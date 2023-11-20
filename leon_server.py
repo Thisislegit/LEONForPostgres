@@ -2,12 +2,44 @@ import json
 import struct
 import socketserver
 from utils import *
-import re
+import util.envs as envs
+import util.postgres as postgres
+import util.plans_lib as plans_lib
+import torch
+import os
+import util.DP as DP
+import copy
+
+def load_sql_Files(sql_list: list):
+    """
+    :param sql_list: list of sql template name
+    :return: list of path of sql query file path
+    """
+    sqllist = []
+    for i in range(0, len(sql_list)):
+        sqlFiles = 'join-order-benchmark/' + sql_list[i] + '.sql'
+        if not os.path.exists(sqlFiles):
+            raise IOError("File Not Exists!")
+        sqllist.append(sqlFiles)
+    return sqllist
 
 class LeonModel:
 
     def __init__(self):
         self.__model = None
+        self.workload = envs.JoinOrderBenchmark(envs.JoinOrderBenchmark.Params())
+        self.workload.workload_info.table_num_rows = postgres.GetAllTableNumRows(self.workload.workload_info.rel_names)
+        self.workload.workload_info.alias_to_names = postgres.GetAllAliasToNames(self.workload.workload_info.rel_ids)
+        trainquery = ['10a']
+        self.sqllist = load_sql_Files(trainquery)
+        self.join_graph, self.all_join_conds, self.query_leaves, self.origin_dp_tables = DP.getPreCondition(self.sqllist[0])
+        print(self.all_join_conds)
+        print(self.workload.workload_info.scan_types)
+        # print(self.workload.workload_info.alias_to_names)
+        # print(self.workload.workload_info.rel_names)
+        # print(self.workload.workload_info.table_num_rows)
+        # print(self.workload.workload_info)
+        # print(self.workload.workload_info.table_num_rows['a1'])
     
     def load_model(self, path):
         pass
@@ -18,7 +50,36 @@ class LeonModel:
         if not isinstance(X, list):
             X = [X]
         X = [json.loads(x) if isinstance(x, str) else x for x in X]
-        print(X[0])
+        nodes = []
+        for i in range(0, len(messages)):
+            node = postgres.ParsePostgresPlanJson_1(X[i], self.workload.workload_info.alias_to_names)
+            if node.info['join_cond'] == ['']:
+                break
+            print(X[i])
+            # print(node)
+            node = plans_lib.FilterScansOrJoins(node)
+            # print(node)
+            plans_lib.GatherUnaryFiltersInfo(node)
+            postgres.EstimateFilterRows(node)
+            # print(node.info['all_filters_est_rows'])
+            try:
+                node.info['sql_str'] = node.to_sql(node.info['join_cond'], with_select_exprs=True)
+            except:
+                print(node.info['join_cond'])
+                print(X[i])
+            # print(node.info['sql_str'])
+            queryFeaturizer = plans_lib.QueryFeaturizer(self.workload.workload_info)
+            query_vecs = torch.from_numpy(queryFeaturizer(node)).unsqueeze(0)
+            node.info['query_encoding'] = copy.deepcopy(query_vecs)
+            nodes.append(node)
+        
+            
+        if nodes:
+            nodeFeaturizer = plans_lib.PhysicalTreeNodeFeaturizer(self.workload.workload_info)
+            trees, indexes = encoding.TreeConvFeaturize(nodeFeaturizer, nodes)
+        # print(trees)
+        
+
         # seqs = [get_plan_seq_adj(x['Plan']) for x in X]
         # print(seqs[0])
         # print(op_names)

@@ -3,7 +3,11 @@ from types import SimpleNamespace
 import numpy as np
 from enum import Enum
 from sklearn.preprocessing import RobustScaler
+import torch
+import copy
+import util.encoding as encoding
 
+DEVICE = 'cuda:1' if torch.cuda.is_available() else 'cpu'
 
 def load_json(path, namespace=True):
     with open(path) as json_file:
@@ -82,6 +86,17 @@ def add_numerical_scalers(feature_statistics):
             feature_statistics[k]["scaler"] = scaler
 
 
+def getNodesEncoding(nodes, nodeFeaturizer, queryFeaturizer):
+    queryencoding = []
+    # i = nodes
+    # tem = torch.from_numpy(queryFeaturizer(i)).unsqueeze(0)
+    # queryencoding.append(tem)
+    # i.info['query_encoding'] = copy.deepcopy(tem)
+    trees, indexes = encoding.TreeConvFeaturize(nodeFeaturizer, nodes)
+    # tensor_query_encoding = (torch.cat(queryencoding, dim=0))
+    return trees.to(DEVICE), indexes.to(DEVICE), None #tensor_query_encoding.to(DEVICE)
+
+
 # get seqs encoding
 plan_parameters = [
     "Node Type",
@@ -92,7 +107,7 @@ plan_parameters = [
     # "est_children_card",
     # "workers_planned",
 ]
-# statistics_file_path = "/data1/liangzibo/zero-shot/zero-shot-data/runs/parsed_plans/statistics_workload_combined.json"
+# statistics_file_path = "/data1/wyz/zero-shot/zero-shot-data/runs/parsed_plans/statistics_workload_combined.json"
 # feature_statistics = load_json(statistics_file_path, namespace=False)
 # op_name_to_one_hot = {}
 # op_names = feature_statistics["op_name"]["value_dict"]
