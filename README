@@ -1,27 +1,31 @@
-PostgreSQL Database Management System
-=====================================
+# LEON System Documentation
 
-This directory contains the source code distribution of the PostgreSQL
-database management system.
+This document provides an overview of the LEON system, focusing on its training and inference components as implemented in `LEON_train.py` and `Leon_server.py`.
 
-PostgreSQL is an advanced object-relational database management system
-that supports an extended subset of the SQL standard, including
-transactions, foreign keys, subqueries, triggers, user-defined types
-and functions.  This distribution also contains C language bindings.
+## LEON_train.py - Training Process
 
-PostgreSQL has many language interfaces, many of which are listed here:
+The training process is broken down into several steps, involving chunking queries, executing them, and using the feedback for training a model.
 
-	https://www.postgresql.org/download/
 
-See the file INSTALL for instructions on how to build and install
-PostgreSQL.  That file also lists supported operating systems and
-hardware platforms and contains information regarding any other
-software packages that are required to build or run the PostgreSQL
-system.  Copyright and license information can be found in the
-file COPYRIGHT.  A comprehensive documentation set is included in this
-distribution; it can be read as described in the installation
-instructions.
+Queries are processed in batches for efficiency:
 
-The latest version of this software may be obtained at
-https://www.postgresql.org/download/.  For more information look at our
-web site located at https://www.postgresql.org/.
+```python
+chunks = chunk(Querylist, 5)
+
+for chunk in chunks:
+    for query in chunk:
+        Feedback_1, Nodes = pg.execute(query, leon=on)  # Inference phase
+
+    # Execution phase
+    nodes_to_execute = Pick_node(Nodes)
+    Feedback_2 = pg.execute(nodes_to_execute.to_sql(),
+                            nodes_to_execute.to_hint(), 
+                            leon=off) 
+    experience = Exp(Feedback_1, Feedback_2)
+
+    # Training phase
+    experience.getpair()
+    model.train()
+```
+
+## Leon_server.py - Inference Process
