@@ -48,7 +48,8 @@ typedef enum
  * XXX is it worth making this user-controllable?  It provides a tradeoff
  * between planner runtime and the accuracy of path cost comparisons.
  */
-#define STD_FUZZ_FACTOR 1.01
+// #define STD_FUZZ_FACTOR 1.01
+#define STD_FUZZ_FACTOR 1.0
 
 static List *translate_sub_tlist(List *tlist, int relid);
 static int	append_total_cost_compare(const ListCell *a, const ListCell *b);
@@ -88,10 +89,26 @@ compare_path_costs(Path *path1, Path *path2, CostSelector criterion)
 	}
 	else
 	{
-		if (path1->total_cost < path2->total_cost)
-			return -1;
-		if (path1->total_cost > path2->total_cost)
-			return +1;
+		// if (path1->total_cost < path2->total_cost)
+		// 	return -1;
+		// if (path1->total_cost > path2->total_cost)
+		// 	return +1;
+		if ((path1->calibration) != 0 && (path2->calibration != 0))
+		{
+			Cost calCost1 = (path1->calibration) * log(path1->total_cost);
+			Cost calCost2 = (path2->calibration) * log(path2->total_cost);
+			if (calCost1 < calCost2)
+				return -1;
+			if (calCost1 > calCost2)
+				return +1;
+		}
+		else
+		{
+			if (path1->total_cost < path2->total_cost)
+				return -1;
+			if (path1->total_cost > path2->total_cost)
+				return +1;
+		}
 
 		/*
 		 * If paths have the same total cost, order them by startup cost.
@@ -167,6 +184,38 @@ compare_path_costs_fuzzily(Path *path1, Path *path2, double fuzz_factor)
 {
 #define CONSIDER_PATH_STARTUP_COST(p)  \
 	((p)->param_info == NULL ? (p)->parent->consider_startup : (p)->parent->consider_param_startup)
+
+	if ((path1->calibration) != 0 && (path2->calibration != 0))
+	{
+		// Cost calCost1 = (path1->calibration) * log(path1->total_cost);
+		// Cost calCost2 = (path2->calibration) * log(path2->total_cost);
+		Cost calCost1 = path1->calibration;
+		Cost calCost2 = path2->calibration;
+		if (calCost1 > calCost2 * fuzz_factor)
+		{
+			/* path1 fuzzily worse on total cost */
+			if (CONSIDER_PATH_STARTUP_COST(path1) &&
+				path2->startup_cost > path1->startup_cost * fuzz_factor)
+			{
+				/* ... but path2 fuzzily worse on startup, so DIFFERENT */
+				return COSTS_DIFFERENT;
+			}
+			/* else path2 dominates */
+			return COSTS_BETTER2;
+		}
+		if (calCost2 > calCost1 * fuzz_factor)
+		{
+			/* path2 fuzzily worse on total cost */
+			if (CONSIDER_PATH_STARTUP_COST(path2) &&
+				path1->startup_cost > path2->startup_cost * fuzz_factor)
+			{
+				/* ... but path1 fuzzily worse on startup, so DIFFERENT */
+				return COSTS_DIFFERENT;
+			}
+			/* else path1 dominates */
+			return COSTS_BETTER1;
+		}
+	}
 
 	/*
 	 * Check total cost first since it's more likely to be different; many

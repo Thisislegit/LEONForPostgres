@@ -1167,6 +1167,18 @@ static struct config_bool ConfigureNamesBool[] =
 		NULL, NULL, NULL
 	},
 	{
+		{"enable_leon", PGC_USERSET, QUERY_TUNING_COST,	
+			gettext_noop("Enable the leon optimizer."),
+			gettext_noop("Enables the leon optimizer. When enabled, the variables enable_leon_rewards"
+		" and enable_leon_selection can be used to control whether or not leon records"
+		" query latency or selects query plans."),
+			GUC_EXPLAIN
+		},
+		&enable_leon,
+		false,
+		NULL, NULL, NULL
+	},
+	{
 		/* Not for general use --- used by SET SESSION AUTHORIZATION */
 		{"is_superuser", PGC_INTERNAL, UNGROUPED,
 			gettext_noop("Shows whether the current user is a superuser."),

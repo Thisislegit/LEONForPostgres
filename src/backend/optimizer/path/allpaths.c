@@ -12,7 +12,7 @@
  *
  *-------------------------------------------------------------------------
  */
-
+// #define OPTIMIZER_DEBUG
 #include "postgres.h"
 
 #include <limits.h>
@@ -49,6 +49,8 @@
 #include "rewrite/rewriteManip.h"
 #include "utils/lsyscache.h"
 
+#include "optimizer/ml_util.h"
+#include "utils/ruleutils.h"
 
 /* results of subquery_is_pushdown_safe */
 typedef struct pushdown_safety_info
@@ -63,6 +65,7 @@ bool		enable_geqo = false;	/* just in case GUC doesn't set it */
 int			geqo_threshold;
 int			min_parallel_table_scan_size;
 int			min_parallel_index_scan_size;
+bool 		enable_leon = false;
 
 /* Hook for plugins to get control in set_rel_pathlist() */
 set_rel_pathlist_hook_type set_rel_pathlist_hook = NULL;
@@ -2987,7 +2990,7 @@ standard_join_search(PlannerInfo *root, int levels_needed, List *initial_rels)
 {
 	int			lev;
 	RelOptInfo *rel;
-
+	int conn_fd;
 	/*
 	 * This function cannot be invoked recursively within any one planning
 	 * problem, so join_rel_level[] can't be in use already.
@@ -3008,6 +3011,16 @@ standard_join_search(PlannerInfo *root, int levels_needed, List *initial_rels)
 	root->join_rel_level = (List **) palloc0((levels_needed + 1) * sizeof(List *));
 
 	root->join_rel_level[1] = initial_rels;
+
+
+	// if (enable_leon)
+	// {
+	// 	conn_fd = connect_to_leon(leon_host, leon_port);
+	// 	if (conn_fd < 0) {
+	// 		elog(WARNING, "Unable to connect to LEON server, reward for query will be dropped.");
+	// 		return;
+	// 	}
+	// }
 
 	for (lev = 2; lev <= levels_needed; lev++)
 	{
@@ -3045,6 +3058,63 @@ standard_join_search(PlannerInfo *root, int levels_needed, List *initial_rels)
 			if (lev < levels_needed)
 				generate_useful_gather_paths(root, rel, false);
 
+			if (enable_leon && should_leon_optimize(lev))
+			{
+				ListCell *p;
+				int length = list_length(rel->savedpaths);
+
+				conn_fd = connect_to_leon(leon_host, leon_port);
+				if (conn_fd < 0) {
+					elog(WARNING, "Unable to connect to LEON server, reward for query will be dropped.");
+					exit(0);
+				}
+
+				write_all_to_socket(conn_fd, START_QUERY_MESSAGE);
+				foreach(p, rel->savedpaths)
+				{
+					Path *path = (Path *)lfirst(p);
+					char* json_plan = plan_to_json(root, path);
+					write_all_to_socket(conn_fd, json_plan);
+					free(json_plan);
+				}
+				write_all_to_socket(conn_fd, TERMINAL_MESSAGE);
+
+				//Necessary Information?
+				shutdown(conn_fd, SHUT_WR);
+
+				double *calibrations = (double *)calloc(length, sizeof(double));
+				
+				// Read Response From LEON
+				get_calibrations(calibrations, lev, length, conn_fd);
+
+				shutdown(conn_fd, SHUT_RDWR);
+
+				int32_t curPosition = 0;
+	
+				foreach (p, rel->savedpaths)
+				{
+					Path *path = (Path *)lfirst(p);
+					// path->total_cost = log(path->total_cost) * calibrations[curPosition];
+					path->calibration = calibrations[curPosition];
+					curPosition++;
+				}
+				
+				Assert(curPosition == length);
+				free(calibrations);
+
+
+				// Add Path At Last
+
+				//FIXME: Not Really? Assert(rel->pathlist == NIL);
+				foreach(p, rel->savedpaths)
+				{	
+					Path *path = (Path *)lfirst(p);
+					add_path(rel, path);
+				}
+				rel->savedpaths = NIL;
+			}
+
+
 			/* Find and save the cheapest paths for this rel */
 			set_cheapest(rel);
 
@@ -3052,6 +3122,11 @@ standard_join_search(PlannerInfo *root, int levels_needed, List *initial_rels)
 			debug_print_rel(root, rel);
 #endif
 		}
+	}
+
+	if (enable_leon)
+	{
+		shutdown(conn_fd, SHUT_RDWR);
 	}
 
 	/*
@@ -4136,6 +4211,24 @@ print_path(PlannerInfo *root, Path *path, int indent)
 		printf("  pathkeys: ");
 		print_pathkeys(path->pathkeys, root->parse->rtable);
 	}
+	if (path->pathtarget)
+	{	
+		for (i = 0; i < indent; i++)
+			printf("\t");
+		printf("  pathtargets: (");
+		PathTarget *pathtarget = path->pathtarget;
+        ListCell *lc_expr;
+		bool first = true;
+        foreach(lc_expr, pathtarget->exprs) {
+			if (!first)
+				printf(", ");
+            Node *expr = (Node *) lfirst(lc_expr);
+            print_expr(expr, root->parse->rtable);
+			first = false;
+        }
+		printf(")");
+		printf("\n");
+	}
 
 	if (join)
 	{
@@ -4168,6 +4261,54 @@ print_path(PlannerInfo *root, Path *path, int indent)
 }
 
 void
+print_joincond(PlannerInfo *root, RelOptInfo *rel)
+{
+	ListCell   *lc;
+	List *rtable = root->parse->rtable;
+
+	if (rel->reloptkind != RELOPT_JOINREL)
+		return;
+
+	printf("join conditions: ");
+	bool first = true;
+	foreach(lc, root->parse->jointree->quals)
+	{
+		Node *expr = (Node *) lfirst(lc);
+		if IsA(expr, OpExpr)
+		{	
+			const OpExpr *e = (const OpExpr *) expr;
+			char	   *opname;
+
+			opname = get_opname(e->opno);
+			if (list_length(e->args) > 1)
+			{	
+				Node * left_node = get_leftop((const Expr *) e);
+				Node * right_node = get_rightop((const Expr *) e);
+				if (IsA(left_node, Var) && IsA(right_node, Var))
+				{	
+					Var *left_var = (Var *) left_node;
+					Var *right_var = (Var *) right_node;
+					//Both vars are from the same relation
+					if (bms_is_member(left_var->varno, rel->relids) &&
+						bms_is_member(right_var->varno, rel->relids))
+					{	
+						if (!first)
+							printf(", ");
+						print_expr(left_node, rtable);
+						printf(" %s ", ((opname != NULL) ? opname : "(invalid operator)"));
+						print_expr(right_node, rtable);
+						first = false;
+					}
+				}
+			}		
+		}
+	}
+
+	printf("\n");
+}
+
+
+void
 debug_print_rel(PlannerInfo *root, RelOptInfo *rel)
 {
 	ListCell   *l;
@@ -4182,7 +4323,9 @@ debug_print_rel(PlannerInfo *root, RelOptInfo *rel)
 		print_restrictclauses(root, rel->baserestrictinfo);
 		printf("\n");
 	}
-
+	
+	print_joincond(root, rel);
+	
 	if (rel->joininfo)
 	{
 		printf("\tjoininfo: ");

@@ -1,0 +1,661 @@
+#ifndef ML_UTIL_H
+#define ML_UTIL_H
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <string.h>
+
+static char* leon_host = "localhost";
+static int leon_port = 9999;
+
+// JSON tags for sending to the leon server.
+static const char* START_QUERY_MESSAGE = "{\"type\": \"query\"}\n";
+static const char *START_FEEDBACK_MESSAGE = "{\"type\": \"reward\"}\n";
+static const char* START_PREDICTION_MESSAGE = "{\"type\": \"predict\"}\n";
+static const char* TERMINAL_MESSAGE = "{\"final\": true}\n";
+
+// A struct to represent a query plan before we transform it into JSON.
+typedef struct BaoPlanNode {
+  // An integer representation of the PG NodeTag.
+  unsigned int node_type;
+
+  // The optimizer cost for this node (total cost).
+  double optimizer_cost;
+
+  // The cardinality estimate (plan rows) for this node.
+  double cardinality_estimate;
+
+  // If this is a scan or index lookup, the name of the underlying relation.
+  char* relation_name;
+
+  // Left child.
+  struct BaoPlanNode* left;
+
+
+  // Right child.
+  struct BaoPlanNode* right;
+} BaoPlanNode;
+
+static bool should_leon_optimize(int level) {
+  return true;
+}
+
+static void get_calibrations(double calibrations[], uint32 queryid, int32_t length, int conn_fd){
+  		// Read the response from the server and store it in the calibrations array
+      // one element is like "1.12," length 5
+      char *response = (char *)calloc(5 * length, sizeof(char));
+      if (read(conn_fd, response, 5 * length * sizeof(char)) > 0) 
+      {
+        char *token = strtok(response, ",");
+        int i = 0;
+        while (token != NULL) 
+        {
+          calibrations[i] = atof(token);
+          token = strtok(NULL, ",");
+          i++;
+        }
+        Assert(i == length);
+        if (i != length)
+        {
+          elog(ERROR, "Python code get wrong number of results!");
+          exit(1);
+        }
+      } else {
+        shutdown(conn_fd, SHUT_RDWR);
+        elog(WARNING, "LEON could not read the response from the server.");
+      }
+    
+      free(response);
+}
+
+
+static int connect_to_leon(const char* host, int port) {
+  int ret, conn_fd;
+  struct sockaddr_in server_addr = { 0 };
+
+  server_addr.sin_family = AF_INET;
+  server_addr.sin_port = htons(port);
+  inet_pton(AF_INET, host, &server_addr.sin_addr);
+  conn_fd = socket(AF_INET, SOCK_STREAM, 0);
+  if (conn_fd < 0) {
+    return conn_fd;
+  }
+  
+  ret = connect(conn_fd, (struct sockaddr*)&server_addr, sizeof(server_addr));
+  if (ret == -1) {
+    return ret;
+  }
+
+  return conn_fd;
+
+}
+
+// Transform a PostgreSQL PlannedStmt into a BaoPlanNode tree.
+static BaoPlanNode* transform_plan(PlannedStmt* stmt, Plan* node) {
+  BaoPlanNode* result = new_bao_plan();
+
+  result->node_type = node->type;
+  result->optimizer_cost = node->total_cost;
+  result->cardinality_estimate = node->plan_rows;
+  result->relation_name = get_relation_name(stmt, node);
+
+  result->left = NULL;
+  result->right = NULL;
+  if (node->lefttree) result->left = transform_plan(stmt, node->lefttree);
+  if (node->righttree) result->right = transform_plan(stmt, node->righttree);
+
+  return result;
+}
+
+static void free_bao_plan_node(BaoPlanNode* node) {
+  if (node->left) free_bao_plan_node(node->left);
+  if (node->right) free_bao_plan_node(node->right);
+  free(node);
+}
+
+static void write_all_to_socket(int conn_fd, const char* json) {
+  size_t json_length;
+  ssize_t written, written_total;
+  json_length = strlen(json);
+  written_total = 0;
+  
+  while (written_total != json_length) {
+    written = write(conn_fd,
+                    json + written_total,
+                    json_length - written_total);
+    written_total += written;
+  }
+}
+
+// Transform the operator types we care about from their PG tag to a
+// string. Call other operators "Other".
+static const char* node_type_to_string(NodeTag tag) {
+  switch (tag) {
+  case T_SeqScan:
+    return "Seq Scan";
+  case T_IndexScan:
+    return "Index Scan";
+  case T_IndexOnlyScan:
+    return "Index Only Scan";
+  case T_BitmapIndexScan:
+    return "Bitmap Index Scan";
+  case T_NestLoop:
+    return "Nested Loop";
+  case T_MergeJoin:
+    return "Merge Join";
+  case T_HashJoin:
+    return "Hash Join";
+  default:
+    return "Other";
+  }
+}
+
+static void
+debug_print_relids(PlannerInfo *root, Relids relids, FILE* stream)
+{
+	int			x;
+	bool		first = true;
+
+	x = -1;
+	while ((x = bms_next_member(relids, x)) >= 0)
+	{
+		if (!first)
+			fprintf(stream, " ");
+		if (x < root->simple_rel_array_size &&
+			root->simple_rte_array[x])
+			fprintf(stream, "%s", root->simple_rte_array[x]->eref->aliasname);
+		else
+			fprintf(stream, "%d", x);
+		first = false;
+	}
+}
+
+void
+debug_print_joincond(PlannerInfo *root, RelOptInfo *rel, File* stream)
+{
+	ListCell   *lc;
+	List *rtable = root->parse->rtable;
+
+	if (rel->reloptkind != RELOPT_JOINREL)
+		return;
+
+	bool first = true;
+	foreach(lc, root->parse->jointree->quals)
+	{
+		Node *expr = (Node *) lfirst(lc);
+		if IsA(expr, OpExpr)
+		{	
+			const OpExpr *e = (const OpExpr *) expr;
+			char	   *opname;
+
+			opname = get_opname(e->opno);
+			if (list_length(e->args) > 1)
+			{	
+				Node * left_node = get_leftop((const Expr *) e);
+				Node * right_node = get_rightop((const Expr *) e);
+				if (IsA(left_node, Var) && IsA(right_node, Var))
+				{	
+					Var *left_var = (Var *) left_node;
+					Var *right_var = (Var *) right_node;
+					//Both vars are from the same relation
+					if (bms_is_member(left_var->varno, rel->relids) &&
+						bms_is_member(right_var->varno, rel->relids))
+					{	
+						if (!first)
+							fprintf(stream, ", ");
+						debug_print_expr(left_node, rtable, stream);
+						fprintf(stream, " %s ", ((opname != NULL) ? opname : "(invalid operator)"));
+						debug_print_expr(right_node, rtable, stream);
+						first = false;
+					}
+				}
+			}		
+		}
+	}
+}
+
+/*
+ * debug_print_expr
+ *	  print an expression to a file
+ */
+void
+debug_print_expr(const Node *expr, const List *rtable, FILE* stream)
+{
+	if (expr == NULL)
+	{
+		fprintf(stream, "<>");
+		return;
+	}
+
+	if (IsA(expr, Var))
+	{
+		const Var  *var = (const Var *) expr;
+		char	   *relname,
+				   *attname;
+
+		switch (var->varno)
+		{
+			case INNER_VAR:
+				relname = "INNER";
+				attname = "?";
+				break;
+			case OUTER_VAR:
+				relname = "OUTER";
+				attname = "?";
+				break;
+			case INDEX_VAR:
+				relname = "INDEX";
+				attname = "?";
+				break;
+			default:
+				{
+					RangeTblEntry *rte;
+
+					Assert(var->varno > 0 &&
+						   (int) var->varno <= list_length(rtable));
+					rte = rt_fetch(var->varno, rtable);
+					relname = rte->eref->aliasname;
+					attname = get_rte_attribute_name(rte, var->varattno);
+				}
+				break;
+		}
+		fprintf(stream, "%s.%s", relname, attname);
+	}
+	else if (IsA(expr, Const))
+	{
+		const Const *c = (const Const *) expr;
+		Oid			typoutput;
+		bool		typIsVarlena;
+		char	   *outputstr;
+
+		if (c->constisnull)
+		{
+			fprintf(stream, "NULL");
+			return;
+		}
+
+		getTypeOutputInfo(c->consttype,
+						  &typoutput, &typIsVarlena);
+
+		outputstr = OidOutputFunctionCall(typoutput, c->constvalue);
+		fprintf(stream, "\'%s\'", outputstr);
+		pfree(outputstr);
+	}
+	else if (IsA(expr, OpExpr))
+	{
+		const OpExpr *e = (const OpExpr *) expr;
+		char	   *opname;
+
+		opname = get_opname(e->opno);
+		if (list_length(e->args) > 1)
+		{
+			debug_print_expr(get_leftop((const Expr *) e), rtable,  stream);
+			fprintf(stream, " %s ", ((opname != NULL) ? opname : "(invalid operator)"));
+			debug_print_expr(get_rightop((const Expr *) e), rtable, stream);
+		}
+		else
+		{
+			fprintf(stream, "%s ", ((opname != NULL) ? opname : "(invalid operator)"));
+			debug_print_expr(get_leftop((const Expr *) e), rtable, stream);
+		}
+	}
+	else if (IsA(expr, FuncExpr))
+	{
+		const FuncExpr *e = (const FuncExpr *) expr;
+		char	   *funcname;
+		ListCell   *l;
+
+		funcname = get_func_name(e->funcid);
+		fprintf(stream, "%s(", ((funcname != NULL) ? funcname : "(invalid function)"));
+		foreach(l, e->args)
+		{
+			debug_print_expr(lfirst(l), rtable, stream);
+			if (lnext(e->args, l))
+				fprintf(stream, ",");
+		}
+		fprintf(stream, ")");
+	}
+	else if (IsA(expr, RelabelType))
+ 	{
+		const RelabelType *r = (const RelabelType*) expr;
+
+		debug_print_expr((Node *) r->arg, rtable, stream);
+	}
+	else if (IsA(expr, RangeTblRef))
+	{
+		int	varno = ((RangeTblRef *) expr)->rtindex;
+		RangeTblEntry *rte = rt_fetch(varno, rtable);
+		fprintf(stream, "RTE %d (%s)", varno, rte->eref->aliasname);
+	}
+	else
+		fprintf(stream, "unknown expr");
+}
+
+
+static void
+debug_print_restrictclauses(PlannerInfo *root, List *clauses, FILE* stream)
+{
+	ListCell   *l;
+
+	foreach(l, clauses)
+	{
+		RestrictInfo *c = lfirst(l);
+
+		debug_print_expr((Node *) c->clause, root->parse->rtable, stream);
+		if (lnext(clauses, l))
+			fprintf(stream, ", ");
+	}
+}
+
+static void
+debug_print_path(PlannerInfo *root, Path *path, int indent, FILE* stream)
+{
+	const char *ptype;
+	bool join = false;
+	Path *subpath = NULL;
+	int i;
+	// StringInfoData buf;
+	char *pathBufPtr = NULL;
+
+	// initStringInfo(&buf);
+
+	switch (nodeTag(path))
+	{
+		case T_Path:
+			switch (path->pathtype)
+			{
+				case T_SeqScan:
+					ptype = "SeqScan";
+					break;
+				case T_SampleScan:
+					ptype = "SampleScan";
+					break;
+				case T_FunctionScan:
+					ptype = "FunctionScan";
+					break;
+				case T_TableFuncScan:
+					ptype = "TableFuncScan";
+					break;
+				case T_ValuesScan:
+					ptype = "ValuesScan";
+					break;
+				case T_CteScan:
+					ptype = "CteScan";
+					break;
+				case T_NamedTuplestoreScan:
+					ptype = "NamedTuplestoreScan";
+					break;
+				case T_Result:
+					ptype = "Result";
+					break;
+				case T_WorkTableScan:
+					ptype = "WorkTableScan";
+					break;
+				default:
+					ptype = "???Path";
+					break;
+			}
+			break;
+		case T_IndexPath:
+			ptype = "IdxScan";
+			break;
+		case T_BitmapHeapPath:
+			ptype = "BitmapHeapScan";
+			break;
+		case T_BitmapAndPath:
+			ptype = "BitmapAndPath";
+			break;
+		case T_BitmapOrPath:
+			ptype = "BitmapOrPath";
+			break;
+		case T_TidPath:
+			ptype = "TidScan";
+			break;
+		case T_SubqueryScanPath:
+			ptype = "SubqueryScan";
+			break;
+		case T_ForeignPath:
+			ptype = "ForeignScan";
+			break;
+		case T_CustomPath:
+			ptype = "CustomScan";
+			break;
+		case T_NestPath:
+			ptype = "NestLoop";
+			join = true;
+			break;
+		case T_MergePath:
+			ptype = "MergeJoin";
+			join = true;
+			break;
+		case T_HashPath:
+			ptype = "HashJoin";
+			join = true;
+			break;
+		case T_AppendPath:
+			ptype = "Append";
+			break;
+		case T_MergeAppendPath:
+			ptype = "MergeAppend";
+			break;
+		case T_GroupResultPath:
+			ptype = "GroupResult";
+			break;
+		case T_MaterialPath:
+			ptype = "Material";
+			subpath = ((MaterialPath *) path)->subpath;
+			break;
+		case T_MemoizePath:
+			ptype = "Memoize";
+			subpath = ((MemoizePath *) path)->subpath;
+			break;
+		case T_UniquePath:
+			ptype = "Unique";
+			subpath = ((UniquePath *) path)->subpath;
+			break;
+		case T_GatherPath:
+			ptype = "Gather";
+			subpath = ((GatherPath *) path)->subpath;
+			break;
+		case T_GatherMergePath:
+			ptype = "GatherMerge";
+			subpath = ((GatherMergePath *) path)->subpath;
+			break;
+		case T_ProjectionPath:
+			ptype = "Projection";
+			subpath = ((ProjectionPath *) path)->subpath;
+			break;
+		case T_ProjectSetPath:
+			ptype = "ProjectSet";
+			subpath = ((ProjectSetPath *) path)->subpath;
+			break;
+		case T_SortPath:
+			ptype = "Sort";
+			subpath = ((SortPath *) path)->subpath;
+			break;
+		case T_IncrementalSortPath:
+			ptype = "IncrementalSort";
+			subpath = ((SortPath *) path)->subpath;
+			break;
+		case T_GroupPath:
+			ptype = "Group";
+			subpath = ((GroupPath *) path)->subpath;
+			break;
+		case T_UpperUniquePath:
+			ptype = "UpperUnique";
+			subpath = ((UpperUniquePath *) path)->subpath;
+			break;
+		case T_AggPath:
+			ptype = "Agg";
+			subpath = ((AggPath *) path)->subpath;
+			break;
+		case T_GroupingSetsPath:
+			ptype = "GroupingSets";
+			subpath = ((GroupingSetsPath *) path)->subpath;
+			break;
+		case T_MinMaxAggPath:
+			ptype = "MinMaxAgg";
+			break;
+		case T_WindowAggPath:
+			ptype = "WindowAgg";
+			subpath = ((WindowAggPath *) path)->subpath;
+			break;
+		case T_SetOpPath:
+			ptype = "SetOp";
+			subpath = ((SetOpPath *) path)->subpath;
+			break;
+		case T_RecursiveUnionPath:
+			ptype = "RecursiveUnion";
+			break;
+		case T_LockRowsPath:
+			ptype = "LockRows";
+			subpath = ((LockRowsPath *) path)->subpath;
+			break;
+		case T_ModifyTablePath:
+			ptype = "ModifyTable";
+			break;
+		case T_LimitPath:
+			ptype = "Limit";
+			subpath = ((LimitPath *) path)->subpath;
+			break;
+		default:
+			ptype = "???Path";
+			break;
+	}
+
+  fprintf(stream, "{\"Node Type\": \"%s\",", ptype);
+  fprintf(stream, "\"Node Type ID\": \"%d\",", path->type);
+	if (path->parent)
+	{
+		fprintf(stream, "\"Relation IDs\": \"");
+		debug_print_relids(root, path->parent->relids, stream);
+		fprintf(stream, "\",");
+
+		if (path->parent->baserestrictinfo)
+		{
+			fprintf(stream, "\"Base Restrict Info\": \"");
+			debug_print_restrictclauses(root, path->parent->baserestrictinfo, stream);
+			fprintf(stream, "\",");
+		}
+
+		if (path->parent->joininfo)
+		{
+			fprintf(stream, "\"Join Info\": \"");
+			debug_print_restrictclauses(root, path->parent->joininfo, stream);
+			fprintf(stream, "\",");
+		}
+	}
+	if (path->param_info)
+	{
+    	fprintf(stream, "\"Required Outer\": \"");
+		debug_print_relids(root, path->param_info->ppi_req_outer, stream);
+		fprintf(stream, "\",");
+	}
+	if (path->parent->reloptkind == RELOPT_JOINREL)
+	{	
+		fprintf(stream, "\"Join Cond\": \"");
+		debug_print_joincond(root, path->parent, stream);
+		fprintf(stream, "\",");
+	}
+	if (path->pathtarget)
+	{	
+		fprintf(stream, "\"Path Target\": \"");
+		PathTarget *pathtarget = path->pathtarget;
+        ListCell *lc_expr;
+		bool first = true;
+        foreach(lc_expr, pathtarget->exprs) {
+			if (!first)
+				fprintf(stream, ", ");
+            Node *expr = (Node *) lfirst(lc_expr);
+            debug_print_expr(expr, root->parse->rtable, stream);
+			first = false;
+        }
+		fprintf(stream, "\",");
+	}
+
+  fprintf(stream, "\"Startup Cost\": %f,", path->startup_cost);
+  fprintf(stream, "\"Total Cost\": %f,", path->total_cost);
+  fprintf(stream, "\"Plan Rows\": %f", path->rows);
+
+
+
+	// if (path->pathkeys)
+	// {
+	// 	fprintf(stream, "\"Pathkeys\": ");
+	// 	print_pathkeys(path->pathkeys, root->parse->rtable);
+	// }
+
+	if (join)
+	{
+		JoinPath *jp = (JoinPath *)path;
+
+		// for (i = 0; i < indent; i++)
+		// 	appendStringInfoString(&buf, "\t");
+		// appendStringInfoString(&buf, "  clauses: ");
+		// print_restrictclauses(root, jp->joinrestrictinfo);
+		// appendStringInfoString(&buf, "\n");
+
+		if (IsA(path, MergePath))
+		{
+			MergePath *mp = (MergePath *)path;
+
+			fprintf(stream, ", \"Sort Outer\": %f,", ((mp->outersortkeys) ? 1 : 0));
+			fprintf(stream, "\"Sort Inner\": %f,", ((mp->innersortkeys) ? 1 : 0));
+			fprintf(stream, "\"Materialize Inner\": %f", ((mp->materialize_inner) ? 1 : 0));
+		}
+
+    fprintf(stream, ", \"Plans\": [");
+		debug_print_path(root, jp->outerjoinpath, indent + 1, stream);
+    fprintf(stream, ", ");
+		debug_print_path(root, jp->innerjoinpath, indent + 1, stream);
+    fprintf(stream, "]");
+	}
+
+	if (subpath)
+	{ 
+	// Plans or SubPlan
+    fprintf(stream, ", \"Plans\": [");
+		debug_print_path(root, subpath, indent + 1, stream);
+		fprintf(stream, "]");
+	}
+	
+  fprintf(stream, "}");
+}
+
+
+static void emit_json(BaoPlanNode* node, FILE* stream) {
+  fprintf(stream, "{\"Node Type\": \"%s\",", node_type_to_string(node->node_type));
+  fprintf(stream, "\"Node Type ID\": \"%d\",", node->node_type);
+  if (node->relation_name)
+    // TODO need to escape the relation name for JSON...
+    fprintf(stream, "\"Relation Name\": \"%s\",", node->relation_name);
+  fprintf(stream, "\"Total Cost\": %f,", node->optimizer_cost);
+  fprintf(stream, "\"Plan Rows\": %f", node->cardinality_estimate);
+  if (!node->left && !node->right) {
+    fprintf(stream, "}");
+    return;
+  }
+
+  fprintf(stream, ", \"Plans\": [");
+  if (node->left) emit_json(node->left, stream);
+  if (node->right) {
+    fprintf(stream, ", ");
+    emit_json(node->right, stream);
+  }
+  fprintf(stream, "]}");
+}
+
+static char* plan_to_json(PlannerInfo * root, Path* plan) {
+  char* buf;
+  size_t json_size;
+  FILE* stream;
+  
+  stream = open_memstream(&buf, &json_size);
+  fprintf(stream, "{\"Plan\": ");
+  debug_print_path(root, plan, 0, stream);
+  fprintf(stream, "}\n");
+  fclose(stream);
+  
+  return buf;
+}
+
+#endif

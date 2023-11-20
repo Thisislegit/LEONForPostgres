@@ -1,0 +1,91 @@
+import json
+import struct
+import socketserver
+
+class LeonModel:
+
+    def __init__(self):
+        self.__model = None
+    
+    def load_model(self, path):
+        pass
+    
+    def predict_plan(self, messages):
+        print("Predicting plan for", messages)
+        X = messages
+        if not isinstance(X, list):
+            X = [X]
+        X = [json.loads(x) if isinstance(x, str) else x for x in X]
+        return str.join(['1.00' for _ in X],',')
+
+class JSONTCPHandler(socketserver.BaseRequestHandler):
+    def handle(self):
+        str_buf = ""
+        while True:
+            str_buf += self.request.recv(1024).decode("UTF-8")
+            if not str_buf:
+                # no more data, connection is finished.
+                return
+            
+            if (null_loc := str_buf.find("\n")) != -1:
+                json_msg = str_buf[:null_loc].strip()
+                str_buf = str_buf[null_loc + 1:]
+                if json_msg:
+                    try:
+                        if self.handle_json(json.loads(json_msg)):
+                            break
+                    except json.decoder.JSONDecodeError:
+                        print("Error decoding JSON:", json_msg)
+                        break
+
+class LeonJSONHandler(JSONTCPHandler):
+    def setup(self):
+        self.__messages = []
+    
+    def handle_json(self, data):
+        if "final" in data:
+            message_type = self.__messages[0]["type"]
+            self.__messages = self.__messages[1:]
+
+            if message_type == "query":
+                result = self.server.leon_model.predict_plan(self.__messages)
+                response = str(result).encode()
+                # self.request.sendall(struct.pack("I", result))
+                self.request.sendall(response)
+                self.request.close()
+            else:
+                print("Unknown message type:", message_type)
+            return True
+        
+        self.__messages.append(data)
+        return False
+
+def start_server(listen_on, port):
+    model = LeonModel()
+
+    # if os.path.exists(DEFAULT_MODEL_PATH):
+    #     print("Loading existing model")
+    #     model.load_model(DEFAULT_MODEL_PATH)
+    
+    socketserver.TCPServer.allow_reuse_address = True
+    with socketserver.TCPServer((listen_on, port), LeonJSONHandler) as server:
+        server.bao_model = model
+        server.serve_forever()
+
+
+print(11111)
+if __name__ == "__main__":
+ 
+    from multiprocessing import Process
+    from config import read_config
+
+    config = read_config()
+    port = int(config["Port"])
+    listen_on = config["ListenOn"]
+
+    print(f"Listening on {listen_on} port {port}")
+    
+    server = Process(target=start_server, args=[listen_on, port])
+    
+    print("Spawning server process...")
+    server.start()
