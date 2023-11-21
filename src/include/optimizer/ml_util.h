@@ -343,7 +343,7 @@ static void
 debug_print_restrictclauses(PlannerInfo *root, List *clauses, FILE* stream)
 {
 	ListCell   *l;
-	fprintf(stream, "[");
+	// fprintf(stream, "[");
 	foreach(l, clauses)
 	{
 		RestrictInfo *c = lfirst(l);
@@ -359,12 +359,13 @@ debug_print_restrictclauses(PlannerInfo *root, List *clauses, FILE* stream)
 		// char * str = deparse_expression(c->clause, context, true, false);
 		char * str = deparse_expression_pretty(c->clause, context, true,
 									 false, true, 0);
+		fprintf(stream, "%s", str);
 		if (str)
 			pfree(str);
 		if (lnext(clauses, l))
 			fprintf(stream, ", ");
 	}
-	fprintf(stream, "]");
+	// fprintf(stream, "]");
 }
 
 static void
