@@ -17,6 +17,21 @@ Transformer_model = SeqFormer(
                         mlp_dropout=0.3,
                         transformer_dropout=0.2,
                     )
+import torch
+import math
+
+from test_case import SeqFormer
+from test_case import get_plan_encoding, configs, load_json, get_op_name_to_one_hot, plan_parameters, add_numerical_scalers
+
+Transformer_model = SeqFormer(
+                        input_dim=configs['node_length'],
+                        hidden_dim=128,
+                        output_dim=1,
+                        mlp_activation="ReLU",
+                        transformer_activation="gelu",
+                        mlp_dropout=0.3,
+                        transformer_dropout=0.2,
+                    )
 
 class LeonModel:
 
@@ -95,6 +110,10 @@ class LeonModel:
         return ucb_sort_idx
     
     def predict_plan(self, messages):
+        '''
+        input. messages 一个等价类的所有 plan
+        output. 所有 plan 的修正值
+        '''
         '''
         input. messages 一个等价类的所有 plan
         output. 所有 plan 的修正值
