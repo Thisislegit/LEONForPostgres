@@ -3,6 +3,7 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <string.h>
+#include "utils/ruleutils.h"
 
 static char* leon_host = "localhost";
 static int leon_port = 9999;
@@ -12,6 +13,36 @@ static const char* START_QUERY_MESSAGE = "{\"type\": \"query\"}\n";
 static const char *START_FEEDBACK_MESSAGE = "{\"type\": \"reward\"}\n";
 static const char* START_PREDICTION_MESSAGE = "{\"type\": \"predict\"}\n";
 static const char* TERMINAL_MESSAGE = "{\"final\": true}\n";
+
+typedef struct
+{
+	List	   *rtable;			/* List of RangeTblEntry nodes */
+	List	   *rtable_names;	/* Parallel list of names for RTEs */
+	List	   *rtable_columns; /* Parallel list of deparse_columns structs */
+	List	   *subplans;		/* List of Plan trees for SubPlans */
+	List	   *ctes;			/* List of CommonTableExpr nodes */
+	AppendRelInfo **appendrels; /* Array of AppendRelInfo nodes, or NULL */
+	/* Workspace for column alias assignment: */
+	bool		unique_using;	/* Are we making USING names globally unique */
+	List	   *using_names;	/* List of assigned names for USING columns */
+	/* Remaining fields are used only when deparsing a Plan tree: */
+	Plan	   *plan;			/* immediate parent of current expression */
+	List	   *ancestors;		/* ancestors of plan */
+	Plan	   *outer_plan;		/* outer subnode, or NULL if none */
+	Plan	   *inner_plan;		/* inner subnode, or NULL if none */
+	List	   *outer_tlist;	/* referent for OUTER_VAR Vars */
+	List	   *inner_tlist;	/* referent for INNER_VAR Vars */
+	List	   *index_tlist;	/* referent for INDEX_VAR Vars */
+	/* Special namespace representing a function signature: */
+	char	   *funcname;
+	int			numargs;
+	char	  **argnames;
+} deparse_namespace;
+
+extern void set_simple_column_names(deparse_namespace *dpns);
+extern char *deparse_expression_pretty(Node *expr, List *dpcontext,
+									   bool forceprefix, bool showimplicit,
+									   int prettyFlags, int startIndent);
 
 static bool should_leon_optimize(int level) {
   return true;
@@ -82,27 +113,48 @@ static void write_all_to_socket(int conn_fd, const char* json) {
   }
 }
 
-// Transform the operator types we care about from their PG tag to a
-// string. Call other operators "Other".
-static const char* node_type_to_string(NodeTag tag) {
-  switch (tag) {
-  case T_SeqScan:
-    return "Seq Scan";
-  case T_IndexScan:
-    return "Index Scan";
-  case T_IndexOnlyScan:
-    return "Index Only Scan";
-  case T_BitmapIndexScan:
-    return "Bitmap Index Scan";
-  case T_NestLoop:
-    return "Nested Loop";
-  case T_MergeJoin:
-    return "Merge Join";
-  case T_HashJoin:
-    return "Hash Join";
-  default:
-    return "Other";
-  }
+List *
+deparse_context_for_path(PlannerInfo *root, List *rtable_names)
+{
+	deparse_namespace *dpns;
+
+	dpns = (deparse_namespace *) palloc0(sizeof(deparse_namespace));
+
+	/* Initialize fields that stay the same across the whole plan tree */
+	dpns->rtable = root->parse->rtable; 
+	dpns->rtable_names = rtable_names;
+	dpns->subplans = root->glob->subplans;
+	dpns->ctes = NIL;
+	if (root->glob->appendRelations)
+	{
+		/* Set up the array, indexed by child relid */
+		int			ntables = list_length(dpns->rtable);
+		ListCell   *lc;
+
+		dpns->appendrels = (AppendRelInfo **)
+			palloc0((ntables + 1) * sizeof(AppendRelInfo *));
+		foreach(lc, root->glob->appendRelations)
+		{
+			AppendRelInfo *appinfo = lfirst_node(AppendRelInfo, lc);
+			Index		crelid = appinfo->child_relid;
+
+			Assert(crelid > 0 && crelid <= ntables);
+			Assert(dpns->appendrels[crelid] == NULL);
+			dpns->appendrels[crelid] = appinfo;
+		}
+	}
+	else
+		dpns->appendrels = NULL;	/* don't need it */
+
+	/*
+	 * Set up column name aliases.  We will get rather bogus results for join
+	 * RTEs, but that doesn't matter because plan trees don't contain any join
+	 * alias Vars.
+	 */
+	set_simple_column_names(dpns);
+
+	/* Return a one-deep namespace stack */
+	return list_make1(dpns);
 }
 
 static void
@@ -291,15 +343,28 @@ static void
 debug_print_restrictclauses(PlannerInfo *root, List *clauses, FILE* stream)
 {
 	ListCell   *l;
-
+	fprintf(stream, "[");
 	foreach(l, clauses)
 	{
 		RestrictInfo *c = lfirst(l);
-
-		debug_print_expr((Node *) c->clause, root->parse->rtable, stream);
+		// get alias names
+		List *rtable_names = NIL;
+		ListCell *lc;
+		foreach(lc, root->parse->rtable)
+		{
+			RangeTblEntry *rte = lfirst(lc);
+			rtable_names = lappend(rtable_names, rte->eref->aliasname);
+		}
+		List * context = deparse_context_for_path(root, rtable_names);
+		// char * str = deparse_expression(c->clause, context, true, false);
+		char * str = deparse_expression_pretty(c->clause, context, true,
+									 false, true, 0);
+		if (str)
+			pfree(str);
 		if (lnext(clauses, l))
 			fprintf(stream, ", ");
 	}
+	fprintf(stream, "]");
 }
 
 static void

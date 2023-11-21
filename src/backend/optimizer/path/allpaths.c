@@ -29,6 +29,7 @@
 #include "nodes/nodeFuncs.h"
 #ifdef OPTIMIZER_DEBUG
 #include "nodes/print.h"
+#include "utils/ruleutils.h"
 #endif
 #include "optimizer/appendinfo.h"
 #include "optimizer/clauses.h"
@@ -50,7 +51,7 @@
 #include "utils/lsyscache.h"
 
 #include "optimizer/ml_util.h"
-#include "utils/ruleutils.h"
+
 
 /* results of subquery_is_pushdown_safe */
 typedef struct pushdown_safety_info
@@ -3977,6 +3978,78 @@ generate_partitionwise_join_paths(PlannerInfo *root, RelOptInfo *rel)
  *****************************************************************************/
 
 #ifdef OPTIMIZER_DEBUG
+// typedef struct
+// {
+// 	List	   *rtable;			/* List of RangeTblEntry nodes */
+// 	List	   *rtable_names;	/* Parallel list of names for RTEs */
+// 	List	   *rtable_columns; /* Parallel list of deparse_columns structs */
+// 	List	   *subplans;		/* List of Plan trees for SubPlans */
+// 	List	   *ctes;			/* List of CommonTableExpr nodes */
+// 	AppendRelInfo **appendrels; /* Array of AppendRelInfo nodes, or NULL */
+// 	/* Workspace for column alias assignment: */
+// 	bool		unique_using;	/* Are we making USING names globally unique */
+// 	List	   *using_names;	/* List of assigned names for USING columns */
+// 	/* Remaining fields are used only when deparsing a Plan tree: */
+// 	Plan	   *plan;			/* immediate parent of current expression */
+// 	List	   *ancestors;		/* ancestors of plan */
+// 	Plan	   *outer_plan;		/* outer subnode, or NULL if none */
+// 	Plan	   *inner_plan;		/* inner subnode, or NULL if none */
+// 	List	   *outer_tlist;	/* referent for OUTER_VAR Vars */
+// 	List	   *inner_tlist;	/* referent for INNER_VAR Vars */
+// 	List	   *index_tlist;	/* referent for INDEX_VAR Vars */
+// 	/* Special namespace representing a function signature: */
+// 	char	   *funcname;
+// 	int			numargs;
+// 	char	  **argnames;
+// } deparse_namespace;
+
+// extern void set_simple_column_names(deparse_namespace *dpns);
+
+
+// List *
+// deparse_context_for_path(PlannerInfo *root, List *rtable_names)
+// {
+// 	deparse_namespace *dpns;
+
+// 	dpns = (deparse_namespace *) palloc0(sizeof(deparse_namespace));
+
+// 	/* Initialize fields that stay the same across the whole plan tree */
+// 	dpns->rtable = root->parse->rtable; 
+// 	dpns->rtable_names = rtable_names;
+// 	dpns->subplans = root->glob->subplans;
+// 	dpns->ctes = NIL;
+// 	if (root->glob->appendRelations)
+// 	{
+// 		/* Set up the array, indexed by child relid */
+// 		int			ntables = list_length(dpns->rtable);
+// 		ListCell   *lc;
+
+// 		dpns->appendrels = (AppendRelInfo **)
+// 			palloc0((ntables + 1) * sizeof(AppendRelInfo *));
+// 		foreach(lc, root->glob->appendRelations)
+// 		{
+// 			AppendRelInfo *appinfo = lfirst_node(AppendRelInfo, lc);
+// 			Index		crelid = appinfo->child_relid;
+
+// 			Assert(crelid > 0 && crelid <= ntables);
+// 			Assert(dpns->appendrels[crelid] == NULL);
+// 			dpns->appendrels[crelid] = appinfo;
+// 		}
+// 	}
+// 	else
+// 		dpns->appendrels = NULL;	/* don't need it */
+
+// 	/*
+// 	 * Set up column name aliases.  We will get rather bogus results for join
+// 	 * RTEs, but that doesn't matter because plan trees don't contain any join
+// 	 * alias Vars.
+// 	 */
+// 	set_simple_column_names(dpns);
+
+// 	/* Return a one-deep namespace stack */
+// 	return list_make1(dpns);
+// }
+
 
 static void
 print_relids(PlannerInfo *root, Relids relids)
@@ -4007,7 +4080,20 @@ print_restrictclauses(PlannerInfo *root, List *clauses)
 	{
 		RestrictInfo *c = lfirst(l);
 
-		print_expr((Node *) c->clause, root->parse->rtable);
+		List *rtable_names = NIL;
+		ListCell *lc;
+		foreach(lc, root->parse->rtable)
+		{
+			RangeTblEntry *rte = lfirst(lc);
+			rtable_names = lappend(rtable_names, rte->eref->aliasname);
+		}
+		List * context = deparse_context_for_path(root, rtable_names);
+		// char * str = deparse_expression(c->clause, context, true, false);
+		char * str = deparse_expression_pretty(c->clause, context, true,
+									 false, true, 0);
+		printf("%s", str);
+		if (str)
+			pfree(str);
 		if (lnext(clauses, l))
 			printf(", ");
 	}
