@@ -338,34 +338,49 @@ debug_print_expr(const Node *expr, const List *rtable, FILE* stream)
 		fprintf(stream, "unknown expr");
 }
 
+List *
+create_context(PlannerInfo *root)
+{
+	List *rtable_names = NIL;
+	ListCell *lc;
+	foreach(lc, root->parse->rtable)
+	{
+		RangeTblEntry *rte = lfirst(lc);
+		rtable_names = lappend(rtable_names, rte->eref->aliasname);
+	}
+	List * context = deparse_context_for_path(root, rtable_names);
+	return context;
+}
+
+void 
+delete_context(List *context)
+{
+	ListCell *lc;
+	foreach(lc, context)
+	{
+		deparse_namespace *dpns = lfirst(lc);
+		pfree(dpns);
+	}
+	list_free(context);
+}
 
 static void
-debug_print_restrictclauses(PlannerInfo *root, List *clauses, FILE* stream)
+debug_print_restrictclauses(PlannerInfo *root, List *clauses, List *context, FILE* stream)
 {
 	ListCell   *l;
-	// fprintf(stream, "[");
 	foreach(l, clauses)
 	{
 		RestrictInfo *c = lfirst(l);
-		// get alias names
-		List *rtable_names = NIL;
-		ListCell *lc;
-		foreach(lc, root->parse->rtable)
-		{
-			RangeTblEntry *rte = lfirst(lc);
-			rtable_names = lappend(rtable_names, rte->eref->aliasname);
-		}
-		List * context = deparse_context_for_path(root, rtable_names);
 		// char * str = deparse_expression(c->clause, context, true, false);
 		char * str = deparse_expression_pretty(c->clause, context, true,
 									 false, true, 0);
 		fprintf(stream, "%s", str);
 		if (str)
 			pfree(str);
+		// pfree context
 		if (lnext(clauses, l))
 			fprintf(stream, ", ");
 	}
-	// fprintf(stream, "]");
 }
 
 static void
@@ -552,19 +567,27 @@ debug_print_path(PlannerInfo *root, Path *path, int indent, FILE* stream)
 		debug_print_relids(root, path->parent->relids, stream);
 		fprintf(stream, "\",");
 
+		// Get context
+		List *context = NIL;
+
 		if (path->parent->baserestrictinfo)
-		{
+		{	
+			context = create_context(root);
 			fprintf(stream, "\"Base Restrict Info\": \"");
-			debug_print_restrictclauses(root, path->parent->baserestrictinfo, stream);
+			debug_print_restrictclauses(root, path->parent->baserestrictinfo, context, stream);
 			fprintf(stream, "\",");
 		}
 
 		if (path->parent->joininfo)
-		{
+		{	
+			if (!context)
+				context = create_context(root);
 			fprintf(stream, "\"Join Info\": \"");
-			debug_print_restrictclauses(root, path->parent->joininfo, stream);
+			debug_print_restrictclauses(root, path->parent->joininfo, context, stream);
 			fprintf(stream, "\",");
 		}
+		if (context)
+			delete_context(context);
 	}
 	if (path->param_info)
 	{
