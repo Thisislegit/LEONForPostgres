@@ -13,28 +13,6 @@ static const char *START_FEEDBACK_MESSAGE = "{\"type\": \"reward\"}\n";
 static const char* START_PREDICTION_MESSAGE = "{\"type\": \"predict\"}\n";
 static const char* TERMINAL_MESSAGE = "{\"final\": true}\n";
 
-// A struct to represent a query plan before we transform it into JSON.
-typedef struct BaoPlanNode {
-  // An integer representation of the PG NodeTag.
-  unsigned int node_type;
-
-  // The optimizer cost for this node (total cost).
-  double optimizer_cost;
-
-  // The cardinality estimate (plan rows) for this node.
-  double cardinality_estimate;
-
-  // If this is a scan or index lookup, the name of the underlying relation.
-  char* relation_name;
-
-  // Left child.
-  struct BaoPlanNode* left;
-
-
-  // Right child.
-  struct BaoPlanNode* right;
-} BaoPlanNode;
-
 static bool should_leon_optimize(int level) {
   return true;
 }
@@ -89,28 +67,6 @@ static int connect_to_leon(const char* host, int port) {
 
 }
 
-// Transform a PostgreSQL PlannedStmt into a BaoPlanNode tree.
-static BaoPlanNode* transform_plan(PlannedStmt* stmt, Plan* node) {
-  BaoPlanNode* result = new_bao_plan();
-
-  result->node_type = node->type;
-  result->optimizer_cost = node->total_cost;
-  result->cardinality_estimate = node->plan_rows;
-  result->relation_name = get_relation_name(stmt, node);
-
-  result->left = NULL;
-  result->right = NULL;
-  if (node->lefttree) result->left = transform_plan(stmt, node->lefttree);
-  if (node->righttree) result->right = transform_plan(stmt, node->righttree);
-
-  return result;
-}
-
-static void free_bao_plan_node(BaoPlanNode* node) {
-  if (node->left) free_bao_plan_node(node->left);
-  if (node->right) free_bao_plan_node(node->right);
-  free(node);
-}
 
 static void write_all_to_socket(int conn_fd, const char* json) {
   size_t json_length;
@@ -622,27 +578,6 @@ debug_print_path(PlannerInfo *root, Path *path, int indent, FILE* stream)
 }
 
 
-static void emit_json(BaoPlanNode* node, FILE* stream) {
-  fprintf(stream, "{\"Node Type\": \"%s\",", node_type_to_string(node->node_type));
-  fprintf(stream, "\"Node Type ID\": \"%d\",", node->node_type);
-  if (node->relation_name)
-    // TODO need to escape the relation name for JSON...
-    fprintf(stream, "\"Relation Name\": \"%s\",", node->relation_name);
-  fprintf(stream, "\"Total Cost\": %f,", node->optimizer_cost);
-  fprintf(stream, "\"Plan Rows\": %f", node->cardinality_estimate);
-  if (!node->left && !node->right) {
-    fprintf(stream, "}");
-    return;
-  }
-
-  fprintf(stream, ", \"Plans\": [");
-  if (node->left) emit_json(node->left, stream);
-  if (node->right) {
-    fprintf(stream, ", ");
-    emit_json(node->right, stream);
-  }
-  fprintf(stream, "]}");
-}
 
 static char* plan_to_json(PlannerInfo * root, Path* plan) {
   char* buf;
