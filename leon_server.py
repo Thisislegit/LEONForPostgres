@@ -9,19 +9,8 @@ import torch
 import os
 import util.DP as DP
 import copy
+import re
 
-def load_sql_Files(sql_list: list):
-    """
-    :param sql_list: list of sql template name
-    :return: list of path of sql query file path
-    """
-    sqllist = []
-    for i in range(0, len(sql_list)):
-        sqlFiles = 'join-order-benchmark/' + sql_list[i] + '.sql'
-        if not os.path.exists(sqlFiles):
-            raise IOError("File Not Exists!")
-        sqllist.append(sqlFiles)
-    return sqllist
 
 class LeonModel:
 
@@ -30,10 +19,6 @@ class LeonModel:
         self.workload = envs.JoinOrderBenchmark(envs.JoinOrderBenchmark.Params())
         self.workload.workload_info.table_num_rows = postgres.GetAllTableNumRows(self.workload.workload_info.rel_names)
         self.workload.workload_info.alias_to_names = postgres.GetAllAliasToNames(self.workload.workload_info.rel_ids)
-        trainquery = ['10a']
-        self.sqllist = load_sql_Files(trainquery)
-        self.join_graph, self.all_join_conds, self.query_leaves, self.origin_dp_tables = DP.getPreCondition(self.sqllist[0])
-        print(self.all_join_conds)
         print(self.workload.workload_info.scan_types)
         # print(self.workload.workload_info.alias_to_names)
         # print(self.workload.workload_info.rel_names)
@@ -49,6 +34,9 @@ class LeonModel:
         X = messages
         if not isinstance(X, list):
             X = [X]
+        for x in X:
+            if not x:
+                return ','.join(['1.00' for _ in X])
         X = [json.loads(x) if isinstance(x, str) else x for x in X]
         nodes = []
         for i in range(0, len(messages)):
@@ -64,6 +52,7 @@ class LeonModel:
             # print(node.info['all_filters_est_rows'])
             try:
                 node.info['sql_str'] = node.to_sql(node.info['join_cond'], with_select_exprs=True)
+                # print(node.info['sql_str'])
             except:
                 print(node.info['join_cond'])
                 print(X[i])
@@ -101,7 +90,9 @@ class JSONTCPHandler(socketserver.BaseRequestHandler):
                 json_msg = str_buf[:null_loc].strip()
                 str_buf = str_buf[null_loc + 1:]
                 if json_msg:
-                    try:    
+                    try:
+                        
+
                         def fix_json_msg(json):
                             pattern = r'ANY \((.*?):text\[\]\)'
                             matches = re.findall(pattern, json)
@@ -111,6 +102,8 @@ class JSONTCPHandler(socketserver.BaseRequestHandler):
                                 json = json.replace(extracted_string, cleaned_string)
                             return json
                         json_msg = fix_json_msg(json_msg)
+                        # json_msg = json_msg.replace('"(', '(').replace(')"', ')').replace('[]),"', '[])","')
+                        # print(repr(json_msg))
                         if self.handle_json(json.loads(json_msg)):
                             break
                     except json.decoder.JSONDecodeError:
