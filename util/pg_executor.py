@@ -4,16 +4,11 @@ import socket
 
 import psycopg2
 import psycopg2.extensions
-# import ray # ray 的安装还有问题
 from psycopg2.extensions import POLL_OK, POLL_READ, POLL_WRITE
 from select import select
 
 # Change these strings so that psycopg2.connect(dsn=dsn_val) works correctly
 # for local & remote Postgres.
-
-# JOB/IMDB.
-# LOCAL_DSN = "postgres://psycopg:psycopg@localhost/imdb"
-
 
 # database = ""
 # user = ""
@@ -22,26 +17,18 @@ from select import select
 # port = ""
 # LOCAL_DSN = ""
 # REMOTE_DSN = ""
-database = "zengximu" # 数据库名称
+database = "imdbload" # 数据库名称
 user = "zengximu"
 password = "banana9909"
 host = "localhost" # 本地数据库
 port = "5281"
-LOCAL_DSN = "dbname='zengximu' user='zengximu' password='banana9909' host='localhost' port='5380'"
+LOCAL_DSN = ""
 REMOTE_DSN = ""
 
 # TPC-H.
 # LOCAL_DSN = "postgres://psycopg:psycopg@localhost/tpch-sf10"
 # REMOTE_DSN = "postgres://psycopg:psycopg@localhost/tpch-sf10"
 
-# A simple class holding an execution result.
-#   result: a list, outputs from cursor.fetchall().  E.g., the textual outputs
-#     from EXPLAIN ANALYZE.
-#   has_timeout: bool, set to True iff an execution has run outside of its
-#     allocated timeouts; False otherwise (e.g., for non-execution statements
-#     such as EXPLAIN).
-#   server_ip: str, the private IP address of the Postgres server that
-#     generated this Result.
 Result = collections.namedtuple(
     'Result',
     ['result', 'has_timeout', 'server_ip'],
@@ -51,7 +38,6 @@ Result = collections.namedtuple(
 # ----------------------------------------
 #     Psycopg setup
 # ----------------------------------------
-
 
 def wait_select_inter(conn):
     while 1:
