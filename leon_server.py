@@ -59,8 +59,9 @@ class LeonModel:
         if IF_TRAIN:
             cost_iter = 10 # training 用模型推理 10 次 获得模型不确定性
         else:
+            Transformer_model.eval() # 关闭 drop out，否则模型波动大
             cost_iter = 1 # testing 推理 1 次
-
+        
         with torch.no_grad():    
             for i in range(cost_iter):
                 cali = Transformer_model(seqs, attns) # cali.shape [# of plan, pad_length] cali 是归一化后的基数估计
@@ -86,7 +87,7 @@ class LeonModel:
         # ucb = cali_var / cali_var.max() - cali_min / cali_min.max()
 
         ucb = cali_var / cali_var.max() - cost_t / cost_t.max() # [# of plan]
-        print("--- ucb ---", ucb)
+        # print("--- ucb ---", ucb)
 
         ucb_sort_idx = torch.argsort(ucb, descending=True) # 张量排序索引 | ucb_sort[0] 是uncertainty高的plan在plan_info中的索引
         ucb_sort_idx = ucb_sort_idx.tolist()
@@ -110,12 +111,12 @@ class LeonModel:
         # 1. encoding. plan -> plan encoding
         IF_TRAIN = False
         if IF_TRAIN:
-            seqs, un_times, attns, loss_mask, pgcosts = self.plans_encoding( X, IF_TRAIN)
+            seqs, un_times, attns, loss_mask, pgcosts = self.plans_encoding(X, IF_TRAIN)
         else:
             seqs, _, attns, _, pgcosts = self.plans_encoding(X, IF_TRAIN)
 
         # 2. calculate calibration
-        IF_TRAIN = True
+        IF_TRAIN = False
         cali_all = self.get_calibrations(seqs, attns, IF_TRAIN)
 
         # 3. 计算 ucb_idx, 存要执行 plan_info_pct 传给 exp_add
@@ -130,7 +131,8 @@ class LeonModel:
 
         cali_str = ['{:.2f}'.format(i) for i in cali_all[:, -1].tolist()] # 最后一次 cali
         print("cali_str len", len(cali_str))
-        return ','.join(cali_str)
+        cali_strs = ','.join(cali_str)
+        return cali_strs, seqs
 
 class JSONTCPHandler(socketserver.BaseRequestHandler):
     def handle(self):
@@ -162,8 +164,9 @@ class LeonJSONHandler(JSONTCPHandler):
             message_type = self.__messages[0]["type"]
             self.__messages = self.__messages[1:]
             if message_type == "query":
-                result = self.server.leon_model.predict_plan(self.__messages)
-                response = str(result).encode()
+                print("\n=== leon_server get a query ===")
+                cali_strs, seqs = self.server.leon_model.predict_plan(self.__messages)
+                response = str(cali_strs).encode()
                 # self.request.sendall(struct.pack("I", result))
                 self.request.sendall(response)
                 self.request.close()
