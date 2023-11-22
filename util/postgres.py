@@ -363,7 +363,8 @@ def ParsePostgresPlanJson_1(json_dict, AliasToNames):
                 assert 'Scan' in op, json_dict
                 assert 'Relation IDs' in json_dict, json_dict
                 if not has_whitespace(json_dict['Relation IDs']):
-                    curr_node.info['filter'] = json_dict['Base Restrict Info'].replace('~~','LIKE').replace(', ',' AND ')
+                    curr_node.info['filter'] = json_dict['Base Restrict Info'].replace(', ',' AND ')
+                    # print(curr_node.info['filter'])
 
         if 'Scan' in op and select_exprs:
             # Record select exprs that belong to this leaf.
