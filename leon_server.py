@@ -15,6 +15,7 @@ import re
 class LeonModel:
 
     def __init__(self):
+        # 初始化
         self.__model = None
         self.workload = envs.JoinOrderBenchmark(envs.JoinOrderBenchmark.Params())
         self.workload.workload_info.table_num_rows = postgres.GetAllTableNumRows(self.workload.workload_info.rel_names)
@@ -67,6 +68,7 @@ class LeonModel:
             nodeFeaturizer = plans_lib.PhysicalTreeNodeFeaturizer(self.workload.workload_info)
             trees, indexes = encoding.TreeConvFeaturize(nodeFeaturizer, nodes)
         # print(trees)
+        # no_grad eval
         
 
         # seqs = [get_plan_seq_adj(x['Plan']) for x in X]
