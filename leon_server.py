@@ -8,6 +8,32 @@ import math
 from test_case import SeqFormer
 from test_case import get_plan_encoding, configs, load_json, get_op_name_to_one_hot, plan_parameters, add_numerical_scalers
 
+import ray
+import pickle
+import os
+import time
+
+
+ray.init()
+
+# @ray.remote
+# class actor:
+#     def __init__(self, ):
+#         self.filename = 1
+
+#     def newfile()
+#         opem 
+
+#         file+ =1
+
+#     def clear 
+
+@ray.remote
+def append_node(file_name, nodes: list):
+    with open(file_name, 'ab') as file:  # 'ab' 模式用于追加
+            pickle.dump(nodes, file)
+    return 1
+
 Transformer_model = SeqFormer(
                         input_dim=configs['node_length'],
                         hidden_dim=128,
@@ -86,7 +112,7 @@ class LeonModel:
                     cali_all = torch.cat((cali_all, cali[:, 0].unsqueeze(1)), dim=1)
                 cali = cali[:, 0].cpu().detach().numpy() # 选择每一行的第一个元素
             
-            print("cali_all shape: ", cali_all.shape)
+            # print("cali_all shape: ", cali_all.shape)
         
         return cali_all
     
@@ -123,6 +149,13 @@ class LeonModel:
         if not isinstance(X, list):
             X = [X]
         X = [json.loads(x) if isinstance(x, str) else x for x in X]
+
+        t1 = time.time()
+        future = append_node.remote("Nodes.pkl", X)
+        # print(ray.get(future))
+        print("Time to write nodes: ", time.time() - t1)
+
+        # print(X[0])
         # for x in X:
         #     print(x)
         # return ','.join(['1.00' for _ in X])
@@ -149,9 +182,11 @@ class LeonModel:
             #     plan_info_pct.append(plan_info[ucb_idx[i]])
 
         cali_str = ['{:.2f}'.format(i) for i in cali_all[:, -1].tolist()] # 最后一次 cali
-        print("cali_str len", len(cali_str))
+        # print("cali_str len", len(cali_str))
         cali_strs = ','.join(cali_str)
-        return cali_strs, seqs
+        # return cali_strs, seqs
+
+        return ",".join(['1.00' for _ in X]), None
 
 class JSONTCPHandler(socketserver.BaseRequestHandler):
     def handle(self):

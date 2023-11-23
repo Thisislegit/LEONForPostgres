@@ -12,22 +12,6 @@ leon train 提交一条 query
 -> PG 根据校验选择 dp 中最优的 path 执行
 -> 获得执行 feedback (pg 返回的一条query的执行时间)
 
-chunks = chunk(Querylist, 5)
-
-for chunk in chunks:
-    for query in chunk:
-        Feedback_1, Nodes = pg.execute(query, leon=on)  # Inference phase
-
-    # Execution phase
-    nodes_to_execute = Pick_node(Nodes)
-    Feedback_2 = pg.execute(nodes_to_execute.to_sql(),
-                            nodes_to_execute.to_hint(), 
-                            leon=off) 
-    experience = Exp(Feedback_1, Feedback_2)
-
-    # Training phase
-    experience.getpair()
-    model.train()
 """
 
 def load_sql(file_list: list):
@@ -49,7 +33,7 @@ def load_sql(file_list: list):
 
 def getPG_latency(query, ENABLE_LEON=False):
     """
-    input. a query
+    input. a loaded query
     output. the average latency of a query get from pg
     """
     latency_sum = 0
