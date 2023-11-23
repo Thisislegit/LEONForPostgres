@@ -3,6 +3,11 @@
 This document provides an overview of the LEON system, focusing on its training and inference components as implemented in `LEON_train.py` and `Leon_server.py`.
 
 ## LEON_train.py - Training Process
+### TODO:
+- [ ] write nodes file with ray
+- [ ] pick_node
+- [ ] train model
+
 
 The training process is broken down into several steps, involving chunking queries, executing them, and using the feedback for training a model.
 
@@ -30,8 +35,8 @@ for chunk in chunks:
 
 ## Leon_server.py - Inference Process
 ### TODO:
-- [ ] Fix json load errors (parsed from postgres)
-- [ ] Ingretation of transformer
+- [x] Fix json load errors (parsed from postgres)
+- [x] Ingretation of transformer
 - [ ] Test inference efficiency and bottleneck
 
 
