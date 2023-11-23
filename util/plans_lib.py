@@ -839,15 +839,15 @@ class QueryFeaturizer(Featurizer):
             self.table_id_to_alias(table)
             for table in self.workload_info.rel_ids
         ]
-        # adj_matrix = nx.to_numpy_array(query_join_graph, nodelist=all_aliases)
-        adj_matrix = np.zeros((len(all_aliases), len(all_aliases)), dtype=int)
+        adj_matrix = nx.to_numpy_array(query_join_graph, nodelist=all_aliases)
+        # adj_matrix = np.zeros((len(all_aliases), len(all_aliases)), dtype=int)
 
-        # 遍历连接图的边，将邻接矩阵中对应位置的值设为1
-        for u, v in query_join_graph.edges():
-            u_idx = all_aliases.index(u)
-            v_idx = all_aliases.index(v)
-            adj_matrix[u_idx, v_idx] = 1
-            adj_matrix[v_idx, u_idx] = 1
+        # # 遍历连接图的边，将邻接矩阵中对应位置的值设为1
+        # for u, v in query_join_graph.edges():
+        #     u_idx = all_aliases.index(u)
+        #     v_idx = all_aliases.index(v)
+        #     adj_matrix[u_idx, v_idx] = 1
+        #     adj_matrix[v_idx, u_idx] = 1
         # # Sufficient to grab the upper-triangular portion (since graph is
         # # undirected).  k=1 means don't grab the diagnoal (all 1s).
         # print(adj_matrix)

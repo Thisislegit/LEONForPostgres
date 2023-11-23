@@ -19,8 +19,8 @@ class LeonModel:
 
     def __init__(self):
         self.__model = None
-        self.encoding_model = 'transformer'
-        self.inference_model = 'transformer' 
+        self.encoding_model = 'tree'
+        self.inference_model = 'tree_conv' 
         # 初始化
         if self.encoding_model == 'tree':
             self.workload = envs.JoinOrderBenchmark(envs.JoinOrderBenchmark.Params())
@@ -123,9 +123,10 @@ class LeonModel:
                 node = plans_lib.FilterScansOrJoins(node)
                 plans_lib.GatherUnaryFiltersInfo(node)
                 postgres.EstimateFilterRows(node)
-                node.info['sql_str'] = node.to_sql(node.info['join_cond'], with_select_exprs=True)
                 if i == 0:
+                    temp = node.to_sql(node.info['join_cond'], with_select_exprs=True)
                     query_vecs = torch.from_numpy(self.queryFeaturizer(node)).unsqueeze(0)
+                node.info['sql_str'] = temp
                 node.info['query_encoding'] = copy.deepcopy(query_vecs)
                 queryencoding.append(query_vecs)
                 nodes.append(node)
