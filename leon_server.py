@@ -14,40 +14,32 @@ import os
 import time
 
 
-ray.init()
-
-# @ray.remote
-# class actor:
-#     def __init__(self, ):
-#         self.filename = 1
-
-#     def newfile()
-#         opem 
-
-#         file+ =1
-
-#     def clear 
-
 @ray.remote
+class FileWriter:
+    def __init__(self, file_path):
+        self.file_path = file_path
+        self.completed_tasks = 0
+
+    def write_file(self):
+        with open(self.file_path, 'ab') as file:
+            time.sleep(10)
+            file.write(b'hello world\n')
+        self.completed_tasks += 1
+        print(1111111)
+    
+    def complete_all_tasks(self, task_num):
+        print(self.completed_tasks)
+        if self.completed_tasks == task_num:
+            return True
+        else:
+            return False
+
+@ray.remote(num_cpus=1)
 def append_node(file_name, nodes: list):
     with open(file_name, 'ab') as file:  # 'ab' 模式用于追加
             pickle.dump(nodes, file)
     return 1
 
-Transformer_model = SeqFormer(
-                        input_dim=configs['node_length'],
-                        hidden_dim=128,
-                        output_dim=1,
-                        mlp_activation="ReLU",
-                        transformer_activation="gelu",
-                        mlp_dropout=0.3,
-                        transformer_dropout=0.2,
-                    )
-import torch
-import math
-
-from test_case import SeqFormer
-from test_case import get_plan_encoding, configs, load_json, get_op_name_to_one_hot, plan_parameters, add_numerical_scalers
 
 Transformer_model = SeqFormer(
                         input_dim=configs['node_length'],
@@ -63,7 +55,9 @@ class LeonModel:
 
     def __init__(self):
         self.__model = None
-    
+        ray.init(_temp_dir="/data1/zengximu/LEON-research/ray") # ray should be init in sub process
+        self.writer_hander = FileWriter.remote('hello.txt')
+
     def load_model(self, path):
         pass
     
@@ -151,14 +145,11 @@ class LeonModel:
         X = [json.loads(x) if isinstance(x, str) else x for x in X]
 
         t1 = time.time()
-        future = append_node.remote("Nodes.pkl", X)
+        # print(X)
+        # future = append_node.options(num_cpus=1).remote("Nodes.pkl", X)
+        self.writer_hander.write_file.remote()
         # print(ray.get(future))
         print("Time to write nodes: ", time.time() - t1)
-
-        # print(X[0])
-        # for x in X:
-        #     print(x)
-        # return ','.join(['1.00' for _ in X])
         
         # 1. encoding. plan -> plan encoding
         IF_TRAIN = False
