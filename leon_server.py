@@ -3,6 +3,7 @@ import struct
 import socketserver
 from utils import *
 import util.envs as envs
+import util.treeconv as treeconv
 import util.postgres as postgres
 import util.plans_lib as plans_lib
 import torch
@@ -10,27 +11,151 @@ import os
 import util.DP as DP
 import copy
 import re
-
+import math
+from test_case import SeqFormer, SeqFormer_tree
+from test_case import get_plan_encoding, configs, load_json, get_op_name_to_one_hot, plan_parameters, add_numerical_scalers
 
 class LeonModel:
 
     def __init__(self):
-        # 初始化
         self.__model = None
-        self.workload = envs.JoinOrderBenchmark(envs.JoinOrderBenchmark.Params())
-        self.workload.workload_info.table_num_rows = postgres.GetAllTableNumRows(self.workload.workload_info.rel_names)
-        self.workload.workload_info.alias_to_names = postgres.GetAllAliasToNames(self.workload.workload_info.rel_ids)
-        print(self.workload.workload_info.scan_types)
-        # print(self.workload.workload_info.alias_to_names)
-        # print(self.workload.workload_info.rel_names)
-        # print(self.workload.workload_info.table_num_rows)
-        # print(self.workload.workload_info)
-        # print(self.workload.workload_info.table_num_rows['a1'])
+        self.encoding_model = 'transformer'
+        self.inference_model = 'transformer' 
+        # 初始化
+        if self.encoding_model == 'tree':
+            self.workload = envs.JoinOrderBenchmark(envs.JoinOrderBenchmark.Params())
+            self.workload.workload_info.table_num_rows = postgres.GetAllTableNumRows(self.workload.workload_info.rel_names)
+            self.workload.workload_info.alias_to_names = postgres.GetAllAliasToNames(self.workload.workload_info.rel_ids)
+            self.queryFeaturizer = plans_lib.QueryFeaturizer(self.workload.workload_info)
+            self.nodeFeaturizer = plans_lib.PhysicalTreeNodeFeaturizer(self.workload.workload_info)
+            if self.inference_model == 'tree_conv':
+                self.tree_model = treeconv.TreeConvolution(820, 123, 1)
+                pass
+            else:
+                self.Transformer_model = SeqFormer_tree(
+                    query_dim=820,
+                    input_dim= 155,
+                    hidden_dim=128,
+                    output_dim=1,
+                    padding_dim=128,
+                    mlp_activation="ReLU",
+                    transformer_activation="gelu",
+                    mlp_dropout=0.3,
+                    transformer_dropout=0.2,
+                    )
+        else:
+            self.Transformer_model = SeqFormer(
+                input_dim=configs['node_length'],
+                hidden_dim=128,
+                output_dim=1,
+                mlp_activation="ReLU",
+                transformer_activation="gelu",
+                mlp_dropout=0.3,
+                transformer_dropout=0.2,
+                )
+            statistics_file_path = "/data1/wyz/online/LEONForPostgres/statistics.json"
+            self.feature_statistics = load_json(statistics_file_path)
+            add_numerical_scalers(self.feature_statistics)
+            self.op_name_to_one_hot = get_op_name_to_one_hot(self.feature_statistics)
+            
+    def plans_encoding(self, plans):
+        '''
+        input. a list of plans in type of json
+        output. (seq_encoding, run_times, attention_mask, loss_mask)
+            - run_times 是归一化之后的
+        '''
+        
+
+        seqs = []
+        attns = []
+        pgcosts = [] # 存所有 plan 的 pg cost
+        for x in plans:
+            seq_encoding, run_times, attention_mask, loss_mask, database_id = get_plan_encoding(
+                x, configs, self.op_name_to_one_hot, plan_parameters, self.feature_statistics)
+            seqs.append(seq_encoding) 
+            attns.append(attention_mask)
+            pgcost = 100 # pg cost model 返回的 cost 【plan变成 hint + sql 再使用 pg 获得 cost】 看【pg_train.py】
+            pgcost_log = math.log(pgcost) # 4.605
+            pgcosts.append(pgcost_log)
+        seqs = torch.stack(seqs, dim=0)
+        attns = torch.stack(attns, dim=0)
+
+        return seqs, run_times, attns, loss_mask, pgcosts
+    
+    def get_calibrations(self, a, b, c=None):
+        cost_iter = 1 # testing 推理 1 次
+        with torch.no_grad():
+            if self.inference_model == 'tree_conv' and self.encoding_model == 'tree':
+                self.tree_model.eval() # tree_conv
+                query_feats = a
+                trees = b
+                indexes = c
+                cali_all = torch.tanh(self.tree_model(query_feats, trees, indexes)).add(1).squeeze(1)
+            else:
+                self.Transformer_model.eval() # 关闭 drop out，否则模型波动大    
+                for i in range(cost_iter): 
+                    if c is None: # transformer
+                        seqs = a
+                        attns = b
+                        cali = self.Transformer_model(seqs, attns) # cali.shape [# of plan, pad_length] cali 是归一化后的基数估计
+                    else:
+                        query_feats = a # tree_transformer
+                        trees = b
+                        indexes = c
+                        cali = self.Transformer_model(query_feats, trees, indexes) # cali.shape [# of plan, pad_length] cali 是归一化后的基数估计
+                    if i == 0:
+                        cali_all = cali[:, 0].unsqueeze(1) # [# of plan] -> [# of plan, 1] cali_all plan （cost_iter次）基数估计（归一化后）结果
+                    else:
+                        cali_all = torch.cat((cali_all, cali[:, 0].unsqueeze(1)), dim=1)
+        # print(cali_all)
+        return cali_all
+    
+    def encoding(self, X): 
+        if self.encoding_model == "tree":
+            nodes = []
+            queryencoding = []
+            for i in range(0, len(X)):
+                # print(X[i])
+                # print(node)
+                node = postgres.ParsePostgresPlanJson_1(X[i], self.workload.workload_info.alias_to_names)
+                if node.info['join_cond'] == ['']:
+                    break
+                node = plans_lib.FilterScansOrJoins(node)
+                plans_lib.GatherUnaryFiltersInfo(node)
+                postgres.EstimateFilterRows(node)
+                node.info['sql_str'] = node.to_sql(node.info['join_cond'], with_select_exprs=True)
+                if i == 0:
+                    query_vecs = torch.from_numpy(self.queryFeaturizer(node)).unsqueeze(0)
+                node.info['query_encoding'] = copy.deepcopy(query_vecs)
+                queryencoding.append(query_vecs)
+                nodes.append(node)
+            if nodes:
+                tensor_query_encoding = (torch.cat(queryencoding, dim=0))
+                trees, indexes = encoding.TreeConvFeaturize(self.nodeFeaturizer, nodes)
+                # print("tensor_query_encoding", tensor_query_encoding.shape,
+                #     "trees", trees.shape,
+                #     "indexes", indexes.shape)
+            return tensor_query_encoding, trees, indexes
+        
+        else:
+            seqs, _, attns, _, _ = self.plans_encoding(X)
+            return seqs, attns, None
+    
+    def inference(self, a, b, c):
+        cali_all = self.get_calibrations(a, b, c)
+        if cali_all.dim() == 1:
+            cali_str = ['{:.2f}'.format(i) for i in cali_all.tolist()] # 最后一次 cali
+        else:
+            cali_str = ['{:.2f}'.format(i) for i in cali_all[:, -1].tolist()] # 最后一次 cali
+        # print("cali_str len", len(cali_str))
+        cali_strs = ','.join(cali_str)
+        return cali_strs
     
     def load_model(self, path):
         pass
     
     def predict_plan(self, messages):
+        # json解析
         print("Predicting plan for ", len(messages))
         X = messages
         if not isinstance(X, list):
@@ -39,37 +164,13 @@ class LeonModel:
             if not x:
                 return ','.join(['1.00' for _ in X])
         X = [json.loads(x) if isinstance(x, str) else x for x in X]
-        nodes = []
-        for i in range(0, len(messages)):
-            node = postgres.ParsePostgresPlanJson_1(X[i], self.workload.workload_info.alias_to_names)
-            if node.info['join_cond'] == ['']:
-                break
-            print(X[i])
-            # print(node)
-            node = plans_lib.FilterScansOrJoins(node)
-            # print(node)
-            plans_lib.GatherUnaryFiltersInfo(node)
-            postgres.EstimateFilterRows(node)
-            # print(node.info['all_filters_est_rows'])
-            try:
-                node.info['sql_str'] = node.to_sql(node.info['join_cond'], with_select_exprs=True)
-                # print(node.info['sql_str'])
-            except:
-                print(node.info['join_cond'])
-                print(X[i])
-            # print(node.info['sql_str'])
-            queryFeaturizer = plans_lib.QueryFeaturizer(self.workload.workload_info)
-            query_vecs = torch.from_numpy(queryFeaturizer(node)).unsqueeze(0)
-            node.info['query_encoding'] = copy.deepcopy(query_vecs)
-            nodes.append(node)
+        # 编码
+        a, b, c = self.encoding(X)
+        # 推理
+        cali_strs = self.inference(a, b, c)
         
-            
-        if nodes:
-            nodeFeaturizer = plans_lib.PhysicalTreeNodeFeaturizer(self.workload.workload_info)
-            trees, indexes = encoding.TreeConvFeaturize(nodeFeaturizer, nodes)
-        # print(trees)
-        # no_grad eval
-        
+        return cali_strs
+
 
         # seqs = [get_plan_seq_adj(x['Plan']) for x in X]
         # print(seqs[0])
@@ -92,9 +193,7 @@ class JSONTCPHandler(socketserver.BaseRequestHandler):
                 json_msg = str_buf[:null_loc].strip()
                 str_buf = str_buf[null_loc + 1:]
                 if json_msg:
-                    try:
-                        
-
+                    try:    
                         def fix_json_msg(json):
                             pattern = r'ANY \((.*?):text\[\]\)'
                             matches = re.findall(pattern, json)

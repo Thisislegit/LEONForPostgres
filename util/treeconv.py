@@ -4,7 +4,7 @@ import torch.nn as nn
 
 from . import plans_lib
 
-DEVICE = 'cuda:2' if torch.cuda.is_available() else 'cpu'
+DEVICE = 'cpu'
 
 
 class TreeConvolution(nn.Module):

@@ -47,9 +47,9 @@ for chunk in chunks:
 ### TODO:
 - [x] Fix json load errors (parsed from postgres)
 - [x] Ingretation of transformer
-- [x] Test inference efficiency and bottleneck
-![Effciency](./Figs/efficiency.jpg)
-- [x] Test trained model ([SeqTransformer](https://github.com/liang-zibo/DACE))
+- [ ] Test inference efficiency and bottleneck
+- [ ] Test trained model ([SeqTransformer](https://github.com/liang-zibo/DACE))
+- [ ] Multiple Database Execution for acceleration.
 
     **pre-trained model for 10 templates**
 
