@@ -64,8 +64,6 @@ class LeonModel:
         output. (seq_encoding, run_times, attention_mask, loss_mask)
             - run_times 是归一化之后的
         '''
-        
-
         seqs = []
         attns = []
         pgcosts = [] # 存所有 plan 的 pg cost
@@ -83,8 +81,8 @@ class LeonModel:
         return seqs, run_times, attns, loss_mask, pgcosts
     
     def get_calibrations(self, a, b, c=None):
-        cost_iter = 1 # testing 推理 1 次
         with torch.no_grad():
+            # cost_iter
             if self.inference_model == 'tree_conv' and self.encoding_model == 'tree':
                 self.tree_model.eval() # tree_conv
                 query_feats = a
@@ -93,20 +91,16 @@ class LeonModel:
                 cali_all = torch.tanh(self.tree_model(query_feats, trees, indexes)).add(1).squeeze(1)
             else:
                 self.Transformer_model.eval() # 关闭 drop out，否则模型波动大    
-                for i in range(cost_iter): 
-                    if c is None: # transformer
-                        seqs = a
-                        attns = b
-                        cali = self.Transformer_model(seqs, attns) # cali.shape [# of plan, pad_length] cali 是归一化后的基数估计
-                    else:
-                        query_feats = a # tree_transformer
-                        trees = b
-                        indexes = c
-                        cali = self.Transformer_model(query_feats, trees, indexes) # cali.shape [# of plan, pad_length] cali 是归一化后的基数估计
-                    if i == 0:
-                        cali_all = cali[:, 0].unsqueeze(1) # [# of plan] -> [# of plan, 1] cali_all plan （cost_iter次）基数估计（归一化后）结果
-                    else:
-                        cali_all = torch.cat((cali_all, cali[:, 0].unsqueeze(1)), dim=1)
+                if c is None: # transformer
+                    seqs = a
+                    attns = b
+                    cali = self.Transformer_model(seqs, attns) # cali.shape [# of plan, pad_length] cali 是归一化后的基数估计
+                else:
+                    query_feats = a # tree_transformer
+                    trees = b
+                    indexes = c
+                    cali = self.Transformer_model(query_feats, trees, indexes) # cali.shape [# of plan, pad_length] cali 是归一化后的基数估计
+                cali_all = cali[:, 0] # [# of plan] -> [# of plan, 1] cali_all plan （cost_iter次）基数估计（归一化后）结果
         # print(cali_all)
         return cali_all
     
@@ -125,6 +119,7 @@ class LeonModel:
                 postgres.EstimateFilterRows(node)
                 if i == 0:
                     temp = node.to_sql(node.info['join_cond'], with_select_exprs=True)
+                    node.info['sql_str'] = temp
                     query_vecs = torch.from_numpy(self.queryFeaturizer(node)).unsqueeze(0)
                 node.info['sql_str'] = temp
                 node.info['query_encoding'] = copy.deepcopy(query_vecs)
@@ -144,10 +139,7 @@ class LeonModel:
     
     def inference(self, a, b, c):
         cali_all = self.get_calibrations(a, b, c)
-        if cali_all.dim() == 1:
-            cali_str = ['{:.2f}'.format(i) for i in cali_all.tolist()] # 最后一次 cali
-        else:
-            cali_str = ['{:.2f}'.format(i) for i in cali_all[:, -1].tolist()] # 最后一次 cali
+        cali_str = ['{:.2f}'.format(i) for i in cali_all.tolist()] # 最后一次 cali
         # print("cali_str len", len(cali_str))
         cali_strs = ','.join(cali_str)
         return cali_strs

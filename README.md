@@ -50,6 +50,64 @@ for chunk in chunks:
 - [ ] Test inference efficiency and bottleneck
 - [ ] Test trained model ([SeqTransformer](https://github.com/liang-zibo/DACE))
 - [ ] Multiple Database Execution for acceleration.
+<!-- 平均执行时间
+解析
+编码
+推理
+timeout = 10000 -->
+
+# Using Ray for Efficient Database Execution
+
+This guide explains how to leverage the Ray framework for efficient database querying. Ray allows for parallel execution and easy scaling, which is particularly useful when dealing with multiple database queries. We'll be using Ray actors to create a pool of database connections and execute queries in parallel.
+
+## Prerequisites
+
+- Python 3.x
+- Ray (`pip install ray`)
+- A database and corresponding Python library (e.g., `psycopg2` for PostgreSQL, `pymysql` for MySQL)
+
+## Setup
+
+First, import the necessary modules and initialize Ray:
+
+```python
+import ray
+from ray.util import ActorPool
+
+ray.init()
+@ray.remote
+class ActorThatQueries:
+    def __init__(self):
+        # Initialize and configure your database connection here
+        # Example: self.db = psycopg2.connect(...)
+
+    def query_db(self, val):
+        # Implement the logic to query the database
+        # Example: res = self.db.execute("SELECT * FROM table WHERE id = %s", (val,))
+        # return res
+
+# Create a list of actors
+actors = [ActorThatQueries.remote() for _ in range(5)]
+
+# Initialize the actor pool
+pool = ActorPool(actors)
+
+# Define the range of values to query
+query_values = list(range(100))
+
+# Execute queries in parallel
+results = list(pool.map_unordered(lambda a, v: a.query_db.remote(v), query_values))
+
+# Process the results
+for result in results:
+    # Handle each result
+    pass
+```
+
+
+Replace the placeholders and example code with specifics relevant to your database and requirements.
+
+>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> 38571786bf (Fixed SQL_ Str error, causing node_ Error that grarh cannot generate)
 
     **pre-trained model for 10 templates**
 
