@@ -38,6 +38,8 @@ for chunk in chunks:
 - [x] Fix json load errors (parsed from postgres)
 - [x] Ingretation of transformer
 - [ ] Test inference efficiency and bottleneck
+- [ ] Test trained model ([SeqTransformer](https://github.com/liang-zibo/DACE))
+- [ ] Multiple Database Execution for acceleration.
 
 
 # Using Ray for Efficient Database Execution
