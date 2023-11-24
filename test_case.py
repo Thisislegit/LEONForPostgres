@@ -49,7 +49,8 @@ def dfs(plan, seq, adjs, parent_node_id, run_times, heights, cur_height, if_trai
     seq.append(plan)
     heights.append(cur_height)
     if if_train:
-        run_times.append(plan["Actual Total Time"])
+        # run_times.append(plan["Actual Total Time"])
+        run_times.append(-1)
     else:
         run_times.append(-1)
     if parent_node_id != -1:  # not root node

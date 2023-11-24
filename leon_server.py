@@ -20,12 +20,14 @@ class FileWriter:
         self.file_path = file_path
         self.completed_tasks = 0
 
-    def write_file(self):
-        with open(self.file_path, 'ab') as file:
-            time.sleep(10)
-            file.write(b'hello world\n')
-        self.completed_tasks += 1
-        print(1111111)
+    def write_file(self, nodes):
+        try:
+            with open(self.file_path, 'ab') as file:
+                pickle.dump(nodes, file)
+                print("write one message")
+            self.completed_tasks += 1
+        except Exception as e:
+            print("write_file() fail to open file and to write message", e)
     
     def complete_all_tasks(self, task_num):
         print(self.completed_tasks)
@@ -33,12 +35,6 @@ class FileWriter:
             return True
         else:
             return False
-
-@ray.remote(num_cpus=1)
-def append_node(file_name, nodes: list):
-    with open(file_name, 'ab') as file:  # 'ab' 模式用于追加
-            pickle.dump(nodes, file)
-    return 1
 
 
 Transformer_model = SeqFormer(
@@ -54,12 +50,17 @@ Transformer_model = SeqFormer(
 class LeonModel:
 
     def __init__(self):
-        self.__model = None
+        self.__model = self.load_model("model.pth")
         ray.init(_temp_dir="/data1/zengximu/LEON-research/ray") # ray should be init in sub process
-        self.writer_hander = FileWriter.remote('hello.txt')
+        node_path = "Nodes.pkl"
+        self.writer_hander = FileWriter.remote(node_path)
 
     def load_model(self, path):
-        pass
+        if not os.path.exists(path):
+            model = Transformer_model
+        else:
+            model = torch.load(path)
+        return model
     
     # -- UNFINISHED pgcost --
     def plans_encoding(self, plans, IF_TRAIN):
@@ -75,65 +76,36 @@ class LeonModel:
 
         seqs = []
         attns = []
-        pgcosts = [] # 存所有 plan 的 pg cost
         for x in plans:
             seq_encoding, run_times, attention_mask, loss_mask, database_id = get_plan_encoding(
                 x, configs, op_name_to_one_hot, plan_parameters, feature_statistics, IF_TRAIN
             )
             seqs.append(seq_encoding) 
             attns.append(attention_mask)
-            pgcost = 100 # pg cost model 返回的 cost 【plan变成 hint + sql 再使用 pg 获得 cost】 看【pg_train.py】
-            pgcost_log = math.log(pgcost) # 4.605
-            pgcosts.append(pgcost_log)
         seqs = torch.stack(seqs, dim=0)
         attns = torch.stack(attns, dim=0)
 
-        return seqs, run_times, attns, loss_mask, pgcosts
+        return seqs, None, attns, None, None
     
     def get_calibrations(self, seqs, attns, IF_TRAIN):
         if IF_TRAIN:
             cost_iter = 10 # training 用模型推理 10 次 获得模型不确定性
         else:
-            Transformer_model.eval() # 关闭 drop out，否则模型波动大
-            cost_iter = 1 # testing 推理 1 次
+            self.__model.eval() # 关闭 drop out，否则模型波动大
+        cost_iter = 1 # testing 推理 1 次
         
         with torch.no_grad():    
             for i in range(cost_iter):
-                cali = Transformer_model(seqs, attns) # cali.shape [# of plan, pad_length] cali 是归一化后的基数估计
+                cali = self.__model(seqs, attns) # cali.shape [# of plan, pad_length] cali 是归一化后的基数估计
                 if i == 0:
                     cali_all = cali[:, 0].unsqueeze(1) # [# of plan] -> [# of plan, 1] cali_all plan （cost_iter次）基数估计（归一化后）结果
                 else:
                     cali_all = torch.cat((cali_all, cali[:, 0].unsqueeze(1)), dim=1)
                 cali = cali[:, 0].cpu().detach().numpy() # 选择每一行的第一个元素
-            
-            # print("cali_all shape: ", cali_all.shape)
-        
+                    
         return cali_all
     
-    def get_ucb_idx(self, cali_all, pgcosts):    
-        cali_mean = cali_all.mean(dim = 1) # 每个 plan 的 cali 均值 [# of plan] | 值为 1 左右
-        cali_var = cali_all.var(dim = 1) # [# of plan] | 值为 0 左右
-        costs = torch.tensor(pgcosts) # [# of plan]
-        cost_t = torch.mul(cali_mean, costs) # 计算 calibration mean * pg返回的cost [# of plan]
-
-        # cali_min, _ = cost_t.min(dim = 0) # plan 的 cali 最小值 [# of plan] 【cali_min只有一个值？】
-        # print("cost_min.shape(): ", cali_min.shape)
-        # print(cali_min)            
-        # ucb = cali_var / cali_var.max() - cali_min / cali_min.max()
-
-        ucb = cali_var / cali_var.max() - cost_t / cost_t.max() # [# of plan]
-        # print("--- ucb ---", ucb)
-
-        ucb_sort_idx = torch.argsort(ucb, descending=True) # 张量排序索引 | ucb_sort[0] 是uncertainty高的plan在plan_info中的索引
-        ucb_sort_idx = ucb_sort_idx.tolist()
-
-        return ucb_sort_idx
-    
     def predict_plan(self, messages):
-        '''
-        input. messages 一个等价类的所有 plan
-        output. 所有 plan 的修正值
-        '''
         '''
         input. messages 一个等价类的所有 plan
         output. 所有 plan 的修正值
@@ -145,39 +117,25 @@ class LeonModel:
         X = [json.loads(x) if isinstance(x, str) else x for x in X]
 
         t1 = time.time()
-        # print(X)
-        # future = append_node.options(num_cpus=1).remote("Nodes.pkl", X)
-        self.writer_hander.write_file.remote()
-        # print(ray.get(future))
+        try:
+            self.writer_hander.write_file.remote(X)
+        except:
+            print("The ray writer_hander cannot write file.")
         print("Time to write nodes: ", time.time() - t1)
         
         # 1. encoding. plan -> plan encoding
         IF_TRAIN = False
-        if IF_TRAIN:
-            seqs, un_times, attns, loss_mask, pgcosts = self.plans_encoding(X, IF_TRAIN)
-        else:
-            seqs, _, attns, _, pgcosts = self.plans_encoding(X, IF_TRAIN)
+        seqs, _, attns, _, _ = self.plans_encoding(X, IF_TRAIN)
 
         # 2. calculate calibration
-        IF_TRAIN = False
         cali_all = self.get_calibrations(seqs, attns, IF_TRAIN)
-
-        # 3. 计算 ucb_idx, 存要执行 plan_info_pct 传给 exp_add
-        if IF_TRAIN:
-            plan_info = [] # 存所有 plan 的 cost, sql, hint 等信息
-            plan_info_pct = [] # 存需要执行的 plan 的 cost, sql, hint 等信息
-            pct = 0.1 # 执行 percent 比例的 plan
-            ucb_idx = self.get_ucb_idx(cali_all, pgcosts)
-            n = math.ceil(pct * len(ucb_idx))
-            # for i in range(n):
-            #     plan_info_pct.append(plan_info[ucb_idx[i]])
+        print("cali_all.shape", cali_all.shape)
 
         cali_str = ['{:.2f}'.format(i) for i in cali_all[:, -1].tolist()] # 最后一次 cali
-        # print("cali_str len", len(cali_str))
         cali_strs = ','.join(cali_str)
-        # return cali_strs, seqs
+        return cali_strs, seqs
 
-        return ",".join(['1.00' for _ in X]), None
+        # return ",".join(['1.00' for _ in X])
 
 class JSONTCPHandler(socketserver.BaseRequestHandler):
     def handle(self):
@@ -210,10 +168,7 @@ class LeonJSONHandler(JSONTCPHandler):
             self.__messages = self.__messages[1:]
             if message_type == "query":
                 print("\n=== leon_server get a query ===")
-                cali_strs, seqs = self.server.leon_model.predict_plan(self.__messages)
-                response = str(cali_strs).encode()
-                print("\n=== leon_server get a query ===")
-                cali_strs, seqs = self.server.leon_model.predict_plan(self.__messages)
+                cali_strs = self.server.leon_model.predict_plan(self.__messages)
                 response = str(cali_strs).encode()
                 # self.request.sendall(struct.pack("I", result))
                 self.request.sendall(response)
@@ -227,10 +182,6 @@ class LeonJSONHandler(JSONTCPHandler):
 
 def start_server(listen_on, port):
     model = LeonModel()
-
-    # if os.path.exists(DEFAULT_MODEL_PATH):
-    #     print("Loading existing model")
-    #     model.load_model(DEFAULT_MODEL_PATH)
     
     socketserver.TCPServer.allow_reuse_address = True
     with socketserver.TCPServer((listen_on, port), LeonJSONHandler) as server:
