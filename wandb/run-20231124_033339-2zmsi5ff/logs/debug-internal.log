@@ -1,0 +1,188 @@
+2023-11-24 03:33:39,013 INFO    StreamThr :1312809 [internal.py:wandb_internal():86] W&B internal server running at pid: 1312809, started at: 2023-11-24 03:33:39.012431
+2023-11-24 03:33:39,015 DEBUG   HandlerThread:1312809 [handler.py:handle_request():146] handle_request: status
+2023-11-24 03:33:39,020 INFO    WriterThread:1312809 [datastore.py:open_for_write():85] open: /data1/wyz/online/LEONForPostgres/wandb/run-20231124_033339-2zmsi5ff/run-2zmsi5ff.wandb
+2023-11-24 03:33:39,021 DEBUG   SenderThread:1312809 [sender.py:send():380] send: header
+2023-11-24 03:33:39,074 DEBUG   SenderThread:1312809 [sender.py:send():380] send: run
+2023-11-24 03:33:40,915 INFO    SenderThread:1312809 [dir_watcher.py:__init__():211] watching files in: /data1/wyz/online/LEONForPostgres/wandb/run-20231124_033339-2zmsi5ff/files
+2023-11-24 03:33:40,915 INFO    SenderThread:1312809 [sender.py:_start_run_threads():1124] run started: 2zmsi5ff with start time 1700796819.013033
+2023-11-24 03:33:40,955 DEBUG   HandlerThread:1312809 [handler.py:handle_request():146] handle_request: check_version
+2023-11-24 03:33:40,956 DEBUG   SenderThread:1312809 [sender.py:send_request():407] send_request: check_version
+2023-11-24 03:33:41,340 DEBUG   HandlerThread:1312809 [handler.py:handle_request():146] handle_request: run_start
+2023-11-24 03:33:41,378 DEBUG   HandlerThread:1312809 [system_info.py:__init__():32] System info init
+2023-11-24 03:33:41,378 DEBUG   HandlerThread:1312809 [system_info.py:__init__():47] System info init done
+2023-11-24 03:33:41,378 INFO    HandlerThread:1312809 [system_monitor.py:start():194] Starting system monitor
+2023-11-24 03:33:41,378 INFO    SystemMonitor:1312809 [system_monitor.py:_start():158] Starting system asset monitoring threads
+2023-11-24 03:33:41,379 INFO    HandlerThread:1312809 [system_monitor.py:probe():214] Collecting system info
+2023-11-24 03:33:41,380 INFO    SystemMonitor:1312809 [interfaces.py:start():190] Started cpu monitoring
+2023-11-24 03:33:41,381 INFO    SystemMonitor:1312809 [interfaces.py:start():190] Started disk monitoring
+2023-11-24 03:33:41,382 INFO    SystemMonitor:1312809 [interfaces.py:start():190] Started gpu monitoring
+2023-11-24 03:33:41,383 INFO    SystemMonitor:1312809 [interfaces.py:start():190] Started memory monitoring
+2023-11-24 03:33:41,384 INFO    SystemMonitor:1312809 [interfaces.py:start():190] Started network monitoring
+2023-11-24 03:33:41,475 DEBUG   HandlerThread:1312809 [system_info.py:probe():196] Probing system
+2023-11-24 03:33:41,486 DEBUG   HandlerThread:1312809 [system_info.py:_probe_git():181] Probing git
+2023-11-24 03:33:41,527 DEBUG   HandlerThread:1312809 [system_info.py:_probe_git():189] Probing git done
+2023-11-24 03:33:41,527 DEBUG   HandlerThread:1312809 [system_info.py:probe():244] Probing system done
+2023-11-24 03:33:41,527 DEBUG   HandlerThread:1312809 [system_monitor.py:probe():223] {'os': 'Linux-5.15.0-87-generic-x86_64-with-glibc2.17', 'python': '3.8.18', 'heartbeatAt': '2023-11-24T03:33:41.475570', 'startedAt': '2023-11-24T03:33:39.003256', 'docker': None, 'cuda': None, 'args': (), 'state': 'running', 'program': '/data1/wyz/online/LEONForPostgres/leon_server.py', 'codePathLocal': 'leon_server.py', 'codePath': 'leon_server.py', 'git': {'remote': 'git@github.com:Thisislegit/LEONForPostgres.git', 'commit': '38571786bf6178ae13c9814c4a58962463cb3205'}, 'email': 'wyz12234@github.com', 'root': '/data1/wyz/online/LEONForPostgres', 'host': 'admin', 'username': 'wyz', 'executable': '/data1/wyz/miniconda3/envs/unlearning/bin/python', 'cpu_count': 24, 'cpu_count_logical': 48, 'cpu_freq': {'current': 1.3860833333333336, 'min': 1000.0, 'max': 3200.0}, 'cpu_freq_per_core': [{'current': 1.0, 'min': 1000.0, 'max': 3200.0}, {'current': 1.0, 'min': 1000.0, 'max': 3200.0}, {'current': 2.0, 'min': 1000.0, 'max': 3200.0}, {'current': 1.0, 'min': 1000.0, 'max': 3200.0}, {'current': 2.0, 'min': 1000.0, 'max': 3200.0}, {'current': 1.0, 'min': 1000.0, 'max': 3200.0}, {'current': 2.0, 'min': 1000.0, 'max': 3200.0}, {'current': 1.0, 'min': 1000.0, 'max': 3200.0}, {'current': 2.0, 'min': 1000.0, 'max': 3200.0}, {'current': 1.0, 'min': 1000.0, 'max': 3200.0}, {'current': 1.0, 'min': 1000.0, 'max': 3200.0}, {'current': 1.0, 'min': 1000.0, 'max': 3200.0}, {'current': 1.0, 'min': 1000.0, 'max': 3200.0}, {'current': 2.1, 'min': 1000.0, 'max': 3200.0}, {'current': 1.0, 'min': 1000.0, 'max': 3200.0}, {'current': 1.4, 'min': 1000.0, 'max': 3200.0}, {'current': 3.0, 'min': 1000.0, 'max': 3200.0}, {'current': 3.2, 'min': 1000.0, 'max': 3200.0}, {'current': 1.0, 'min': 1000.0, 'max': 3200.0}, {'current': 1.0, 'min': 1000.0, 'max': 3200.0}, {'current': 1.0, 'min': 1000.0, 'max': 3200.0}, {'current': 1.0, 'min': 1000.0, 'max': 3200.0}, {'current': 1.0, 'min': 1000.0, 'max': 3200.0}, {'current': 1.9, 'min': 1000.0, 'max': 3200.0}, {'current': 1.0, 'min': 1000.0, 'max': 3200.0}, {'current': 1.0, 'min': 1000.0, 'max': 3200.0}, {'current': 1.0, 'min': 1000.0, 'max': 3200.0}, {'current': 1.0, 'min': 1000.0, 'max': 3200.0}, {'current': 1.0, 'min': 1000.0, 'max': 3200.0}, {'current': 1.0, 'min': 1000.0, 'max': 3200.0}, {'current': 1.0, 'min': 1000.0, 'max': 3200.0}, {'current': 1.0, 'min': 1000.0, 'max': 3200.0}, {'current': 1.5, 'min': 1000.0, 'max': 3200.0}, {'current': 1.0, 'min': 1000.0, 'max': 3200.0}, {'current': 1.0, 'min': 1000.0, 'max': 3200.0}, {'current': 1.0, 'min': 1000.0, 'max': 3200.0}, {'current': 1.0, 'min': 1000.0, 'max': 3200.0}, {'current': 1.0, 'min': 1000.0, 'max': 3200.0}, {'current': 1.0, 'min': 1000.0, 'max': 3200.0}, {'current': 1.0, 'min': 1000.0, 'max': 3200.0}, {'current': 1.0, 'min': 1000.0, 'max': 3200.0}, {'current': 2.1, 'min': 1000.0, 'max': 3200.0}, {'current': 2.199, 'min': 1000.0, 'max': 3200.0}, {'current': 1.7, 'min': 1000.0, 'max': 3200.0}, {'current': 1.665, 'min': 1000.0, 'max': 3200.0}, {'current': 2.0, 'min': 1000.0, 'max': 3200.0}, {'current': 1.0, 'min': 1000.0, 'max': 3200.0}, {'current': 1.0, 'min': 1000.0, 'max': 3200.0}], 'disk': {'/': {'total': 97.87200164794922, 'used': 16.254711151123047}}, 'gpu': 'NVIDIA GeForce RTX 3080', 'gpu_count': 4, 'gpu_devices': [{'name': 'NVIDIA GeForce RTX 3080', 'memory_total': 10737418240}, {'name': 'NVIDIA GeForce RTX 3080', 'memory_total': 10737418240}, {'name': 'NVIDIA GeForce RTX 3080', 'memory_total': 10737418240}, {'name': 'NVIDIA GeForce RTX 3080', 'memory_total': 10737418240}], 'memory': {'total': 251.5478973388672}}
+2023-11-24 03:33:41,527 INFO    HandlerThread:1312809 [system_monitor.py:probe():224] Finished collecting system info
+2023-11-24 03:33:41,528 INFO    HandlerThread:1312809 [system_monitor.py:probe():227] Publishing system info
+2023-11-24 03:33:41,528 DEBUG   HandlerThread:1312809 [system_info.py:_save_pip():52] Saving list of pip packages installed into the current environment
+2023-11-24 03:33:41,528 DEBUG   HandlerThread:1312809 [system_info.py:_save_pip():68] Saving pip packages done
+2023-11-24 03:33:41,528 DEBUG   HandlerThread:1312809 [system_info.py:_save_conda():75] Saving list of conda packages installed into the current environment
+2023-11-24 03:33:41,918 INFO    Thread-12 :1312809 [dir_watcher.py:_on_file_created():271] file/dir created: /data1/wyz/online/LEONForPostgres/wandb/run-20231124_033339-2zmsi5ff/files/conda-environment.yaml
+2023-11-24 03:33:41,919 INFO    Thread-12 :1312809 [dir_watcher.py:_on_file_created():271] file/dir created: /data1/wyz/online/LEONForPostgres/wandb/run-20231124_033339-2zmsi5ff/files/requirements.txt
+2023-11-24 03:33:43,444 DEBUG   HandlerThread:1312809 [system_info.py:_save_conda():87] Saving conda packages done
+2023-11-24 03:33:43,446 INFO    HandlerThread:1312809 [system_monitor.py:probe():229] Finished publishing system info
+2023-11-24 03:33:43,451 DEBUG   SenderThread:1312809 [sender.py:send():380] send: files
+2023-11-24 03:33:43,451 INFO    SenderThread:1312809 [sender.py:_save_file():1380] saving file wandb-metadata.json with policy now
+2023-11-24 03:33:43,464 DEBUG   HandlerThread:1312809 [handler.py:handle_request():146] handle_request: stop_status
+2023-11-24 03:33:43,464 DEBUG   SenderThread:1312809 [sender.py:send_request():407] send_request: stop_status
+2023-11-24 03:33:43,470 DEBUG   HandlerThread:1312809 [handler.py:handle_request():146] handle_request: internal_messages
+2023-11-24 03:33:43,917 INFO    Thread-12 :1312809 [dir_watcher.py:_on_file_modified():288] file/dir modified: /data1/wyz/online/LEONForPostgres/wandb/run-20231124_033339-2zmsi5ff/files/conda-environment.yaml
+2023-11-24 03:33:43,917 INFO    Thread-12 :1312809 [dir_watcher.py:_on_file_created():271] file/dir created: /data1/wyz/online/LEONForPostgres/wandb/run-20231124_033339-2zmsi5ff/files/wandb-metadata.json
+2023-11-24 03:33:44,104 DEBUG   SenderThread:1312809 [sender.py:send():380] send: telemetry
+2023-11-24 03:33:44,104 DEBUG   HandlerThread:1312809 [handler.py:handle_request():146] handle_request: status_report
+2023-11-24 03:33:44,106 DEBUG   SenderThread:1312809 [sender.py:send():380] send: exit
+2023-11-24 03:33:44,106 INFO    SenderThread:1312809 [sender.py:send_exit():585] handling exit code: 0
+2023-11-24 03:33:44,106 INFO    SenderThread:1312809 [sender.py:send_exit():587] handling runtime: 2
+2023-11-24 03:33:44,108 INFO    SenderThread:1312809 [sender.py:_save_file():1380] saving file wandb-summary.json with policy end
+2023-11-24 03:33:44,109 INFO    SenderThread:1312809 [sender.py:send_exit():593] send defer
+2023-11-24 03:33:44,109 DEBUG   HandlerThread:1312809 [handler.py:handle_request():146] handle_request: defer
+2023-11-24 03:33:44,109 INFO    HandlerThread:1312809 [handler.py:handle_request_defer():172] handle defer: 0
+2023-11-24 03:33:44,110 DEBUG   SenderThread:1312809 [sender.py:send_request():407] send_request: defer
+2023-11-24 03:33:44,110 INFO    SenderThread:1312809 [sender.py:send_request_defer():609] handle sender defer: 0
+2023-11-24 03:33:44,110 INFO    SenderThread:1312809 [sender.py:transition_state():613] send defer: 1
+2023-11-24 03:33:44,110 DEBUG   HandlerThread:1312809 [handler.py:handle_request():146] handle_request: defer
+2023-11-24 03:33:44,110 INFO    HandlerThread:1312809 [handler.py:handle_request_defer():172] handle defer: 1
+2023-11-24 03:33:44,111 DEBUG   SenderThread:1312809 [sender.py:send_request():407] send_request: defer
+2023-11-24 03:33:44,111 INFO    SenderThread:1312809 [sender.py:send_request_defer():609] handle sender defer: 1
+2023-11-24 03:33:44,111 INFO    SenderThread:1312809 [sender.py:transition_state():613] send defer: 2
+2023-11-24 03:33:44,111 DEBUG   HandlerThread:1312809 [handler.py:handle_request():146] handle_request: defer
+2023-11-24 03:33:44,111 INFO    HandlerThread:1312809 [handler.py:handle_request_defer():172] handle defer: 2
+2023-11-24 03:33:44,111 INFO    HandlerThread:1312809 [system_monitor.py:finish():203] Stopping system monitor
+2023-11-24 03:33:44,112 DEBUG   SystemMonitor:1312809 [system_monitor.py:_start():172] Starting system metrics aggregation loop
+2023-11-24 03:33:44,112 DEBUG   SystemMonitor:1312809 [system_monitor.py:_start():179] Finished system metrics aggregation loop
+2023-11-24 03:33:44,112 DEBUG   SystemMonitor:1312809 [system_monitor.py:_start():183] Publishing last batch of metrics
+2023-11-24 03:33:44,113 INFO    HandlerThread:1312809 [interfaces.py:finish():202] Joined cpu monitor
+2023-11-24 03:33:44,114 INFO    HandlerThread:1312809 [interfaces.py:finish():202] Joined disk monitor
+2023-11-24 03:33:44,494 INFO    HandlerThread:1312809 [interfaces.py:finish():202] Joined gpu monitor
+2023-11-24 03:33:44,495 INFO    HandlerThread:1312809 [interfaces.py:finish():202] Joined memory monitor
+2023-11-24 03:33:44,495 INFO    HandlerThread:1312809 [interfaces.py:finish():202] Joined network monitor
+2023-11-24 03:33:44,495 DEBUG   HandlerThread:1312809 [handler.py:handle_request():146] handle_request: poll_exit
+2023-11-24 03:33:44,496 DEBUG   SenderThread:1312809 [sender.py:send_request():407] send_request: defer
+2023-11-24 03:33:44,496 INFO    SenderThread:1312809 [sender.py:send_request_defer():609] handle sender defer: 2
+2023-11-24 03:33:44,496 INFO    SenderThread:1312809 [sender.py:transition_state():613] send defer: 3
+2023-11-24 03:33:44,496 DEBUG   SenderThread:1312809 [sender.py:send():380] send: stats
+2023-11-24 03:33:44,497 DEBUG   SenderThread:1312809 [sender.py:send_request():407] send_request: poll_exit
+2023-11-24 03:33:44,497 DEBUG   HandlerThread:1312809 [handler.py:handle_request():146] handle_request: defer
+2023-11-24 03:33:44,497 INFO    HandlerThread:1312809 [handler.py:handle_request_defer():172] handle defer: 3
+2023-11-24 03:33:44,498 DEBUG   SenderThread:1312809 [sender.py:send_request():407] send_request: defer
+2023-11-24 03:33:44,498 INFO    SenderThread:1312809 [sender.py:send_request_defer():609] handle sender defer: 3
+2023-11-24 03:33:44,498 INFO    SenderThread:1312809 [sender.py:transition_state():613] send defer: 4
+2023-11-24 03:33:44,498 DEBUG   HandlerThread:1312809 [handler.py:handle_request():146] handle_request: defer
+2023-11-24 03:33:44,498 INFO    HandlerThread:1312809 [handler.py:handle_request_defer():172] handle defer: 4
+2023-11-24 03:33:44,499 DEBUG   SenderThread:1312809 [sender.py:send_request():407] send_request: defer
+2023-11-24 03:33:44,499 INFO    SenderThread:1312809 [sender.py:send_request_defer():609] handle sender defer: 4
+2023-11-24 03:33:44,499 INFO    SenderThread:1312809 [sender.py:transition_state():613] send defer: 5
+2023-11-24 03:33:44,499 DEBUG   HandlerThread:1312809 [handler.py:handle_request():146] handle_request: defer
+2023-11-24 03:33:44,499 INFO    HandlerThread:1312809 [handler.py:handle_request_defer():172] handle defer: 5
+2023-11-24 03:33:44,499 DEBUG   SenderThread:1312809 [sender.py:send():380] send: summary
+2023-11-24 03:33:44,500 INFO    SenderThread:1312809 [sender.py:_save_file():1380] saving file wandb-summary.json with policy end
+2023-11-24 03:33:44,500 DEBUG   SenderThread:1312809 [sender.py:send_request():407] send_request: defer
+2023-11-24 03:33:44,500 INFO    SenderThread:1312809 [sender.py:send_request_defer():609] handle sender defer: 5
+2023-11-24 03:33:44,501 INFO    SenderThread:1312809 [sender.py:transition_state():613] send defer: 6
+2023-11-24 03:33:44,501 DEBUG   HandlerThread:1312809 [handler.py:handle_request():146] handle_request: defer
+2023-11-24 03:33:44,501 INFO    HandlerThread:1312809 [handler.py:handle_request_defer():172] handle defer: 6
+2023-11-24 03:33:44,501 DEBUG   SenderThread:1312809 [sender.py:send_request():407] send_request: defer
+2023-11-24 03:33:44,502 INFO    SenderThread:1312809 [sender.py:send_request_defer():609] handle sender defer: 6
+2023-11-24 03:33:44,507 DEBUG   HandlerThread:1312809 [handler.py:handle_request():146] handle_request: status_report
+2023-11-24 03:33:44,644 INFO    wandb-upload_0:1312809 [upload_job.py:push():131] Uploaded file /tmp/tmpfyqp9w27wandb/2ezm32yi-wandb-metadata.json
+2023-11-24 03:33:44,797 INFO    SenderThread:1312809 [sender.py:transition_state():613] send defer: 7
+2023-11-24 03:33:44,798 DEBUG   HandlerThread:1312809 [handler.py:handle_request():146] handle_request: defer
+2023-11-24 03:33:44,798 INFO    HandlerThread:1312809 [handler.py:handle_request_defer():172] handle defer: 7
+2023-11-24 03:33:44,798 DEBUG   SenderThread:1312809 [sender.py:send_request():407] send_request: defer
+2023-11-24 03:33:44,798 INFO    SenderThread:1312809 [sender.py:send_request_defer():609] handle sender defer: 7
+2023-11-24 03:33:44,917 INFO    Thread-12 :1312809 [dir_watcher.py:_on_file_modified():288] file/dir modified: /data1/wyz/online/LEONForPostgres/wandb/run-20231124_033339-2zmsi5ff/files/config.yaml
+2023-11-24 03:33:44,918 INFO    Thread-12 :1312809 [dir_watcher.py:_on_file_created():271] file/dir created: /data1/wyz/online/LEONForPostgres/wandb/run-20231124_033339-2zmsi5ff/files/output.log
+2023-11-24 03:33:44,918 INFO    Thread-12 :1312809 [dir_watcher.py:_on_file_created():271] file/dir created: /data1/wyz/online/LEONForPostgres/wandb/run-20231124_033339-2zmsi5ff/files/wandb-summary.json
+2023-11-24 03:33:45,488 DEBUG   HandlerThread:1312809 [handler.py:handle_request():146] handle_request: poll_exit
+2023-11-24 03:33:46,112 INFO    SenderThread:1312809 [sender.py:transition_state():613] send defer: 8
+2023-11-24 03:33:46,112 DEBUG   SenderThread:1312809 [sender.py:send_request():407] send_request: poll_exit
+2023-11-24 03:33:46,113 DEBUG   HandlerThread:1312809 [handler.py:handle_request():146] handle_request: defer
+2023-11-24 03:33:46,113 INFO    HandlerThread:1312809 [handler.py:handle_request_defer():172] handle defer: 8
+2023-11-24 03:33:46,114 DEBUG   SenderThread:1312809 [sender.py:send_request():407] send_request: defer
+2023-11-24 03:33:46,114 INFO    SenderThread:1312809 [sender.py:send_request_defer():609] handle sender defer: 8
+2023-11-24 03:33:46,114 INFO    SenderThread:1312809 [job_builder.py:build():298] Attempting to build job artifact
+2023-11-24 03:33:46,114 INFO    SenderThread:1312809 [job_builder.py:_get_source_type():428] is repo sourced job
+2023-11-24 03:33:46,150 INFO    SenderThread:1312809 [job_builder.py:build():404] adding wandb-job metadata file
+2023-11-24 03:33:46,171 INFO    SenderThread:1312809 [sender.py:transition_state():613] send defer: 9
+2023-11-24 03:33:46,172 DEBUG   HandlerThread:1312809 [handler.py:handle_request():146] handle_request: defer
+2023-11-24 03:33:46,172 DEBUG   SenderThread:1312809 [sender.py:send():380] send: artifact
+2023-11-24 03:33:46,172 INFO    HandlerThread:1312809 [handler.py:handle_request_defer():172] handle defer: 9
+2023-11-24 03:33:46,490 DEBUG   HandlerThread:1312809 [handler.py:handle_request():146] handle_request: poll_exit
+2023-11-24 03:33:46,918 INFO    Thread-12 :1312809 [dir_watcher.py:_on_file_modified():288] file/dir modified: /data1/wyz/online/LEONForPostgres/wandb/run-20231124_033339-2zmsi5ff/files/output.log
+2023-11-24 03:33:47,583 INFO    SenderThread:1312809 [sender.py:send_artifact():1458] sent artifact job-git_github.com_Thisislegit_LEONForPostgres.git_leon_server.py - {'id': 'QXJ0aWZhY3Q6NjQ3NDc3NTQx', 'state': 'COMMITTED', 'artifactSequence': {'id': 'QXJ0aWZhY3RDb2xsZWN0aW9uOjExODMxOTI0MA==', 'latestArtifact': {'id': 'QXJ0aWZhY3Q6NjQ3NDc3NTQx', 'versionIndex': 0}}}
+2023-11-24 03:33:47,584 DEBUG   SenderThread:1312809 [sender.py:send_request():407] send_request: defer
+2023-11-24 03:33:47,584 INFO    SenderThread:1312809 [sender.py:send_request_defer():609] handle sender defer: 9
+2023-11-24 03:33:47,584 INFO    SenderThread:1312809 [dir_watcher.py:finish():358] shutting down directory watcher
+2023-11-24 03:33:47,919 INFO    SenderThread:1312809 [dir_watcher.py:finish():388] scan: /data1/wyz/online/LEONForPostgres/wandb/run-20231124_033339-2zmsi5ff/files
+2023-11-24 03:33:47,920 INFO    SenderThread:1312809 [dir_watcher.py:finish():402] scan save: /data1/wyz/online/LEONForPostgres/wandb/run-20231124_033339-2zmsi5ff/files/wandb-metadata.json wandb-metadata.json
+2023-11-24 03:33:47,920 INFO    SenderThread:1312809 [dir_watcher.py:finish():402] scan save: /data1/wyz/online/LEONForPostgres/wandb/run-20231124_033339-2zmsi5ff/files/wandb-summary.json wandb-summary.json
+2023-11-24 03:33:47,920 INFO    SenderThread:1312809 [dir_watcher.py:finish():402] scan save: /data1/wyz/online/LEONForPostgres/wandb/run-20231124_033339-2zmsi5ff/files/requirements.txt requirements.txt
+2023-11-24 03:33:47,921 INFO    SenderThread:1312809 [dir_watcher.py:finish():402] scan save: /data1/wyz/online/LEONForPostgres/wandb/run-20231124_033339-2zmsi5ff/files/config.yaml config.yaml
+2023-11-24 03:33:47,926 INFO    SenderThread:1312809 [dir_watcher.py:finish():402] scan save: /data1/wyz/online/LEONForPostgres/wandb/run-20231124_033339-2zmsi5ff/files/conda-environment.yaml conda-environment.yaml
+2023-11-24 03:33:47,929 INFO    SenderThread:1312809 [dir_watcher.py:finish():402] scan save: /data1/wyz/online/LEONForPostgres/wandb/run-20231124_033339-2zmsi5ff/files/output.log output.log
+2023-11-24 03:33:47,930 INFO    SenderThread:1312809 [sender.py:transition_state():613] send defer: 10
+2023-11-24 03:33:47,931 DEBUG   SenderThread:1312809 [sender.py:send_request():407] send_request: poll_exit
+2023-11-24 03:33:47,933 DEBUG   HandlerThread:1312809 [handler.py:handle_request():146] handle_request: defer
+2023-11-24 03:33:47,934 INFO    HandlerThread:1312809 [handler.py:handle_request_defer():172] handle defer: 10
+2023-11-24 03:33:47,937 DEBUG   SenderThread:1312809 [sender.py:send_request():407] send_request: defer
+2023-11-24 03:33:47,938 INFO    SenderThread:1312809 [sender.py:send_request_defer():609] handle sender defer: 10
+2023-11-24 03:33:47,941 INFO    SenderThread:1312809 [file_pusher.py:finish():175] shutting down file pusher
+2023-11-24 03:33:48,532 INFO    wandb-upload_0:1312809 [upload_job.py:push():131] Uploaded file /data1/wyz/online/LEONForPostgres/wandb/run-20231124_033339-2zmsi5ff/files/wandb-summary.json
+2023-11-24 03:33:48,841 INFO    wandb-upload_1:1312809 [upload_job.py:push():131] Uploaded file /data1/wyz/online/LEONForPostgres/wandb/run-20231124_033339-2zmsi5ff/files/requirements.txt
+2023-11-24 03:33:48,894 INFO    wandb-upload_4:1312809 [upload_job.py:push():131] Uploaded file /data1/wyz/online/LEONForPostgres/wandb/run-20231124_033339-2zmsi5ff/files/output.log
+2023-11-24 03:33:49,216 INFO    wandb-upload_2:1312809 [upload_job.py:push():131] Uploaded file /data1/wyz/online/LEONForPostgres/wandb/run-20231124_033339-2zmsi5ff/files/config.yaml
+2023-11-24 03:33:49,224 INFO    wandb-upload_3:1312809 [upload_job.py:push():131] Uploaded file /data1/wyz/online/LEONForPostgres/wandb/run-20231124_033339-2zmsi5ff/files/conda-environment.yaml
+2023-11-24 03:33:49,424 INFO    Thread-11 :1312809 [sender.py:transition_state():613] send defer: 11
+2023-11-24 03:33:49,425 DEBUG   HandlerThread:1312809 [handler.py:handle_request():146] handle_request: defer
+2023-11-24 03:33:49,425 INFO    HandlerThread:1312809 [handler.py:handle_request_defer():172] handle defer: 11
+2023-11-24 03:33:49,426 DEBUG   SenderThread:1312809 [sender.py:send_request():407] send_request: defer
+2023-11-24 03:33:49,426 INFO    SenderThread:1312809 [sender.py:send_request_defer():609] handle sender defer: 11
+2023-11-24 03:33:49,426 INFO    SenderThread:1312809 [file_pusher.py:join():181] waiting for file pusher
+2023-11-24 03:33:49,426 INFO    SenderThread:1312809 [sender.py:transition_state():613] send defer: 12
+2023-11-24 03:33:49,426 DEBUG   HandlerThread:1312809 [handler.py:handle_request():146] handle_request: defer
+2023-11-24 03:33:49,427 INFO    HandlerThread:1312809 [handler.py:handle_request_defer():172] handle defer: 12
+2023-11-24 03:33:49,427 DEBUG   SenderThread:1312809 [sender.py:send_request():407] send_request: defer
+2023-11-24 03:33:49,427 INFO    SenderThread:1312809 [sender.py:send_request_defer():609] handle sender defer: 12
+2023-11-24 03:33:49,427 INFO    SenderThread:1312809 [file_stream.py:finish():595] file stream finish called
+2023-11-24 03:33:49,710 INFO    SenderThread:1312809 [file_stream.py:finish():599] file stream finish is done
+2023-11-24 03:33:49,710 INFO    SenderThread:1312809 [sender.py:transition_state():613] send defer: 13
+2023-11-24 03:33:49,711 DEBUG   HandlerThread:1312809 [handler.py:handle_request():146] handle_request: defer
+2023-11-24 03:33:49,711 INFO    HandlerThread:1312809 [handler.py:handle_request_defer():172] handle defer: 13
+2023-11-24 03:33:49,712 DEBUG   SenderThread:1312809 [sender.py:send_request():407] send_request: defer
+2023-11-24 03:33:49,712 INFO    SenderThread:1312809 [sender.py:send_request_defer():609] handle sender defer: 13
+2023-11-24 03:33:49,712 INFO    SenderThread:1312809 [sender.py:transition_state():613] send defer: 14
+2023-11-24 03:33:49,712 DEBUG   HandlerThread:1312809 [handler.py:handle_request():146] handle_request: defer
+2023-11-24 03:33:49,713 INFO    HandlerThread:1312809 [handler.py:handle_request_defer():172] handle defer: 14
+2023-11-24 03:33:49,713 DEBUG   SenderThread:1312809 [sender.py:send():380] send: final
+2023-11-24 03:33:49,713 DEBUG   SenderThread:1312809 [sender.py:send():380] send: footer
+2023-11-24 03:33:49,713 DEBUG   SenderThread:1312809 [sender.py:send_request():407] send_request: defer
+2023-11-24 03:33:49,714 INFO    SenderThread:1312809 [sender.py:send_request_defer():609] handle sender defer: 14
+2023-11-24 03:33:49,715 DEBUG   HandlerThread:1312809 [handler.py:handle_request():146] handle_request: poll_exit
+2023-11-24 03:33:49,715 DEBUG   HandlerThread:1312809 [handler.py:handle_request():146] handle_request: server_info
+2023-11-24 03:33:49,716 DEBUG   SenderThread:1312809 [sender.py:send_request():407] send_request: poll_exit
+2023-11-24 03:33:49,716 DEBUG   HandlerThread:1312809 [handler.py:handle_request():146] handle_request: get_summary
+2023-11-24 03:33:49,717 DEBUG   HandlerThread:1312809 [handler.py:handle_request():146] handle_request: sampled_history
+2023-11-24 03:33:49,718 DEBUG   SenderThread:1312809 [sender.py:send_request():407] send_request: server_info
+2023-11-24 03:33:49,722 DEBUG   HandlerThread:1312809 [handler.py:handle_request():146] handle_request: internal_messages
+2023-11-24 03:33:49,723 DEBUG   HandlerThread:1312809 [handler.py:handle_request():146] handle_request: job_info
+2023-11-24 03:33:49,978 DEBUG   SenderThread:1312809 [sender.py:send_request():407] send_request: job_info
+2023-11-24 03:33:49,979 INFO    MainThread:1312809 [wandb_run.py:_footer_history_summary_info():3760] rendering history
+2023-11-24 03:33:49,979 INFO    MainThread:1312809 [wandb_run.py:_footer_history_summary_info():3792] rendering summary
+2023-11-24 03:33:49,979 INFO    MainThread:1312809 [wandb_run.py:_footer_sync_info():3719] logging synced files
+2023-11-24 03:33:49,980 DEBUG   HandlerThread:1312809 [handler.py:handle_request():146] handle_request: shutdown
+2023-11-24 03:33:49,980 INFO    HandlerThread:1312809 [handler.py:finish():866] shutting down handler
+2023-11-24 03:33:50,724 INFO    WriterThread:1312809 [datastore.py:close():294] close: /data1/wyz/online/LEONForPostgres/wandb/run-20231124_033339-2zmsi5ff/run-2zmsi5ff.wandb
+2023-11-24 03:33:50,978 INFO    SenderThread:1312809 [sender.py:finish():1536] shutting down sender
+2023-11-24 03:33:50,979 INFO    SenderThread:1312809 [file_pusher.py:finish():175] shutting down file pusher
+2023-11-24 03:33:50,979 INFO    SenderThread:1312809 [file_pusher.py:join():181] waiting for file pusher
