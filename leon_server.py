@@ -28,17 +28,16 @@ files = ['1a', '1b', '1c', '1d', '2a', '2b', '2c', '2d', '3a', '3b', '3c', '4a',
              '19b', '19c', '19d', '20a', '20b', '20c', '21a', '21b', '21c', '22a', '22b',
              '22c', '22d', '23a', '23b', '23c', '24a', '24b', '25a', '25b', '25c', '26a', 
              '26b', '26c', '27a', '27b', '27c', '28a', '28b', '28c', '29a', '29b', '29c',
-             '30a', '30b', '30c', '31a', '31b', '31c', '32a', '32b', '33a', '33b', '33c']
-
+             '30a', '30b', '30c', '31a', '31b', '31c', '32a', '32b', '33a', '33b', '33c', 'end']
 def save_to_json(data):
     # 打开文件的模式: 常用的有’r’（读取模式，缺省值）、‘w’（写入模式）、‘a’（追加模式）等
-    with open('./data.json', 'w') as f:
+    with open('./data2.json', 'w') as f:
         # 使用json.dump()函数将序列化后的JSON格式的数据写入到文件中
         json.dump(data, f, indent=4)
 
 def read_to_json():
     # 打开文件的模式: 常用的有’r’（读取模式，缺省值）、‘w’（写入模式）、‘a’（追加模式）等
-    with open('./data.json', 'r') as f:
+    with open('./data2.json', 'r') as f:
         # 使用json.dump()函数将序列化后的JSON格式的数据写入到文件中
         data = json.load(f)
     return data
@@ -47,12 +46,13 @@ def read_to_json():
 class LeonModel:
 
     def __init__(self):
+        self.eval_time = True
         run = wandb.init(
-                    project="tree_conv",
+                    project="transformer",
                     )
         self.__model = None
-        self.encoding_model = 'tree'
-        self.inference_model = 'tree_conv' 
+        self.encoding_model = 'transformer'
+        self.inference_model = 'transformer' 
         self.analysis_all_time = 0
         self.encoding_all_time = 0
         self.inference_all_time = 0
@@ -149,11 +149,11 @@ class LeonModel:
                 # print(X[i])
                 # print(node)
                 node = postgres.ParsePostgresPlanJson_1(X[i], self.workload.workload_info.alias_to_names)
-                if node.info['join_cond'] == ['']:
+                if node.info['join_cond'] == ['']: # return 1.00
                     return None, None, None
                 node = plans_lib.FilterScansOrJoins(node)
                 plans_lib.GatherUnaryFiltersInfo(node)
-                postgres.EstimateFilterRows(node)
+                postgres.EstimateFilterRows(node)   
                 if i == 0:
                     temp = node.to_sql(node.info['join_cond'], with_select_exprs=True)
                     node.info['sql_str'] = temp
@@ -185,26 +185,27 @@ class LeonModel:
         pass
     
     def predict_plan(self, messages):
-        data = read_to_json()
-        for i in files:
-            if i not in data:
-                break
-            curr_file = i
-        if curr_file != self.curr_file:
-            all_time = {
-            "analysis_time": self.analysis_all_time / self.n,
-            "encoding_time": self.encoding_all_time / self.n,
-            "inference_time": self.inference_all_time / self.n
-            }
-            data[self.curr_file].append(all_time)
-            save_to_json(data)
-            wandb.log({"analysis_time": self.analysis_all_time / self.n, "encoding_time": self.encoding_all_time / self.n, "inference_time": self.inference_all_time / self.n, "sql_id": self.curr_file})
-            self.analysis_all_time = 0
-            self.encoding_all_time = 0
-            self.inference_all_time = 0
-            self.n = 0
-            self.curr_file = curr_file
-        print(self.curr_file)
+        if self.eval_time:
+            data = read_to_json()
+            for i in files:
+                if i not in data:
+                    break
+                curr_file = i
+            if curr_file != self.curr_file:
+                all_time = {
+                "analysis_time": self.analysis_all_time / self.n,
+                "encoding_time": self.encoding_all_time / self.n,
+                "inference_time": self.inference_all_time / self.n
+                }
+                data[self.curr_file].append(all_time)
+                save_to_json(data)
+                wandb.log({"analysis_time": self.analysis_all_time / self.n, "encoding_time": self.encoding_all_time / self.n, "inference_time": self.inference_all_time / self.n, "sql_id": self.curr_file})
+                self.analysis_all_time = 0
+                self.encoding_all_time = 0
+                self.inference_all_time = 0
+                self.n = 0
+                self.curr_file = curr_file
+            # print(self.curr_file)
             
         # json解析
         start_time = time.time()
@@ -232,11 +233,12 @@ class LeonModel:
         cali_strs = self.inference(a, b, c)
         end_time = time.time()
         # 平均执行时间
-        inference_time = end_time - start_time
-        self.analysis_all_time += analysis_time
-        self.encoding_all_time += encoding_time
-        self.inference_all_time += inference_time
-        self.n += 1
+        if self.eval_time:
+            inference_time = end_time - start_time
+            self.analysis_all_time += analysis_time
+            self.encoding_all_time += encoding_time
+            self.inference_all_time += inference_time
+            self.n += 1
         
         return cali_strs
 
