@@ -2,6 +2,7 @@ import os
 from util import pg_executor
 import subprocess
 import json
+import time
 """
 nodes 是一条query 的所有 plans 需要用到 server.py 中的解析
 
@@ -88,12 +89,12 @@ def GetLatencyFromPg(sql, hint, ENABLE_LEON, verbose=False, check_hint_used=Fals
         # Why 'verbose': makes ParsePostgresPlanJson() able to access required
         # fields, e.g., 'Output' and 'Alias'.  Also see SqlToPlanNode() comment.
         if ENABLE_LEON:
-            cursor.execute('SET geqo=off')
             cursor.execute('SET enable_leon=on')
-        else:
             cursor.execute('SET geqo=off')
+        else:
             cursor.execute('SET enable_leon=off')
-        geqo_off = hint is not None and len(hint) > 0
+            cursor.execute('SET geqo=off')
+        geqo_off = True
         result = _run_explain('explain(verbose, format json)',
                               sql,
                               hint,
@@ -103,11 +104,12 @@ def GetLatencyFromPg(sql, hint, ENABLE_LEON, verbose=False, check_hint_used=Fals
 
     if (result == []):
         return 10000
-    json_dict = result[0][0][0]
-    latency = float(json_dict['Execution Time'])
-    print("latency", latency)
+    # json_dict = result[0][0][0]
+    # latency = float(json_dict['Execution Time'])
+    # print("latency", latency)
 
-    return latency
+    # return latency
+    return 0
 
 
 def load_sql(file_list: list):
@@ -132,23 +134,24 @@ def get_latency(query, ENABLE_LEON=False):
     input. a loaded query
     output. the average latency of a query get from pg
     """
-    latency = GetLatencyFromPg(query, None, ENABLE_LEON, verbose=False, check_hint_used=False, timeout=20000, dropbuffer=False)
+    latency = GetLatencyFromPg(query, None, ENABLE_LEON, verbose=False, check_hint_used=False, timeout=0, dropbuffer=False)
     return latency
 
 def save_to_json(data):
     # 打开文件的模式: 常用的有’r’（读取模式，缺省值）、‘w’（写入模式）、‘a’（追加模式）等
-    with open('./data.json', 'w') as f:
+    with open('./data2.json', 'w') as f:
         # 使用json.dump()函数将序列化后的JSON格式的数据写入到文件中
         json.dump(data, f, indent=4)
 
 def read_to_json():
     # 打开文件的模式: 常用的有’r’（读取模式，缺省值）、‘w’（写入模式）、‘a’（追加模式）等
-    with open('./data.json', 'r') as f:
+    with open('./data2.json', 'r') as f:
         # 使用json.dump()函数将序列化后的JSON格式的数据写入到文件中
         data = json.load(f)
     return data
 
 if __name__ == '__main__':
+    eval_time = True
     files = ['1a', '1b', '1c', '1d', '2a', '2b', '2c', '2d', '3a', '3b', '3c', '4a',
              '4b', '4c', '5a', '5b', '5c', '6a', '6b', '6c', '6d', '6e', '6f', '7a', 
              '7b', '7c', '8a', '8b', '8c', '8d', '9a', '9b', '9c', '9d', '10a', '10b', 
@@ -158,29 +161,21 @@ if __name__ == '__main__':
              '19b', '19c', '19d', '20a', '20b', '20c', '21a', '21b', '21c', '22a', '22b',
              '22c', '22d', '23a', '23b', '23c', '24a', '24b', '25a', '25b', '25c', '26a', 
              '26b', '26c', '27a', '27b', '27c', '28a', '28b', '28c', '29a', '29b', '29c',
-             '30a', '30b', '30c', '31a', '31b', '31c', '32a', '32b', '33a', '33b', '33c', '1a']
+             '30a', '30b', '30c', '31a', '31b', '31c', '32a', '32b', '33a', '33b', '33c', 'end']
     sqls = load_sql(files)
     # print(train_sqls[0])
-    label_1a = False
-    ENABLE_LEON = bool
-
     for i in range(len(files)):
         value = files[i]
-        if label_1a and value == '1a':
-            print("------------- query {} ------------".format(value))
-            query_latency = get_latency(sqls[i], ENABLE_LEON=True)
-            print("-- query_latency leon --", query_latency)
-            continue
-        if value == '1a' and label_1a == False:
-            label_1a = True
         print("------------- query {} ------------".format(value))
-        data = read_to_json()
-        data[value] = []
-        save_to_json(data)
+        if eval_time:
+            data = read_to_json()
+            data[value] = []
+            save_to_json(data)
         # query_latency = get_latency(sqls[i], ENABLE_LEON=False)
         # print("-- query_latency pg --", query_latency)
+        start_time = time.time()
         query_latency = get_latency(sqls[i], ENABLE_LEON=True)
-        print("-- query_latency leon --", query_latency)
+        print("-- query_latency leon --", time.time() - start_time)
 
 
 

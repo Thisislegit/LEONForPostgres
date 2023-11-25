@@ -1,0 +1,688 @@
+{
+    "1a": [
+        {
+            "analysis_time": 9.792191641671316e-06,
+            "encoding_time": 0.12519770009177073,
+            "inference_time": 0.015716893332345144
+        }
+    ],
+    "1b": [
+        {
+            "analysis_time": 8.719308035714285e-06,
+            "encoding_time": 0.11714211532047816,
+            "inference_time": 0.01069343090057373
+        }
+    ],
+    "1c": [
+        {
+            "analysis_time": 8.446829659598215e-06,
+            "encoding_time": 0.12101718357631139,
+            "inference_time": 0.011035118784223284
+        }
+    ],
+    "1d": [
+        {
+            "analysis_time": 1.0473387581961496e-05,
+            "encoding_time": 0.11955809593200684,
+            "inference_time": 0.011421527181352888
+        }
+    ],
+    "2a": [
+        {
+            "analysis_time": 9.758131844656809e-06,
+            "encoding_time": 0.12243541649409703,
+            "inference_time": 0.01077171734401158
+        }
+    ],
+    "2b": [
+        {
+            "analysis_time": 1.1120523725237166e-05,
+            "encoding_time": 0.12395267827170235,
+            "inference_time": 0.01542198657989502
+        }
+    ],
+    "2c": [
+        {
+            "analysis_time": 1.0779925755092076e-05,
+            "encoding_time": 0.12376352718898229,
+            "inference_time": 0.011644346373421805
+        }
+    ],
+    "2d": [
+        {
+            "analysis_time": 1.0916164943150111e-05,
+            "encoding_time": 0.13452659334455216,
+            "inference_time": 0.009928056171962194
+        }
+    ],
+    "3a": [
+        {
+            "analysis_time": 9.298324584960938e-06,
+            "encoding_time": 0.1054564118385315,
+            "inference_time": 0.008433759212493896
+        }
+    ],
+    "3b": [
+        {
+            "analysis_time": 9.47713851928711e-06,
+            "encoding_time": 0.11536213755607605,
+            "inference_time": 0.008055418729782104
+        }
+    ],
+    "3c": [
+        {
+            "analysis_time": 9.447336196899414e-06,
+            "encoding_time": 0.11334893107414246,
+            "inference_time": 0.008521735668182373
+        }
+    ],
+    "4a": [
+        {
+            "analysis_time": 9.672982352120535e-06,
+            "encoding_time": 0.1374479361942836,
+            "inference_time": 0.010478956358773368
+        }
+    ],
+    "4b": [
+        {
+            "analysis_time": 1.0541507175990514e-05,
+            "encoding_time": 0.15103566646575928,
+            "inference_time": 0.015321884836469377
+        }
+    ],
+    "4c": [
+        {
+            "analysis_time": 1.0660716465541295e-05,
+            "encoding_time": 0.14575975281851633,
+            "inference_time": 0.010678580829075404
+        }
+    ],
+    "5a": [
+        {
+            "analysis_time": 1.0337148393903459e-05,
+            "encoding_time": 0.14880127566201345,
+            "inference_time": 0.010040334292820521
+        }
+    ],
+    "5b": [
+        {
+            "analysis_time": 1.1086463928222656e-05,
+            "encoding_time": 0.1402301788330078,
+            "inference_time": 0.011662278856549944
+        }
+    ],
+    "5c": [
+        {
+            "analysis_time": 9.979520525251115e-06,
+            "encoding_time": 0.1516073260988508,
+            "inference_time": 0.010324256760733468
+        }
+    ],
+    "6a": [
+        {
+            "analysis_time": 1.0473387581961496e-05,
+            "encoding_time": 0.13910605226244246,
+            "inference_time": 0.010807360921587263
+        }
+    ],
+    "6b": [
+        {
+            "analysis_time": 1.1222703116280691e-05,
+            "encoding_time": 0.1330005441393171,
+            "inference_time": 0.016687512397766113
+        }
+    ],
+    "6c": [
+        {
+            "analysis_time": 1.052447727748326e-05,
+            "encoding_time": 0.1305490561894008,
+            "inference_time": 0.011142611503601074
+        }
+    ],
+    "6d": [
+        {
+            "analysis_time": 1.1256762913295201e-05,
+            "encoding_time": 0.14133834838867188,
+            "inference_time": 0.00984365599496024
+        }
+    ],
+    "6e": [
+        {
+            "analysis_time": 1.1597360883440291e-05,
+            "encoding_time": 0.1438976526260376,
+            "inference_time": 0.00980426583971296
+        }
+    ],
+    "6f": [
+        {
+            "analysis_time": 1.1035374232700893e-05,
+            "encoding_time": 0.14081338473728724,
+            "inference_time": 0.01041325501033238
+        }
+    ],
+    "7a": [
+        {
+            "analysis_time": 1.7933729218273628e-05,
+            "encoding_time": 0.3082986285046833,
+            "inference_time": 0.019778591830555987
+        }
+    ],
+    "7b": [
+        {
+            "analysis_time": 1.8521053035084795e-05,
+            "encoding_time": 0.30755144503058457,
+            "inference_time": 0.020671353107545434
+        }
+    ],
+    "7c": [
+        {
+            "analysis_time": 1.7657512571753525e-05,
+            "encoding_time": 0.3128469252004856,
+            "inference_time": 0.02003245818905714
+        }
+    ],
+    "8a": [
+        {
+            "analysis_time": 1.4810001148897059e-05,
+            "encoding_time": 0.2271447695937811,
+            "inference_time": 0.01483448346455892
+        }
+    ],
+    "8b": [
+        {
+            "analysis_time": 1.4660405177696079e-05,
+            "encoding_time": 0.22906976120144712,
+            "inference_time": 0.014428769840913661
+        }
+    ],
+    "8c": [
+        {
+            "analysis_time": 1.4258366005093444e-05,
+            "encoding_time": 0.19724760803521849,
+            "inference_time": 0.01409602632709578
+        }
+    ],
+    "8d": [
+        {
+            "analysis_time": 1.4478085087794884e-05,
+            "encoding_time": 0.19873455926483752,
+            "inference_time": 0.014334571127798044
+        }
+    ],
+    "9a": [
+        {
+            "analysis_time": 1.4767502293442234e-05,
+            "encoding_time": 0.25569177878023397,
+            "inference_time": 0.01623705661658085
+        }
+    ],
+    "9b": [
+        {
+            "analysis_time": 1.5971636531328914e-05,
+            "encoding_time": 0.26293678235526036,
+            "inference_time": 0.015805752590449168
+        }
+    ],
+    "9c": [
+        {
+            "analysis_time": 1.4938489355222143e-05,
+            "encoding_time": 0.2559726623573689,
+            "inference_time": 0.01497108286077326
+        }
+    ],
+    "9d": [
+        {
+            "analysis_time": 1.3642840915256076e-05,
+            "encoding_time": 0.2566535545117927,
+            "inference_time": 0.01606552046958846
+        }
+    ],
+    "10a": [
+        {
+            "analysis_time": 1.1594399161960768e-05,
+            "encoding_time": 0.1953473764917125,
+            "inference_time": 0.012941780297652535
+        }
+    ],
+    "10b": [
+        {
+            "analysis_time": 1.140781070875085e-05,
+            "encoding_time": 0.189052851303764,
+            "inference_time": 0.012665033340454102
+        }
+    ],
+    "10c": [
+        {
+            "analysis_time": 1.0594077732252037e-05,
+            "encoding_time": 0.1885202345640763,
+            "inference_time": 0.013450513715329378
+        }
+    ],
+    "11a": [
+        {
+            "analysis_time": 1.4490239760454963e-05,
+            "encoding_time": 0.28251559033113366,
+            "inference_time": 0.017694563024184283
+        }
+    ],
+    "11b": [
+        {
+            "analysis_time": 1.4739878037396599e-05,
+            "encoding_time": 0.29739347345688766,
+            "inference_time": 0.018031821531407973
+        }
+    ],
+    "11c": [
+        {
+            "analysis_time": 1.4509874231675092e-05,
+            "encoding_time": 0.28085602592019476,
+            "inference_time": 0.01743171355303596
+        }
+    ],
+    "11d": [
+        {
+            "analysis_time": 1.4369628008674173e-05,
+            "encoding_time": 0.27424789597006405,
+            "inference_time": 0.017319539014030907
+        }
+    ],
+    "12a": [
+        {
+            "analysis_time": 1.3592663933249082e-05,
+            "encoding_time": 0.2765347060035257,
+            "inference_time": 0.019007427552167108
+        }
+    ],
+    "12b": [
+        {
+            "analysis_time": 1.4389262479894301e-05,
+            "encoding_time": 0.2665296722860897,
+            "inference_time": 0.01692799119388356
+        }
+    ],
+    "12c": [
+        {
+            "analysis_time": 1.3424368465647978e-05,
+            "encoding_time": 0.27251129150390624,
+            "inference_time": 0.015371415194343117
+        }
+    ],
+    "13a": [
+        {
+            "analysis_time": 1.6225301302396334e-05,
+            "encoding_time": 0.29259814482468827,
+            "inference_time": 0.018826548869793232
+        }
+    ],
+    "13b": [
+        {
+            "analysis_time": 1.6625110919658953e-05,
+            "encoding_time": 0.29961892641507665,
+            "inference_time": 0.01844135797940768
+        }
+    ],
+    "13c": [
+        {
+            "analysis_time": 1.6636114854079028e-05,
+            "encoding_time": 0.3155253483698918,
+            "inference_time": 0.01810793509850135
+        }
+    ],
+    "13d": [
+        {
+            "analysis_time": 1.6199625455416166e-05,
+            "encoding_time": 0.2989528527626624,
+            "inference_time": 0.018570628532996545
+        }
+    ],
+    "14a": [
+        {
+            "analysis_time": 1.4003954435649671e-05,
+            "encoding_time": 0.2826205241052728,
+            "inference_time": 0.016382869921232526
+        }
+    ],
+    "14b": [
+        {
+            "analysis_time": 1.4731758519222862e-05,
+            "encoding_time": 0.2955185237683748,
+            "inference_time": 0.016970954443279066
+        }
+    ],
+    "14c": [
+        {
+            "analysis_time": 1.426746970728824e-05,
+            "encoding_time": 0.29124308887280914,
+            "inference_time": 0.01625488933764006
+        }
+    ],
+    "15a": [
+        {
+            "analysis_time": 2.0835591458726203e-05,
+            "encoding_time": 0.4273225713050228,
+            "inference_time": 0.023780322622978824
+        }
+    ],
+    "15b": [
+        {
+            "analysis_time": 1.9458518631156832e-05,
+            "encoding_time": 0.396196654473228,
+            "inference_time": 0.023909061804585074
+        }
+    ],
+    "15c": [
+        {
+            "analysis_time": 1.822668930579876e-05,
+            "encoding_time": 0.3650490840276082,
+            "inference_time": 0.023604039488167597
+        }
+    ],
+    "15d": [
+        {
+            "analysis_time": 1.913103564032193e-05,
+            "encoding_time": 0.3726863669252944,
+            "inference_time": 0.023124394745662295
+        }
+    ],
+    "16a": [
+        {
+            "analysis_time": 1.6389891158702762e-05,
+            "encoding_time": 0.2789893067160318,
+            "inference_time": 0.01842201033303904
+        }
+    ],
+    "16b": [
+        {
+            "analysis_time": 1.6303949577863826e-05,
+            "encoding_time": 0.26717811129813973,
+            "inference_time": 0.018089896024659623
+        }
+    ],
+    "16c": [
+        {
+            "analysis_time": 1.5846518583075943e-05,
+            "encoding_time": 0.27328808363093887,
+            "inference_time": 0.019551263299099234
+        }
+    ],
+    "16d": [
+        {
+            "analysis_time": 1.5109084373296693e-05,
+            "encoding_time": 0.27022638986277026,
+            "inference_time": 0.01694916292678478
+        }
+    ],
+    "17a": [
+        {
+            "analysis_time": 1.338550022670201e-05,
+            "encoding_time": 0.2144260309180435,
+            "inference_time": 0.01549246359844597
+        }
+    ],
+    "17b": [
+        {
+            "analysis_time": 1.3186007129902743e-05,
+            "encoding_time": 0.20233936699069277,
+            "inference_time": 0.01415527596765635
+        }
+    ],
+    "17c": [
+        {
+            "analysis_time": 1.2714035656987404e-05,
+            "encoding_time": 0.19343642312653211,
+            "inference_time": 0.013905374371275609
+        }
+    ],
+    "17d": [
+        {
+            "analysis_time": 1.2548602357202646e-05,
+            "encoding_time": 0.18767103856923628,
+            "inference_time": 0.013104190631788604
+        }
+    ],
+    "17e": [
+        {
+            "analysis_time": 1.3823411902602837e-05,
+            "encoding_time": 0.19479638703015387,
+            "inference_time": 0.015057164795544684
+        }
+    ],
+    "17f": [
+        {
+            "analysis_time": 1.1901466213926976e-05,
+            "encoding_time": 0.19495335403753786,
+            "inference_time": 0.014780681960436762
+        }
+    ],
+    "18a": [
+        {
+            "analysis_time": 1.2821080733318718e-05,
+            "encoding_time": 0.21898437032894214,
+            "inference_time": 0.0141985221784942
+        }
+    ],
+    "18b": [
+        {
+            "analysis_time": 1.270430428641183e-05,
+            "encoding_time": 0.2539327290593361,
+            "inference_time": 0.014993492437868702
+        }
+    ],
+    "18c": [
+        {
+            "analysis_time": 1.2660513118821747e-05,
+            "encoding_time": 0.232834022872302,
+            "inference_time": 0.015248157540146185
+        }
+    ],
+    "19a": [
+        {
+            "analysis_time": 2.260634441249418e-05,
+            "encoding_time": 0.4350516614534997,
+            "inference_time": 0.022125475454014658
+        }
+    ],
+    "19b": [
+        {
+            "analysis_time": 2.0823731327688458e-05,
+            "encoding_time": 0.44085542413572604,
+            "inference_time": 0.025127423520119773
+        }
+    ],
+    "19c": [
+        {
+            "analysis_time": 2.0324789135661345e-05,
+            "encoding_time": 0.5638279662226999,
+            "inference_time": 0.034545072656593574
+        }
+    ],
+    "19d": [
+        {
+            "analysis_time": 1.9431903662271058e-05,
+            "encoding_time": 0.37593433793806874,
+            "inference_time": 0.019016166396488416
+        }
+    ],
+    "20a": [
+        {
+            "analysis_time": 1.861507242376154e-05,
+            "encoding_time": 0.3512753107331016,
+            "inference_time": 0.018504954468120227
+        }
+    ],
+    "20b": [
+        {
+            "analysis_time": 1.8677928230979226e-05,
+            "encoding_time": 0.3610755768689242,
+            "inference_time": 0.01759221770546653
+        }
+    ],
+    "20c": [
+        {
+            "analysis_time": 1.8983537500554866e-05,
+            "encoding_time": 0.36412816697900946,
+            "inference_time": 0.01785959222099998
+        }
+    ],
+    "21a": [
+        {
+            "analysis_time": 2.0509478689610272e-05,
+            "encoding_time": 0.4360209360890005,
+            "inference_time": 0.021285170796273768
+        }
+    ],
+    "21b": [
+        {
+            "analysis_time": 2.086847677998159e-05,
+            "encoding_time": 0.4107218583424886,
+            "inference_time": 0.020767284535813606
+        }
+    ],
+    "21c": [
+        {
+            "analysis_time": 2.0820519019817485e-05,
+            "encoding_time": 0.4339793290214977,
+            "inference_time": 0.023965177864863955
+        }
+    ],
+    "22a": [
+        {
+            "analysis_time": 2.3514405826578166e-05,
+            "encoding_time": 0.5562684972184643,
+            "inference_time": 0.028779587351289906
+        }
+    ],
+    "22b": [
+        {
+            "analysis_time": 2.4235636966867852e-05,
+            "encoding_time": 0.5944237774774843,
+            "inference_time": 0.03656937723470511
+        }
+    ],
+    "22c": [
+        {
+            "analysis_time": 2.44113138146269e-05,
+            "encoding_time": 0.5806208182695815,
+            "inference_time": 0.033941946531596934
+        }
+    ],
+    "22d": [
+        {
+            "analysis_time": 2.474653392208549e-05,
+            "encoding_time": 0.5624357668080724,
+            "inference_time": 0.037410197700175424
+        }
+    ],
+    "23a": [
+        {
+            "analysis_time": 2.4813458435517505e-05,
+            "encoding_time": 0.5262757315671533,
+            "inference_time": 0.03504050046877753
+        }
+    ],
+    "23b": [
+        {
+            "analysis_time": 2.597806447729431e-05,
+            "encoding_time": 0.5306485374469805,
+            "inference_time": 0.033720841682644415
+        }
+    ],
+    "23c": [
+        {
+            "analysis_time": 2.6150753623560857e-05,
+            "encoding_time": 0.5209647300548124,
+            "inference_time": 0.03161317662786422
+        }
+    ],
+    "24a": [
+        {
+            "analysis_time": 3.0482063418803053e-05,
+            "encoding_time": 0.6681026542826524,
+            "inference_time": 0.03728606353584281
+        }
+    ],
+    "24b": [
+        {
+            "analysis_time": 3.019716235659078e-05,
+            "encoding_time": 0.6966845644525734,
+            "inference_time": 0.039624178657657085
+        }
+    ],
+    "25a": [
+        {
+            "analysis_time": 1.92416019928761e-05,
+            "encoding_time": 0.3757686462157812,
+            "inference_time": 0.02220066541280502
+        }
+    ],
+    "25b": [
+        {
+            "analysis_time": 1.9583946619278344e-05,
+            "encoding_time": 0.39483245672323763,
+            "inference_time": 0.023476692346426156
+        }
+    ],
+    "25c": [
+        {
+            "analysis_time": 1.9489190517327723e-05,
+            "encoding_time": 0.40165454607743484,
+            "inference_time": 0.025938582726013966
+        }
+    ],
+    "26a": [
+        {
+            "analysis_time": 2.8189344078257836e-05,
+            "encoding_time": 0.6405746355897821,
+            "inference_time": 0.03749917227056529
+        }
+    ],
+    "26b": [
+        {
+            "analysis_time": 2.7860761223352545e-05,
+            "encoding_time": 0.6342055847470179,
+            "inference_time": 0.03514005464288686
+        }
+    ],
+    "26c": [
+        {
+            "analysis_time": 2.8114860546072147e-05,
+            "encoding_time": 0.608697493158292,
+            "inference_time": 0.03413403800428359
+        }
+    ],
+    "27a": [
+        {
+            "analysis_time": 3.460620311980552e-05,
+            "encoding_time": 0.8416507948953387,
+            "inference_time": 0.05330334638828393
+        }
+    ],
+    "27b": [
+        {
+            "analysis_time": 3.4656129518788715e-05,
+            "encoding_time": 0.8422162850519844,
+            "inference_time": 0.054838935044684844
+        }
+    ],
+    "27c": [
+        {
+            "analysis_time": 3.5123088191631524e-05,
+            "encoding_time": 0.8396629996155571,
+            "inference_time": 0.0481851851152546
+        }
+    ],
+    "28a": [
+        {
+            "analysis_time": 4.00436881512433e-05,
+            "encoding_time": 1.0783549997331603,
+            "inference_time": 0.05579187825130164
+        }
+    ],
+    "28b": [
+        {
+            "analysis_time": 4.24943901266168e-05,
+            "encoding_time": 1.052360260569305,
+            "inference_time": 0.055866519925143014
+        }
+    ]
+}
