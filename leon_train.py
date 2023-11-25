@@ -1,6 +1,9 @@
 import os
 from util import postgres
 from util import pg_executor
+from util import postgres
+from util import envs
+from util import plans_lib
 import pickle
 import torch
 import math
@@ -30,6 +33,37 @@ Transformer_model = SeqFormer(
                         transformer_dropout=0.2,
                     )
 
+def load_sql(file_list: list):
+    """
+    :param file_list: list of query file in str
+    :return: list of sql query string
+    """
+    sqls = []
+    for file_str in file_list:
+        sqlFile = '/data1/zengximu/LEON-research/LEON/join-order-benchmark/' + file_str + '.sql'
+        if not os.path.exists(sqlFile):
+            raise IOError("File Not Exists!")
+        with open(sqlFile, 'r') as f:
+            data = f.read().splitlines()
+            sql = ' '.join(data)
+        sqls.append(sql)
+        f.close()
+    return sqls
+
+def getPG_latency(query, ENABLE_LEON=False):
+    """
+    input. a loaded query
+    output. the average latency of a query get from pg
+    """
+    latency_sum = 0
+    cnt = 3
+    for c in range(cnt):
+        latency_sum = latency_sum + postgres.GetLatencyFromPg(query, None, ENABLE_LEON, verbose=False, check_hint_used=False, timeout=90000,
+                                                dropbuffer=False)
+    pg_latency = latency_sum / cnt
+    return pg_latency
+
+# UNFINISHED hint sql -> pgcosts
 def plans_encoding(plans, IF_TRAIN):
     '''
     input. a list of plans in type of json
@@ -62,36 +96,6 @@ def plans_encoding(plans, IF_TRAIN):
         return seqs, run_times, attns, loss_mask, pgcosts
     else:
         return seqs, None, attns, None, None
-
-def load_sql(file_list: list):
-    """
-    :param file_list: list of query file in str
-    :return: list of sql query string
-    """
-    sqls = []
-    for file_str in file_list:
-        sqlFile = '/data1/zengximu/LEON-research/LEON/join-order-benchmark/' + file_str + '.sql'
-        if not os.path.exists(sqlFile):
-            raise IOError("File Not Exists!")
-        with open(sqlFile, 'r') as f:
-            data = f.read().splitlines()
-            sql = ' '.join(data)
-        sqls.append(sql)
-        f.close()
-    return sqls
-
-def getPG_latency(query, ENABLE_LEON=False):
-    """
-    input. a loaded query
-    output. the average latency of a query get from pg
-    """
-    latency_sum = 0
-    cnt = 3
-    for c in range(cnt):
-        latency_sum = latency_sum + postgres.GetLatencyFromPg(query, None, ENABLE_LEON, verbose=False, check_hint_used=False, timeout=90000,
-                                                dropbuffer=False)
-    pg_latency = latency_sum / cnt
-    return pg_latency
 
 def get_calibrations(model, seqs, attns, IF_TRAIN):
     if IF_TRAIN:
@@ -131,6 +135,28 @@ def get_ucb_idx(cali_all, pgcosts):
 
     return ucb_sort_idx
 
+def PlanToNode(workload, plans):
+    nodes = []
+    for i in range(len(plans)):
+        # 一个 message 等价类包括多条 plans
+        print("================================")
+        # print("plans[{}]\n".format(i), plans[i])
+        node = postgres.ParsePostgresPlanJson_1(plans[i], workload.workload_info.alias_to_names)
+        if node.info['join_cond'] == ['']:
+            break
+        node = plans_lib.FilterScansOrJoins(node)
+        plans_lib.GatherUnaryFiltersInfo(node)
+        postgres.EstimateFilterRows(node)
+        if i == 0:
+            temp = node.to_sql(node.info['join_cond'], with_select_exprs=True)
+            node.info['sql_str'] = temp
+        node.info['sql_str'] = temp
+        nodes.append(node)
+        print("node\n", node)
+    
+    return nodes
+
+
 if __name__ == '__main__':
     # train_files = ['1a', '2a', '3a']
     train_files = ['1a']
@@ -147,6 +173,9 @@ if __name__ == '__main__':
         print("-- query_latency leon --", query_latency)
 
     # STEP 2. get messages and train model
+    workload = envs.JoinOrderBenchmark(envs.JoinOrderBenchmark.Params())
+    workload.workload_info.table_num_rows = postgres.GetAllTableNumRows(workload.workload_info.rel_names)
+    workload.workload_info.alias_to_names = postgres.GetAllAliasToNames(workload.workload_info.rel_ids)
     IF_TRAIN = True
     model_path = "model.pth"
     if not os.path.exists(model_path):
@@ -154,21 +183,25 @@ if __name__ == '__main__':
     else:
         model = torch.load(model_path)
     
-    pkl_cnt = 42
-    with open("Nodes.pkl", "rb") as file:
+    # pkl_cnt = 42
+    pkl_cnt = 1
+    with open("messages.pkl", "rb") as file:
         for i in range(pkl_cnt):
-            message = pickle.load(file)
-            print("\nlen(message)", len(message))
             pkl_cnt = pkl_cnt -1
-            # 1. encoding. plan -> plan encoding
-            seqs, un_times, attns, loss_mask, pgcosts = plans_encoding(message, IF_TRAIN)
-            # 2. calculate calibration
-            cali_all = get_calibrations(model, seqs, attns, IF_TRAIN)
-            # 3. 计算 ucb_idx, 存要执行 plan_info_pct 传给 exp_add
-            pct = 0.1 # 执行 percent 比例的 plan
-            ucb_idx = get_ucb_idx(cali_all, pgcosts)
-            n = math.ceil(pct * len(ucb_idx))
-            # for i in range(n):
-            #     plan_info_pct.append(plan_info[ucb_idx[i]])
+            message = pickle.load(file) # message 是一个等价类 / 子查询
+            print("\nlen(message)", len(message))
+            nodes = PlanToNode(workload, message)
+
+            
+            # # 1. encoding. plan -> plan encoding
+            # seqs, un_times, attns, loss_mask, pgcosts = plans_encoding(message, IF_TRAIN)
+            # # 2. calculate calibration
+            # cali_all = get_calibrations(model, seqs, attns, IF_TRAIN)
+            # # 3. 计算 ucb_idx, 存要执行 plan_info_pct 传给 exp_add
+            # pct = 0.1 # 执行 percent 比例的 plan
+            # ucb_idx = get_ucb_idx(cali_all, pgcosts)
+            # n = math.ceil(pct * len(ucb_idx))
+            # # for i in range(n):
+            # #     plan_info_pct.append(plan_info[ucb_idx[i]])
 
 

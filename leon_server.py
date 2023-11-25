@@ -52,7 +52,7 @@ class LeonModel:
     def __init__(self):
         self.__model = self.load_model("model.pth")
         ray.init(_temp_dir="/data1/zengximu/LEON-research/ray") # ray should be init in sub process
-        node_path = "Nodes.pkl"
+        node_path = "messages.pkl"
         self.writer_hander = FileWriter.remote(node_path)
 
     def load_model(self, path):

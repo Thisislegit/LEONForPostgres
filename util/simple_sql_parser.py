@@ -31,7 +31,7 @@ def _GetJoinConds(sql):
         \.     # the dot "."
         (\w+)  # 2nd table column
         """, re.VERBOSE)
-    print(sql)
+    # print(sql) # cancel print sql
     join_conds = join_cond_pat.findall(sql)
     return _DedupJoinConds(join_conds)
 
