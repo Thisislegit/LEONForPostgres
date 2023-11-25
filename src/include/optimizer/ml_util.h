@@ -6,6 +6,7 @@
 #include "utils/ruleutils.h"
 
 static char* leon_host = "localhost";
+// static int leon_port = 9999;
 static int leon_port = 7735;
 
 // JSON tags for sending to the leon server.

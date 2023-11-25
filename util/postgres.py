@@ -353,6 +353,72 @@ def ParsePostgresPlanJson(json_dict):
 
     return _parse_pg(curr)
 
+def ParsePostgresPlanJson_1(json_dict, AliasToNames):
+    """Takes JSON dict, parses into a Node."""
+    curr = json_dict['Plan']
+
+    def _parse_pg(json_dict, select_exprs=None, indent=0):
+        op = json_dict['Node Type']
+        cost = json_dict['Total Cost']
+        if op == 'Aggregate':
+            op = json_dict['Partial Mode'] + op
+            if select_exprs is None:
+                # Record the SELECT <select_exprs> at the topmost Aggregate.
+                # E.g., ['min(mi.info)', 'min(miidx.info)', 'min(t.title)'].
+                select_exprs = json_dict['Path Target'].split(', ')
+
+        # Record relevant info.
+        curr_node = plans_lib.Node(op)
+        curr_node.cost = cost
+        # Only available if 'analyze' is set (actual execution).
+        curr_node.actual_time_ms = json_dict.get('Actual Total Time')
+        # Special case.
+        def has_whitespace(s):
+            return any(char.isspace() for char in s)
+        if 'Relation IDs' in json_dict:
+            if not has_whitespace(json_dict['Relation IDs']):
+                curr_node.table_alias = json_dict['Relation IDs']
+                curr_node.table_name = AliasToNames[curr_node.table_alias]
+
+        if 'Join Cond' in json_dict:
+            curr_node.info['join_cond'] = [item.strip() for item in json_dict['Join Cond'].split(', ')]
+
+
+        # Unary predicate on a table.
+        if 'Base Restrict Info' in json_dict:
+            if not op in ['Material', 'Memoize', 'Hash']:
+                assert 'Scan' in op, json_dict
+                assert 'Relation IDs' in json_dict, json_dict
+                if not has_whitespace(json_dict['Relation IDs']):
+                    curr_node.info['filter'] = json_dict['Base Restrict Info'].replace(', ',' AND ')
+                    # print(curr_node.info['filter'])
+
+        if 'Scan' in op and select_exprs:
+            # Record select exprs that belong to this leaf.
+            # Assume: SELECT <exprs> are all expressed in terms of aliases.
+            if 'Relation IDs' in json_dict.key():
+                if not has_whitespace(json_dict['Relation IDs']):
+                    filtered = _FilterExprsByAlias(select_exprs, json_dict['Relation IDs'])
+                    if filtered:
+                        curr_node.info['select_exprs'] = filtered
+
+        # Recurse.
+        if 'Plans' in json_dict:
+            for n in json_dict['Plans']:
+                curr_node.children.append(
+                    _parse_pg(n, select_exprs=select_exprs, indent=indent + 2))
+        if op == 'Bitmap Heap Scan':
+            for c in curr_node.children:
+                if c.node_type == 'Bitmap Index Scan':
+                    # 'Bitmap Index Scan' doesn't have the field 'Relation Name'.
+                    c.table_name = curr_node.table_name
+                    c.table_alias = curr_node.table_alias
+
+        return curr_node
+
+    return _parse_pg(curr)
+
+
 
 def EstimateFilterRows(nodes):
     """For each node, issues an EXPLAIN to estimates #rows of unary preds.
@@ -429,4 +495,20 @@ def GetAllTableNumRows(rel_names):
             num_rows = cursor.fetchall()[0][0]
             print(num_rows)
             d[rel_name] = num_rows
+    return d
+
+def GetAllAliasToNames(rel_ids):
+    """
+    通过别名去找到表名
+    """
+
+    table_id_to_name = lambda table_id: table_id.split(' ')[0]
+    table_id_to_alias = lambda table_id: table_id.split(' ')[-1]
+
+    d = {}
+
+    for rel_id in rel_ids:
+        name = table_id_to_name(rel_id)
+        alias = table_id_to_alias(rel_id)
+        d[alias] = name
     return d
