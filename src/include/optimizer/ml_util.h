@@ -676,7 +676,9 @@ static char* plan_to_json(PlannerInfo * root, Path* plan) {
   stream = open_memstream(&buf, &json_size);
   fprintf(stream, "{\"Plan\": ");
   debug_print_path(root, plan, 0, stream);
-  fprintf(stream, "}\n");
+  fprintf(stream, "");
+  fprintf(stream, "\"QueryId\": \"%d\",", root->parse->queryId);
+  fprintf(stream,"}\n");
   fclose(stream);
   
   return buf;
