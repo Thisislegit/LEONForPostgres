@@ -12,7 +12,7 @@ from test_case import SeqFormer
 from test_case import get_plan_encoding, configs, load_json, get_op_name_to_one_hot, plan_parameters, add_numerical_scalers
 
 """
-nodes 是一条query 的所有 plans 需要用到 server.py 中的解析
+nodes 是一条query 的所有 plans, 需要用到 server.py 中的解析
 
 数据路径
 leon train 提交一条 query 
@@ -20,6 +20,9 @@ leon train 提交一条 query
 -> leon server 做校验
 -> PG 根据校验选择 dp 中最优的 path 执行
 -> 获得执行 feedback (pg 返回的一条query的执行时间)
+
+train pair
+[query_encoding, latency, cost]
 
 """
 
@@ -77,7 +80,6 @@ def plans_encoding(plans, IF_TRAIN):
 
     seqs = []
     attns = []
-    pgcosts = [] # 存所有 plan 的 pg cost
     for x in plans:
         # print(x)
         # run_times 无法获取
@@ -86,14 +88,12 @@ def plans_encoding(plans, IF_TRAIN):
         )
         seqs.append(seq_encoding) 
         attns.append(attention_mask)
-        pgcost = 100 # pg cost model 返回的 cost 【plan变成 hint + sql 再使用 pg 获得 cost】 看【pg_train.py】
-        pgcost_log = math.log(pgcost) # 4.605
-        pgcosts.append(pgcost_log)
+
     seqs = torch.stack(seqs, dim=0)
     attns = torch.stack(attns, dim=0)
 
     if IF_TRAIN:
-        return seqs, run_times, attns, loss_mask, pgcosts
+        return seqs, run_times, attns, loss_mask
     else:
         return seqs, None, attns, None, None
 
@@ -129,18 +129,23 @@ def get_ucb_idx(cali_all, pgcosts):
 
     ucb = cali_var / cali_var.max() - cost_t / cost_t.max() # [# of plan]
     print("len(ucb)", len(ucb))
-
     ucb_sort_idx = torch.argsort(ucb, descending=True) # 张量排序索引 | ucb_sort[0] 是uncertainty高的plan在plan_info中的索引
     ucb_sort_idx = ucb_sort_idx.tolist()
 
     return ucb_sort_idx
 
 def PlanToNode(workload, plans):
+    '''
+    input. plans 
+        一个 message 等价类包括多条 plans
+    output. nodes
+        一个 node 的 sql 信息在 node.info['sql_str'], cost 信息在 node.cost, hint 信息在 node.hint_str()
+    '''
     nodes = []
     for i in range(len(plans)):
         # 一个 message 等价类包括多条 plans
-        print("================================")
-        # print("plans[{}]\n".format(i), plans[i])
+        # print("================================")
+        # print("plans[{}]\n".format(i))
         node = postgres.ParsePostgresPlanJson_1(plans[i], workload.workload_info.alias_to_names)
         if node.info['join_cond'] == ['']:
             break
@@ -152,10 +157,18 @@ def PlanToNode(workload, plans):
             node.info['sql_str'] = temp
         node.info['sql_str'] = temp
         nodes.append(node)
-        print("node\n", node)
+        # print("node\n", node)
     
     return nodes
 
+def getNodesCost(nodes):
+    pgcosts = [] # 存所有 plan 的 pg cost
+    for node in nodes:
+        pgcost = node.cost
+        pgcost_log = math.log(pgcost)
+        pgcosts.append(pgcost_log)
+    
+    return pgcosts
 
 if __name__ == '__main__':
     # train_files = ['1a', '2a', '3a']
@@ -163,7 +176,7 @@ if __name__ == '__main__':
     train_sqls = load_sql(train_files)
     # print(train_sqls[0])
 
-    # STEP 1. send query
+    # PHASE 1. send query with ENABLE_LEON=True
     ENABLE_LEON = bool
     for i in range(len(train_sqls)):
         print("------------- query {} ------------".format(i))
@@ -172,7 +185,7 @@ if __name__ == '__main__':
         query_latency = getPG_latency(train_sqls[i], ENABLE_LEON=True)
         print("-- query_latency leon --", query_latency)
 
-    # STEP 2. get messages and train model
+    # PHASE 2. get messages and train model
     workload = envs.JoinOrderBenchmark(envs.JoinOrderBenchmark.Params())
     workload.workload_info.table_num_rows = postgres.GetAllTableNumRows(workload.workload_info.rel_names)
     workload.workload_info.alias_to_names = postgres.GetAllAliasToNames(workload.workload_info.rel_ids)
@@ -188,20 +201,21 @@ if __name__ == '__main__':
     with open("messages.pkl", "rb") as file:
         for i in range(pkl_cnt):
             pkl_cnt = pkl_cnt -1
-            message = pickle.load(file) # message 是一个等价类 / 子查询
+            message = pickle.load(file) # message = plans 是一个等价类 / 子查询
             print("\nlen(message)", len(message))
+            # STEP 1) get node, [query_encoding, latency, cost]
             nodes = PlanToNode(workload, message)
-
+            pgcosts = getNodesCost(nodes)
             
-            # # 1. encoding. plan -> plan encoding
-            # seqs, un_times, attns, loss_mask, pgcosts = plans_encoding(message, IF_TRAIN)
-            # # 2. calculate calibration
-            # cali_all = get_calibrations(model, seqs, attns, IF_TRAIN)
-            # # 3. 计算 ucb_idx, 存要执行 plan_info_pct 传给 exp_add
-            # pct = 0.1 # 执行 percent 比例的 plan
-            # ucb_idx = get_ucb_idx(cali_all, pgcosts)
-            # n = math.ceil(pct * len(ucb_idx))
-            # # for i in range(n):
-            # #     plan_info_pct.append(plan_info[ucb_idx[i]])
+            seqs, un_times, attns, loss_mask = plans_encoding(message, IF_TRAIN) # encoding. plan -> plan encoding
+            cali_all = get_calibrations(model, seqs, attns, IF_TRAIN)
+
+            # STEP 2) pick node to execut with ENABLE_LEON=False
+            pct = 0.1 # 执行 percent 比例的 plan
+            ucb_idx = get_ucb_idx(cali_all, pgcosts)
+            print(ucb_idx)
+            n = math.ceil(pct * len(ucb_idx))
+            # for i in range(n):
+            #     plan_info_pct.append(plan_info[ucb_idx[i]]) # 存要执行 plan_info_pct
 
 
