@@ -199,7 +199,6 @@ def GetLatencyFromPg(sql, hint, ENABLE_LEON, verbose=False, check_hint_used=Fals
         return 90000
     json_dict = result[0][0][0]
     latency = float(json_dict['Execution Time'])
-    print("latency", latency)
     # node0 = ParsePostgresPlanJson(json_dict)
     # node = plans_lib.FilterScansOrJoins(node0)
     #

@@ -53,7 +53,7 @@ def load_sql(file_list: list):
         f.close()
     return sqls
 
-def getPG_latency(query, ENABLE_LEON=False):
+def getPG_latency(query, hint=None, ENABLE_LEON=False):
     """
     input. a loaded query
     output. the average latency of a query get from pg
@@ -61,7 +61,7 @@ def getPG_latency(query, ENABLE_LEON=False):
     latency_sum = 0
     cnt = 3
     for c in range(cnt):
-        latency_sum = latency_sum + postgres.GetLatencyFromPg(query, None, ENABLE_LEON, verbose=False, check_hint_used=False, timeout=90000,
+        latency_sum = latency_sum + postgres.GetLatencyFromPg(query, hint, ENABLE_LEON, verbose=False, check_hint_used=False, timeout=90000,
                                                 dropbuffer=False)
     pg_latency = latency_sum / cnt
     return pg_latency
@@ -71,6 +71,7 @@ def plans_encoding(plans, IF_TRAIN):
     '''
     input. a list of plans in type of json
     output. (seq_encoding, run_times, attention_mask, loss_mask)
+        - seq_encoding torch.Size([1, 760])
         - run_times 是归一化之后的
     '''
     statistics_file_path = "/data1/zengximu/LEON-research/LEONForPostgres/statistics.json"
@@ -203,19 +204,23 @@ if __name__ == '__main__':
             pkl_cnt = pkl_cnt -1
             message = pickle.load(file) # message = plans 是一个等价类 / 子查询
             print("\nlen(message)", len(message))
-            # STEP 1) get node, [query_encoding, latency, cost]
+            # STEP 1) get node, [encoded_plan, node_latency_hint, node_cost]
             nodes = PlanToNode(workload, message)
-            pgcosts = getNodesCost(nodes)
+            costs = getNodesCost(nodes)
             
-            seqs, un_times, attns, loss_mask = plans_encoding(message, IF_TRAIN) # encoding. plan -> plan encoding
-            cali_all = get_calibrations(model, seqs, attns, IF_TRAIN)
+            encoded_plans, un_times, attns, loss_mask = plans_encoding(message, IF_TRAIN) # encoding. plan -> plan_encoding / seqs
+            cali_all = get_calibrations(model, encoded_plans, attns, IF_TRAIN)
 
             # STEP 2) pick node to execut with ENABLE_LEON=False
             pct = 0.1 # 执行 percent 比例的 plan
-            ucb_idx = get_ucb_idx(cali_all, pgcosts)
+            ucb_idx = get_ucb_idx(cali_all, costs)
             print(ucb_idx)
             n = math.ceil(pct * len(ucb_idx))
-            # for i in range(n):
-            #     plan_info_pct.append(plan_info[ucb_idx[i]]) # 存要执行 plan_info_pct
+            for i in range(n):
+                node_sql = nodes[i].info['sql_str']
+                node_hint = nodes[i].hint_str()
+                node_latency_hint = getPG_latency(node_sql, node_hint, ENABLE_LEON=False)
+                print("node_latency_hint", node_latency_hint)
+                # plan_info_pct.append(plan_info[ucb_idx[i]]) # 存要执行 plan_info_pct
 
 
