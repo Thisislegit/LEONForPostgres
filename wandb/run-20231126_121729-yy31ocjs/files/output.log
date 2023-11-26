@@ -1,0 +1,30 @@
+/data1/wyz/miniconda3/envs/unlearning/lib/python3.8/site-packages/torch/nn/modules/transformer.py:282: UserWarning: enable_nested_tensor is True, but self.use_nested_tensor is False because encoder_layer.self_attn.num_heads is odd
+  warnings.warn(f"enable_nested_tensor is True, but self.use_nested_tensor is False because {why_not_sparsity_fast_path}")
+Process Process-1:
+Traceback (most recent call last):
+  File "/data1/wyz/miniconda3/envs/unlearning/lib/python3.8/multiprocessing/process.py", line 315, in _bootstrap
+    self.run()
+  File "/data1/wyz/miniconda3/envs/unlearning/lib/python3.8/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/data1/wyz/online/LEONForPostgres/leon_server1.py", line 304, in start_server
+    model = LeonModel()
+  File "/data1/wyz/online/LEONForPostgres/leon_server1.py", line 95, in __init__
+    model_dict = torch.load("/data1/wyz/online/LEONForPostgres/checkpoints/DACE.ckpt").cpu().numpy()
+  File "/data1/wyz/miniconda3/envs/unlearning/lib/python3.8/site-packages/torch/serialization.py", line 1014, in load
+    return _load(opened_zipfile,
+  File "/data1/wyz/miniconda3/envs/unlearning/lib/python3.8/site-packages/torch/serialization.py", line 1422, in _load
+    result = unpickler.load()
+  File "/data1/wyz/miniconda3/envs/unlearning/lib/python3.8/site-packages/torch/serialization.py", line 1392, in persistent_load
+    typed_storage = load_tensor(dtype, nbytes, key, _maybe_decode_ascii(location))
+  File "/data1/wyz/miniconda3/envs/unlearning/lib/python3.8/site-packages/torch/serialization.py", line 1366, in load_tensor
+    wrap_storage=restore_location(storage, location),
+  File "/data1/wyz/miniconda3/envs/unlearning/lib/python3.8/site-packages/torch/serialization.py", line 381, in default_restore_location
+    result = fn(storage, location)
+  File "/data1/wyz/miniconda3/envs/unlearning/lib/python3.8/site-packages/torch/serialization.py", line 279, in _cuda_deserialize
+    return obj.cuda(device)
+  File "/data1/wyz/miniconda3/envs/unlearning/lib/python3.8/site-packages/torch/_utils.py", line 107, in _cuda
+    with torch.cuda.device(device):
+  File "/data1/wyz/miniconda3/envs/unlearning/lib/python3.8/site-packages/torch/cuda/__init__.py", line 370, in __enter__
+    self.prev_idx = torch.cuda._exchange_device(self.idx)
+  File "/data1/wyz/miniconda3/envs/unlearning/lib/python3.8/site-packages/torch/cuda/__init__.py", line 284, in _lazy_init
+    raise RuntimeError(
