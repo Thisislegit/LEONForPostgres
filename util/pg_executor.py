@@ -15,7 +15,7 @@ from select import select
 # LOCAL_DSN = "postgres://psycopg:psycopg@localhost/imdb"
 
 
-database = "postgres"
+database = "imdbload"
 user = "wyz"
 password = "wangyuze"
 host = "localhost"

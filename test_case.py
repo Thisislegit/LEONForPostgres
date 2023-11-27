@@ -8,7 +8,7 @@ from sklearn.preprocessing import RobustScaler
 import torch.nn.functional as F
 
 configs = {
-    'node_length' : 19, # +1 for ???Path  # of node_types +2 
+    'node_length' : 18, # +1 for ???Path  # of node_types +2 
     'pad_length' : 40,
     # training
     "loss_weight" : 0.5,

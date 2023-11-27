@@ -92,10 +92,11 @@ class LeonModel:
             #     mlp_dropout=0.3,
             #     transformer_dropout=0.2,
             #     )
-            # self.Transformer_model = SeqFormer_Transformer(18, 128, 1)
-            # self.Transformer_model = PL_DACE(self.Transformer_model)
-            # self.Transformer_model.load_state_dict(model_dict["state_dict"])
-            self.Transformer_model = Transformer_model
+            model_dict = torch.load("/data1/wyz/online/LEONForPostgres/checkpoints/DACE.ckpt")
+            self.Transformer_model = SeqFormer_Transformer(18, 128, 1)
+            self.Transformer_model = PL_DACE(self.Transformer_model)
+            self.Transformer_model.load_state_dict(model_dict["state_dict"])
+            self.Transformer_model = self.Transformer_model.to(DEVICE)
             statistics_file_path = "/data1/wyz/online/LEONForPostgres/statistics.json"
             self.feature_statistics = load_json(statistics_file_path)
             add_numerical_scalers(self.feature_statistics)
@@ -135,8 +136,8 @@ class LeonModel:
             else:
                 self.Transformer_model.eval() # 关闭 drop out，否则模型波动大    
                 if c is None: # transformer
-                    seqs = a
-                    attns = b
+                    seqs = a.to(DEVICE)
+                    attns = b.to(DEVICE)
                     cali = self.Transformer_model(seqs, attns) # cali.shape [# of plan, pad_length] cali 是归一化后的基数估计
                 else:
                     query_feats = a # tree_transformer
@@ -318,10 +319,11 @@ def start_server(listen_on, port):
 if __name__ == "__main__":
     from multiprocessing import Process
     from config import read_config
-    model_dict = torch.load("/data1/wyz/online/LEONForPostgres/checkpoints/DACE.ckpt")
-    Transformer_model = SeqFormer_Transformer(18, 128, 1)
-    Transformer_model = PL_DACE(Transformer_model)
-    Transformer_model.load_state_dict(model_dict["state_dict"])
+    torch.multiprocessing.set_start_method('spawn')
+    # model_dict = torch.load("/data1/wyz/online/LEONForPostgres/checkpoints/DACE.ckpt")
+    # Transformer_model = SeqFormer_Transformer(18, 128, 1)
+    # Transformer_model = PL_DACE(Transformer_model)
+    # Transformer_model.load_state_dict(model_dict["state_dict"])
 
 
     config = read_config()
