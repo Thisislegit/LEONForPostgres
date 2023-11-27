@@ -1179,6 +1179,16 @@ static struct config_bool ConfigureNamesBool[] =
 		NULL, NULL, NULL
 	},
 	{
+		{"not_cali", PGC_USERSET, QUERY_TUNING_COST,	
+			gettext_noop("Enable the leon calibration cost."),
+			gettext_noop("Enables the leon optimizer calibration cost "),
+			GUC_EXPLAIN
+		},
+		&not_cali,
+		true,
+		NULL, NULL, NULL
+	},
+	{
 		/* Not for general use --- used by SET SESSION AUTHORIZATION */
 		{"is_superuser", PGC_INTERNAL, UNGROUPED,
 			gettext_noop("Shows whether the current user is a superuser."),

@@ -2,6 +2,16 @@
 
 This document provides an overview of the LEON system, focusing on its training and inference components as implemented in `LEON_train.py` and `Leon_server.py`.
 
+## Pre-requests
+### GUC
+Set following guc for enabling (enable_leon is off as default, not_cali is on as default)
+```bash
+enable_leon = on;
+not_cali = on;
+```
+### Postgres Config
+Load ./conf/LEON-postgresql.conf into postgresql
+
 ## LEON_train.py - Training Process
 ### TODO:
 - [ ] write nodes file with ray
