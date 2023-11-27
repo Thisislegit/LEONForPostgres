@@ -25,6 +25,7 @@ extern PGDLLIMPORT int geqo_threshold;
 extern PGDLLIMPORT int min_parallel_table_scan_size;
 extern PGDLLIMPORT int min_parallel_index_scan_size;
 extern PGDLLIMPORT bool enable_leon;
+extern PGDLLIMPORT bool not_cali;
 
 /* Hook for plugins to get control in set_rel_pathlist() */
 typedef void (*set_rel_pathlist_hook_type) (PlannerInfo *root,

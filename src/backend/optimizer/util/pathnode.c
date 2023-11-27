@@ -34,6 +34,7 @@
 #include "utils/lsyscache.h"
 #include "utils/memutils.h"
 #include "utils/selfuncs.h"
+#include "optimizer/paths.h"
 
 typedef enum
 {
@@ -48,8 +49,8 @@ typedef enum
  * XXX is it worth making this user-controllable?  It provides a tradeoff
  * between planner runtime and the accuracy of path cost comparisons.
  */
-// #define STD_FUZZ_FACTOR 1.01
-#define STD_FUZZ_FACTOR 1.0
+#define STD_FUZZ_FACTOR 1.01
+// #define STD_FUZZ_FACTOR 1.0
 
 static List *translate_sub_tlist(List *tlist, int relid);
 static int	append_total_cost_compare(const ListCell *a, const ListCell *b);
@@ -94,9 +95,18 @@ compare_path_costs(Path *path1, Path *path2, CostSelector criterion)
 		// if (path1->total_cost > path2->total_cost)
 		// 	return +1;
 		if ((path1->calibration) != 0 && (path2->calibration != 0))
-		{
-			Cost calCost1 = (path1->calibration) * log(path1->total_cost);
-			Cost calCost2 = (path2->calibration) * log(path2->total_cost);
+		{	
+			Cost calCost1, calCost2;
+			if (not_cali)
+			{
+				Cost calCost1 = path1->calibration;
+				Cost calCost2 = path2->calibration;
+			}
+			else
+			{
+				Cost calCost1 = (path1->calibration) * log(path1->total_cost);
+				Cost calCost2 = (path2->calibration) * log(path2->total_cost);
+			}
 			if (calCost1 < calCost2)
 				return -1;
 			if (calCost1 > calCost2)
@@ -187,10 +197,17 @@ compare_path_costs_fuzzily(Path *path1, Path *path2, double fuzz_factor)
 
 	if ((path1->calibration) != 0 && (path2->calibration != 0))
 	{
-		// Cost calCost1 = (path1->calibration) * log(path1->total_cost);
-		// Cost calCost2 = (path2->calibration) * log(path2->total_cost);
-		Cost calCost1 = path1->calibration;
-		Cost calCost2 = path2->calibration;
+		Cost calCost1, calCost2;
+		if (not_cali)
+		{
+			Cost calCost1 = path1->calibration;
+			Cost calCost2 = path2->calibration;
+		}
+		else
+		{
+			Cost calCost1 = (path1->calibration) * log(path1->total_cost);
+			Cost calCost2 = (path2->calibration) * log(path2->total_cost);
+		}
 		if (calCost1 > calCost2 * fuzz_factor)
 		{
 			/* path1 fuzzily worse on total cost */
