@@ -67,7 +67,7 @@ int			geqo_threshold;
 int			min_parallel_table_scan_size;
 int			min_parallel_index_scan_size;
 bool 		enable_leon = false;
-bool		not_cali = true;
+bool		not_cali = false;
 
 /* Hook for plugins to get control in set_rel_pathlist() */
 set_rel_pathlist_hook_type set_rel_pathlist_hook = NULL;

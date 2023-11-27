@@ -1185,7 +1185,7 @@ static struct config_bool ConfigureNamesBool[] =
 			GUC_EXPLAIN
 		},
 		&not_cali,
-		true,
+		false,
 		NULL, NULL, NULL
 	},
 	{

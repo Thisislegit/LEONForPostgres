@@ -4,10 +4,10 @@ This document provides an overview of the LEON system, focusing on its training 
 
 ## Pre-requests
 ### GUC
-Set following guc for enabling (enable_leon is off as default, not_cali is on as default)
+Set following guc for enabling (enable_leon is off as default, not_cali is off as default)
 ```bash
 enable_leon = on;
-not_cali = on;
+not_cali = off;
 ```
 ### Postgres Config
 Load ./conf/LEON-postgresql.conf into postgresql
