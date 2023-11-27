@@ -82,7 +82,7 @@ def DropBufferCache():
         cursor.execute('select pg_dropcache();')
         cursor.execute('DISCARD ALL;')
 
-def GetLatencyFromPg(sql, hint, ENABLE_LEON, verbose=False, check_hint_used=False, timeout=10000, dropbuffer=False):
+def GetLatencyFromPg(sql, hint, ENABLE_LEON, ENABLE_NOT_CAIL, verbose=False, check_hint_used=False, timeout=10000, dropbuffer=False):
     if dropbuffer:
         DropBufferCache()
     with pg_executor.Cursor() as cursor:
@@ -92,6 +92,11 @@ def GetLatencyFromPg(sql, hint, ENABLE_LEON, verbose=False, check_hint_used=Fals
         if ENABLE_LEON:
             cursor.execute('SET enable_leon=on')
             cursor.execute('SET geqo=off')
+            if ENABLE_NOT_CAIL:
+                cursor.execute('SET not_cali=off') # zibo
+            else:
+                cursor.execute('SET not_cali=on') # our
+            
         else:
             cursor.execute('SET enable_leon=off')
             cursor.execute('SET geqo=off')
@@ -129,12 +134,12 @@ def load_sql(file_list: list):
         f.close()
     return sqls
 
-def get_latency(query, ENABLE_LEON=False):
+def get_latency(query, ENABLE_LEON=False, ENALBE_NOT_CAIL=False):
     """
     input. a loaded query
     output. the average latency of a query get from pg
     """
-    latency = GetLatencyFromPg(query, None, ENABLE_LEON, verbose=False, check_hint_used=False, timeout=0, dropbuffer=False)
+    latency = GetLatencyFromPg(query, None, ENABLE_LEON, ENABLE_NOT_CAIL, verbose=False, check_hint_used=False, timeout=0, dropbuffer=False)
     return latency
 
 def save_to_json(data):
@@ -185,7 +190,7 @@ if __name__ == '__main__':
         pg.append(query_latency)
         print("-- query_latency pg --", query_latency)
         start_time = time.time()
-        query_latency = get_latency(sqls[i], ENABLE_LEON=True)
+        query_latency = get_latency(sqls[i], ENABLE_LEON=True, ENABLE_NOT_CAIL=True)
         tf.append(query_latency)
         print("-- query_latency leon --", query_latency)
     with open("./pg.txt", 'wb') as f:
