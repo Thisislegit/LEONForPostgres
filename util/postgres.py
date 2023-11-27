@@ -376,8 +376,13 @@ def ParsePostgresPlanJson_1(json_dict, AliasToNames):
             return any(char.isspace() for char in s)
         if 'Relation IDs' in json_dict:
             if not has_whitespace(json_dict['Relation IDs']):
+                # one table exists
                 curr_node.table_alias = json_dict['Relation IDs']
                 curr_node.table_name = AliasToNames[curr_node.table_alias]
+            else:
+                # multiple tables exist
+                tbls = [AliasToNames[tbl] for tbl in sorted(json_dict['Relation IDs'].split())] # 'ct mc' -> ['ct', 'mc'] -> ['company_type', 'movie_companies']
+                curr_node.info['join_tables'] = ','.join(tbls) # company_type,movie_companies
 
         if 'Join Cond' in json_dict:
             curr_node.info['join_cond'] = [item.strip() for item in json_dict['Join Cond'].split(', ')]
