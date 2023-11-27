@@ -10,6 +10,7 @@ import math
 import json
 from test_case import SeqFormer
 from test_case import get_plan_encoding, configs, load_json, get_op_name_to_one_hot, plan_parameters, add_numerical_scalers
+from leon_experience import Experience
 
 """
 nodes 是一条query 的所有 plans, 需要用到 server.py 中的解析
@@ -59,7 +60,7 @@ def getPG_latency(query, hint=None, ENABLE_LEON=False):
     output. the average latency of a query get from pg
     """
     latency_sum = 0
-    cnt = 3
+    cnt = 1 # 3 1 
     for c in range(cnt):
         latency_sum = latency_sum + postgres.GetLatencyFromPg(query, hint, ENABLE_LEON, verbose=False, check_hint_used=False, timeout=90000,
                                                 dropbuffer=False)
@@ -72,7 +73,6 @@ def plans_encoding(plans, IF_TRAIN):
     input. a list of plans in type of json
     output. (seq_encoding, run_times, attention_mask, loss_mask)
         - seq_encoding torch.Size([1, 760])
-        - run_times 是归一化之后的
     '''
     statistics_file_path = "/data1/zengximu/LEON-research/LEONForPostgres/statistics.json"
     feature_statistics = load_json(statistics_file_path)
@@ -81,12 +81,10 @@ def plans_encoding(plans, IF_TRAIN):
 
     seqs = []
     attns = []
-    for x in plans:
-        # print(x)
-        # run_times 无法获取
+    for x in plans:        
         seq_encoding, run_times, attention_mask, loss_mask, database_id = get_plan_encoding(
             x, configs, op_name_to_one_hot, plan_parameters, feature_statistics, IF_TRAIN
-        )
+        ) # run_times 无法获取
         seqs.append(seq_encoding) 
         attns.append(attention_mask)
 
@@ -114,7 +112,6 @@ def get_calibrations(model, seqs, attns, IF_TRAIN):
                 cali_all = torch.cat((cali_all, cali[:, 0].unsqueeze(1)), dim=1)
             cali = cali[:, 0].cpu().detach().numpy() # 选择每一行的第一个元素
 
-    print("cali_all.shape ", cali_all.shape)            
     return cali_all
 
 def get_ucb_idx(cali_all, pgcosts):    
@@ -136,16 +133,13 @@ def get_ucb_idx(cali_all, pgcosts):
     return ucb_sort_idx
 
 def PlanToNode(workload, plans):
-    '''
-    input. plans 
-        一个 message 等价类包括多条 plans
+    """
+    input. plans 一个 message 等价类包括多条 plans
     output. nodes
-        一个 node 的 sql 信息在 node.info['sql_str'], cost 信息在 node.cost, hint 信息在 node.hint_str()
-    '''
+        sql 信息在 node.info['sql_str'], cost 信息在 node.cost, hint 信息在 node.hint_str(), join_tables 信息在 node.info['join_tables']
+    """
     nodes = []
     for i in range(len(plans)):
-        # 一个 message 等价类包括多条 plans
-        # print("================================")
         # print("plans[{}]\n".format(i))
         node = postgres.ParsePostgresPlanJson_1(plans[i], workload.workload_info.alias_to_names)
         if node.info['join_cond'] == ['']:
@@ -158,7 +152,6 @@ def PlanToNode(workload, plans):
             node.info['sql_str'] = temp
         node.info['sql_str'] = temp
         nodes.append(node)
-        # print("node\n", node)
     
     return nodes
 
@@ -171,11 +164,23 @@ def getNodesCost(nodes):
     
     return pgcosts
 
+def initEqSet():
+    equ_tem = ['title,movie_keyword,keyword', 'kind_type,title,comp_cast_type,complete_cast,movie_companies', 'kind_type,title,comp_cast_type,complete_cast,movie_companies,company_name', 'movie_companies,company_name', 'movie_companies,company_name,title',
+            'movie_companies,company_name,title,aka_title', 'company_name,movie_companies,title,cast_info', 'name,aka_name', 'name,aka_name,cast_info', 'info_type,movie_info_idx', 'company_type,movie_companies',
+            'company_type,movie_companies,title', 'company_type,movie_companies,title,movie_info', 'movie_companies,company_name', 'keyword,movie_keyword', 'keyword,movie_keyword,movie_info_idx']
+    equ_set = set() # 用集合 方便 eq keys 中去重
+    # 'title,movie_keyword,keyword' -> 'keyword,movie_keyword,title'
+    for i in equ_tem:
+        e_tem = i.split(',')
+        e_tem = ','.join(sorted(e_tem))
+        equ_set.add(e_tem)
+
+    return equ_set
+
 if __name__ == '__main__':
     # train_files = ['1a', '2a', '3a']
     train_files = ['1a']
     train_sqls = load_sql(train_files)
-    # print(train_sqls[0])
 
     # PHASE 1. send query with ENABLE_LEON=True
     ENABLE_LEON = bool
@@ -197,30 +202,52 @@ if __name__ == '__main__':
     else:
         model = torch.load(model_path)
     
-    # pkl_cnt = 42
-    pkl_cnt = 1
-    with open("messages.pkl", "rb") as file:
-        for i in range(pkl_cnt):
-            pkl_cnt = pkl_cnt -1
-            message = pickle.load(file) # message = plans 是一个等价类 / 子查询
-            print("\nlen(message)", len(message))
-            # STEP 1) get node, [encoded_plan, node_latency_hint, node_cost]
-            nodes = PlanToNode(workload, message)
-            costs = getNodesCost(nodes)
-            
-            encoded_plans, un_times, attns, loss_mask = plans_encoding(message, IF_TRAIN) # encoding. plan -> plan_encoding / seqs
-            cali_all = get_calibrations(model, encoded_plans, attns, IF_TRAIN)
+    exp = Experience(eq_set=initEqSet())
+    print("Init workload and equal set keys")
 
-            # STEP 2) pick node to execut with ENABLE_LEON=False
+    pkl_cnt = 1 # 42
+    with open("messages.pkl", "rb") as file:
+        for eq_cnt in range(pkl_cnt): # 取一个等价类
+            pkl_cnt = pkl_cnt -1
+            message = pickle.load(file) # message = plans 是一个等价类 eq_class / 子查询
+            print(f"\nthe {eq_cnt} message/ equal set with {len(message)} plans")
+
+            # STEP 1) get node
+            nodes = PlanToNode(workload, message)
+            encoded_plans, _, attns, loss_mask = plans_encoding(message, IF_TRAIN) # encoding. plan -> plan_encoding / seqs torch.Size([26, 1, 760])
+
+            # STEP 2) pick node to execute
             pct = 0.1 # 执行 percent 比例的 plan
+            costs = getNodesCost(nodes)
+            cali_all = get_calibrations(model, encoded_plans, attns, IF_TRAIN)
             ucb_idx = get_ucb_idx(cali_all, costs)
-            print(ucb_idx)
-            n = math.ceil(pct * len(ucb_idx))
-            for i in range(n):
-                node_sql = nodes[i].info['sql_str']
-                node_hint = nodes[i].hint_str()
-                node_latency_hint = getPG_latency(node_sql, node_hint, ENABLE_LEON=False)
+            num_to_exe = math.ceil(pct * len(ucb_idx))
+
+            # STEP 3) execute with ENABLE_LEON=False and add exp
+            # 经验 [[logcost, sql, hint, latency, [query_vector, node], join, joinids], ...]
+            for i in range(num_to_exe):
+                node_idx = ucb_idx[i] # 第 i 大ucb 的 node idx
+                a_node = nodes[node_idx]
+                node_latency_hint = getPG_latency(a_node.info['sql_str'], a_node.hint_str(), ENABLE_LEON=False)
+                a_node.info['latency'] = node_latency_hint
+                # a_node.info['encoded_plan'] = encoded_plans[node_idx] # torch.Size([1, 760])
                 print("node_latency_hint", node_latency_hint)
-                # plan_info_pct.append(plan_info[ucb_idx[i]]) # 存要执行 plan_info_pct
+
+                # (1) add new EqSet key in exp
+                if i == 0:
+                    eqKey = a_node.info['join_tables']
+                    exp.AddEqSet(eqKey)
+                # (2) add experience of certain EqSet key
+                a_plan = [a_node.cost,
+                            a_node.info['sql_str'],
+                            a_node.hint_str(),
+                            a_node.info['latency'],
+                            [encoded_plans[node_idx], a_node],
+                            None,
+                            a_node.info['join_tables']]
+                if not exp.isCache(eqKey, a_plan):
+                    exp.AppendExp(eqKey, a_plan)
+
+            print("len(exp.GetExp(eqKey))", len(exp.GetExp(eqKey)))
 
 
