@@ -25,14 +25,13 @@ ray.init()
 class ActorThatQueries:
     def __init__(self, port):
         # Initialize and configure your database connection here
-        self.db = psycopg2.connect(database="postgres", user="wyz", password="wangyuze", host="localhost", port=port)
+        self.db = psycopg2.connect(database="imdbload", user="wyz", password="wangyuze", host="localhost", port=port)
+        self.db.set_session(autocommit=True)
+        self.cursor = self.db.cursor()
 
-    def query_db(self, sql):
+    def Execute(self, s, verbose, geqo_off, timeout_ms):
         # Implement the logic to query the database
-        with self.db.cursor() as cursor:
-            cursor.execute(sql)
-            res = cursor.fetchall()
-        return res
+        return pg_executor.Execute(s, verbose, geqo_off, timeout_ms, self.cursor)
 
 # Create a list of actors
 actors = [ActorThatQueries.remote(port) for port in [1120, 1125, 1130]]

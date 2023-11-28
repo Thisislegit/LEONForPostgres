@@ -4,6 +4,9 @@ import subprocess
 import json
 import time
 import pickle
+import psycopg2
+import ray
+from ray.util import ActorPool
 """
 nodes 是一条query 的所有 plans 需要用到 server.py 中的解析
 
@@ -15,6 +18,19 @@ leon train 提交一条 query
 -> 获得执行 feedback (pg 返回的一条query的执行时间)
 
 """
+# @ray.remote
+# class ActorThatQueries:
+#     def __init__(self, port):
+#         # Initialize and configure your database connection here
+#         self.db = psycopg2.connect(database="imdbload", user="wyz", password="wangyuze", host="localhost", port=port)
+#         self.db.set_session(autocommit=True)
+#         self.cursor = self.db.cursor()
+
+#     def Execute(self, data):
+#         # Implement the logic to query the database
+#         s, verbose, geqo_off, timeout_ms = data
+#         return pg_executor.Execute(s, verbose, geqo_off, timeout_ms, self.cursor)
+
 
 def _run_explain(explain_str,
                  sql,
@@ -64,8 +80,10 @@ def _run_explain(explain_str,
     else:
         s = str(explain_str).rstrip() + '\n' + sql
     if remote:
-        assert cursor is None
-        return pg_executor.ExecuteRemote(s, verbose, geqo_off, timeout_ms)
+        data = [(s, verbose, geqo_off, timeout_ms)]
+        # def actor_call(actor, data):
+        #     return actor.Execute.remote(data)
+        # return pool.map_unordered(actor_call, data)
     else:
         return pg_executor.Execute(s, verbose, geqo_off, timeout_ms, cursor)
 
@@ -106,7 +124,7 @@ def GetLatencyFromPg(sql, hint, ENABLE_LEON, ENABLE_NOT_CAIL, verbose=False, che
                               hint,
                               verbose=True,
                               geqo_off=geqo_off,
-                              cursor=cursor, timeout_ms=timeout * 1.5).result
+                              cursor=cursor, timeout_ms=timeout * 1.5).result # remote改这里！！！
 
     if (result == []):
         return 10000
@@ -114,7 +132,7 @@ def GetLatencyFromPg(sql, hint, ENABLE_LEON, ENABLE_NOT_CAIL, verbose=False, che
     latency = float(json_dict['Execution Time'])
     print("latency", latency)
 
-    return latency
+    return latency, json_dict
 
 
 def load_sql(file_list: list):
@@ -134,13 +152,13 @@ def load_sql(file_list: list):
         f.close()
     return sqls
 
-def get_latency(query, ENABLE_LEON=False, ENALBE_NOT_CAIL=False):
+def get_latency(query, ENABLE_LEON=False, ENABLE_NOT_CAIL=False):
     """
     input. a loaded query
     output. the average latency of a query get from pg
     """
-    latency = GetLatencyFromPg(query, None, ENABLE_LEON, ENABLE_NOT_CAIL, verbose=False, check_hint_used=False, timeout=0, dropbuffer=False)
-    return latency
+    latency, json = GetLatencyFromPg(query, None, ENABLE_LEON, ENABLE_NOT_CAIL, verbose=False, check_hint_used=False, timeout=0, dropbuffer=False)
+    return latency, json
 
 def save_to_json(data):
     # 打开文件的模式: 常用的有’r’（读取模式，缺省值）、‘w’（写入模式）、‘a’（追加模式）等
@@ -174,10 +192,16 @@ if __name__ == '__main__':
              '13d', '14a', '14b', '14c', '15a', '15b', '15c', '15d', '16a', '16b', '16c',
              '16d', '17a', '17b', '17c', '17d', '17e', '17f', '18a', '18b', '18c', '19a',
              '19b', '19c', '19d', '20a', '20b', '20c', '21a', '21b', '21c', '22a', '22b',
-             '22c', '22d', '23a', '23b', '23c', '24a', '24b', '25a', '25b', '25c']
+             '22c', '22d', '23a', '23b', '23c', '24a', '24b', '25a', '25b', '25c', '26a', 
+             '26b', '26c', '27a', '27b', '27c', '28a', '28b', '28c']
     pg = []
     tf = []
+    pg_json = []
+    tf_json = []
     sqls = load_sql(files)
+    # ray.init()
+    # actors = [ActorThatQueries.remote(port) for port in [1120, 1125]]
+    # pool = ActorPool(actors)
     # print(train_sqls[0])
     for i in range(len(files)):
         value = files[i]
@@ -186,18 +210,23 @@ if __name__ == '__main__':
             data = read_to_json()
             data[value] = []
             save_to_json(data)
-        query_latency = get_latency(sqls[i], ENABLE_LEON=False)
+        query_latency, json = get_latency(sqls[i], ENABLE_LEON=False)
         pg.append(query_latency)
+        pg_json.append(json)
         print("-- query_latency pg --", query_latency)
-        start_time = time.time()
-        query_latency = get_latency(sqls[i], ENABLE_LEON=True, ENABLE_NOT_CAIL=True)
+        query_latency, json = get_latency(sqls[i], ENABLE_LEON=True, ENABLE_NOT_CAIL=True)
         tf.append(query_latency)
+        tf_json.append(json)
+        print(json)
         print("-- query_latency leon --", query_latency)
-    with open("./pg.txt", 'wb') as f:
-        pickle.dump(pg, f)
-    with open("./tf.txt", 'wb') as f:
-        pickle.dump(tf, f)
-
+    # with open("./pg1.txt", 'wb') as f:
+    #     pickle.dump(pg, f)
+    # with open("./tf1.txt", 'wb') as f:
+    #     pickle.dump(tf, f)
+    # with open("./tf1_json.txt", 'wb') as f:
+    #     pickle.dump(tf_json, f)
+    # with open("./pg1_json.txt", 'wb') as f:
+    #     pickle.dump(pg_json, f)
 
 
 
