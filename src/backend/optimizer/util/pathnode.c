@@ -232,6 +232,7 @@ compare_path_costs_fuzzily(Path *path1, Path *path2, double fuzz_factor)
 			/* else path1 dominates */
 			return COSTS_BETTER1;
 		}
+		return COSTS_EQUAL;
 	}
 
 	/*
