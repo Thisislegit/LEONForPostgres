@@ -183,7 +183,7 @@ class LeonModel:
     
     def inference(self, a, b, c):
         cali_all = self.get_calibrations(a, b, c)
-        cali_str = ['{:.2f}'.format(i) for i in cali_all.tolist()] # 最后一次 cali
+        cali_str = ['{:.2f}'.format(9.99 if i * 10 >= 10 else i * 10) for i in cali_all.tolist()] # 最后一次 cali
         # print("cali_str len", len(cali_str))
         cali_strs = ','.join(cali_str)
         return cali_strs
