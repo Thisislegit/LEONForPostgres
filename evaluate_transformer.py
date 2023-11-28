@@ -191,9 +191,7 @@ if __name__ == '__main__':
              '10c', '11a', '11b', '11c', '11d', '12a', '12b', '12c', '13a', '13b', '13c', 
              '13d', '14a', '14b', '14c', '15a', '15b', '15c', '15d', '16a', '16b', '16c',
              '16d', '17a', '17b', '17c', '17d', '17e', '17f', '18a', '18b', '18c', '19a',
-             '19b', '19c', '19d', '20a', '20b', '20c', '21a', '21b', '21c', '22a', '22b',
-             '22c', '22d', '23a', '23b', '23c', '24a', '24b', '25a', '25b', '25c', '26a', 
-             '26b', '26c', '27a', '27b', '27c', '28a', '28b', '28c']
+             '19b', '19c', '19d', '20a', '20b', '20c', '21a', '21b', '21c', '22a', '22b']
     pg = []
     tf = []
     pg_json = []
@@ -219,14 +217,14 @@ if __name__ == '__main__':
         tf_json.append(json)
         print(json)
         print("-- query_latency leon --", query_latency)
-    # with open("./pg1.txt", 'wb') as f:
-    #     pickle.dump(pg, f)
-    # with open("./tf1.txt", 'wb') as f:
-    #     pickle.dump(tf, f)
-    # with open("./tf1_json.txt", 'wb') as f:
-    #     pickle.dump(tf_json, f)
-    # with open("./pg1_json.txt", 'wb') as f:
-    #     pickle.dump(pg_json, f)
+    with open("./log/pg1.txt", 'wb') as f:
+        pickle.dump(pg, f)
+    with open("./log/tf1.txt", 'wb') as f:
+        pickle.dump(tf, f)
+    with open("./log/tf1_json.txt", 'wb') as f:
+        pickle.dump(tf_json, f)
+    with open("./log/pg1_json.txt", 'wb') as f:
+        pickle.dump(pg_json, f)
 
 
 

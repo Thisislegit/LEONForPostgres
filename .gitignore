@@ -42,6 +42,7 @@ lib*.pc
 /Debug/
 /Release/
 /tmp_install/
+/util/__pycache__/
 __pycache__/
 /log/
 .vscode/**
