@@ -11,6 +11,9 @@ import json
 from test_case import SeqFormer
 from test_case import get_plan_encoding, configs, load_json, get_op_name_to_one_hot, plan_parameters, add_numerical_scalers
 from leon_experience import Experience
+import numpy as np
+import ray
+import time
 
 """
 nodes 是一条query 的所有 plans, 需要用到 server.py 中的解析
@@ -53,6 +56,14 @@ def load_sql(file_list: list):
         sqls.append(sql)
         f.close()
     return sqls
+
+def load_model(model_path: str):
+    if not os.path.exists(model_path):
+        model = Transformer_model
+    else:
+        model = torch.load(model_path)
+    
+    return model
 
 def getPG_latency(query, hint=None, ENABLE_LEON=False):
     """
@@ -178,76 +189,134 @@ def initEqSet():
     return equ_set
 
 if __name__ == '__main__':
-    # train_files = ['1a', '2a', '3a']
-    train_files = ['1a']
-    train_sqls = load_sql(train_files)
+    train_files = ['1a', '2a', '3a', '4a']
+    # train_files = ['1a']
+    chunk_size = 2 # the # of sqls in a chunk
+    IF_TRAIN = True
+    model_path = "model.pth"
+    message_path = "messages.pkl"
 
-    # PHASE 1. send query with ENABLE_LEON=True
-    ENABLE_LEON = bool
-    for i in range(len(train_sqls)):
-        print("------------- query {} ------------".format(i))
-        query_latency = getPG_latency(train_sqls[i], ENABLE_LEON=False)
-        print("-- query_latency pg --", query_latency)
-        query_latency = getPG_latency(train_sqls[i], ENABLE_LEON=True)
-        print("-- query_latency leon --", query_latency)
-
-    # PHASE 2. get messages and train model
+    ray.init(address='auto', namespace='server_namespace', _temp_dir="/data1/zengximu/LEON-research/ray") # init only once
+    Exp = Experience(eq_set=initEqSet())
+    print("Init workload and equal set keys")
     workload = envs.JoinOrderBenchmark(envs.JoinOrderBenchmark.Params())
     workload.workload_info.table_num_rows = postgres.GetAllTableNumRows(workload.workload_info.rel_names)
     workload.workload_info.alias_to_names = postgres.GetAllAliasToNames(workload.workload_info.rel_ids)
-    IF_TRAIN = True
-    model_path = "model.pth"
-    if not os.path.exists(model_path):
-        model = Transformer_model
-    else:
-        model = torch.load(model_path)
-    
-    exp = Experience(eq_set=initEqSet())
-    print("Init workload and equal set keys")
 
-    pkl_cnt = 1 # 42
-    with open("messages.pkl", "rb") as file:
-        for eq_cnt in range(pkl_cnt): # 取一个等价类
-            pkl_cnt = pkl_cnt -1
-            message = pickle.load(file) # message = plans 是一个等价类 eq_class / 子查询
-            print(f"\nthe {eq_cnt} message/ equal set with {len(message)} plans")
+    # ===== ITERATION OF CHUNKS ====
+    ch_start_idx = 0 # the start idx of the current chunk in train_files
+    while ch_start_idx + chunk_size <= len(train_files):
+        print(f"\n+++++++++ a chunk of sql from {ch_start_idx}  ++++++++")
+        sqls_chunk = load_sql(train_files[ch_start_idx : ch_start_idx + chunk_size])
+        print(train_files[ch_start_idx : ch_start_idx + chunk_size])
 
-            # STEP 1) get node
-            nodes = PlanToNode(workload, message)
-            encoded_plans, _, attns, loss_mask = plans_encoding(message, IF_TRAIN) # encoding. plan -> plan_encoding / seqs torch.Size([26, 1, 760])
+        # ++++ PHASE 1. ++++ send a chunk of queries with ENABLE_LEON=True
+        # ENABLE_LEON = bool
+        for q_send_cnt in range(chunk_size):
+            print(f"------------- sending query {q_send_cnt} starting from idx {ch_start_idx} ------------")
+            query_latency = getPG_latency(sqls_chunk[q_send_cnt], ENABLE_LEON=False)
+            print("latency pg ", query_latency)
+            query_latency = getPG_latency(sqls_chunk[q_send_cnt], ENABLE_LEON=True)
+            print("latency leon ", query_latency)
 
-            # STEP 2) pick node to execute
-            pct = 0.1 # 执行 percent 比例的 plan
-            costs = getNodesCost(nodes)
-            cali_all = get_calibrations(model, encoded_plans, attns, IF_TRAIN)
-            ucb_idx = get_ucb_idx(cali_all, costs)
-            num_to_exe = math.ceil(pct * len(ucb_idx))
+        # ==== ITERATION OF RECIEVED QUERIES IN A CHUNK ====
+        q_recieved_cnt = 0 # the # of recieved queries; value in [1, chunk_size]
+        curr_QueryId = "" # to imply the difference of QueryId between two messages
+        model = load_model(model_path)
 
-            # STEP 3) execute with ENABLE_LEON=False and add exp
-            # 经验 [[logcost, sql, hint, latency, [query_vector, node], join, joinids], ...]
-            for i in range(num_to_exe):
-                node_idx = ucb_idx[i] # 第 i 大ucb 的 node idx
-                a_node = nodes[node_idx]
-                node_latency_hint = getPG_latency(a_node.info['sql_str'], a_node.hint_str(), ENABLE_LEON=False)
-                a_node.info['latency'] = node_latency_hint
-                # a_node.info['encoded_plan'] = encoded_plans[node_idx] # torch.Size([1, 760])
-                print("node_latency_hint", node_latency_hint)
+        # to ensure that all sent sqls are processed as messages before sending the next chunk of sqls
+        same_actor = ray.get_actor('leon_server')
+        PKL_READY = ray.get(same_actor.complete_all_tasks.remote())
+        while(not PKL_READY):
+            time.sleep(0.1)
+            print("waiting for PKL_READY ...")
+            PKL_READY = ray.get(same_actor.complete_all_tasks.remote())
+        
+        # ++++ PHASE 2. ++++ get messages of a chunk, nodes, and experience
+        PKL_exist = True
+        with open(message_path, "rb") as file:
+            while(PKL_exist):
+                try:
+                    message = pickle.load(file)
+                except:
+                    PKL_exist = False
+                    break
 
-                # (1) add new EqSet key in exp
-                if i == 0:
-                    eqKey = a_node.info['join_tables']
-                    exp.AddEqSet(eqKey)
-                # (2) add experience of certain EqSet key
-                a_plan = [a_node.cost,
-                            a_node.info['sql_str'],
-                            a_node.hint_str(),
-                            a_node.info['latency'],
-                            [encoded_plans[node_idx], a_node],
-                            None,
-                            a_node.info['join_tables']]
-                if not exp.isCache(eqKey, a_plan):
-                    exp.AppendExp(eqKey, a_plan)
+                if curr_QueryId != message[0]['QueryId']: # the QueryId of the first plan in the message
+                    print(f"------------- recieving query {q_recieved_cnt} starting from idx {ch_start_idx} ------------")
+                    q_recieved_cnt = q_recieved_cnt + 1 # start recieve equal sets from a new sql
+                    curr_QueryId = message[0]['QueryId']
+                print(f">>> message with {len(message)} plans")
 
-            print("len(exp.GetExp(eqKey))", len(exp.GetExp(eqKey)))
+                # STEP 1) get node
+                nodes = PlanToNode(workload, message)
+                encoded_plans, _, attns, loss_mask = plans_encoding(message, IF_TRAIN) # encoding. plan -> plan_encoding / seqs torch.Size([26, 1, 760])
+
+                # STEP 2) pick node to execute
+                pct = 0.1 # 执行 percent 比例的 plan
+                costs = getNodesCost(nodes)
+                cali_all = get_calibrations(model, encoded_plans, attns, IF_TRAIN)
+                ucb_idx = get_ucb_idx(cali_all, costs)
+                num_to_exe = math.ceil(pct * len(ucb_idx))
+                print("ucb_idx to exe", ucb_idx[:num_to_exe])
+
+                # STEP 3) execute with ENABLE_LEON=False and add exp
+                # 经验 [[logcost, sql, hint, latency, [query_vector, node], join, joinids], ...]
+                for i in range(num_to_exe):
+                    node_idx = ucb_idx[i] # 第 i 大ucb 的 node idx
+                    print("node_idx", node_idx)
+                    a_node = nodes[node_idx]
+                    a_node.info['latency'] = getPG_latency(a_node.info['sql_str'], a_node.hint_str(), ENABLE_LEON=False)
+
+                    # (1) add new EqSet key in exp
+                    if i == 0:
+                        eqKey = a_node.info['join_tables']
+                        Exp.AddEqSet(eqKey)
+                    # (2) add experience of certain EqSet key
+                    a_plan = [a_node.cost,
+                                a_node.info['sql_str'],
+                                a_node.hint_str(),
+                                a_node.info['latency'],
+                                [encoded_plans[node_idx], a_node],
+                                None,
+                                a_node.info['join_tables']]
+                    if not Exp.isCache(eqKey, a_plan):
+                        Exp.AppendExp(eqKey, a_plan)
+
+                print("len(Exp.GetExp(eqKey))", len(Exp.GetExp(eqKey)))
+        
+        # ++++ PHASE 3. ++++ model training
+        # batchsize = 3 # 128
+        # train_pairs = Exp.Getpair()
+        # if len(train_pairs) < batchsize:
+        #     pass # !!! 加上 iter 后 改为 continue !!!
+        # for i in train_pairs:
+        #     print(i[0][0], i[1][0]) # cost
+        # # STEP 1) get train pairs of a batch
+        # shuffled_idx = np.random.permutation(len(train_pairs))
+        # print(shuffled_idx)
+        # curr_idx = 0
+        # while curr_idx + batchsize < len(shuffled_idx):
+        #     batch_pairs = [train_pairs[i] for i in shuffled_idx[shuffled_idx: shuffled_idx + batchsize]]
+        #     costs = []
+        #     latencies = []
+        #     # query_feats = []
+        #     nodes = []
+        #     for pair in batch_pairs:
+        #         costs.append(pair[0][0])
+        #         costs.append(pair[1][0])
+        #         latencies.append(pair[0][1])
+        #         latencies.append(pair[1][1])
+        #         nodes.append(pair[0][3])
+        #         nodes.append(pair[1][3])
+        
+        ch_start_idx = ch_start_idx + chunk_size
+        # save model
+        # clear pkl
+        if os.path.exists(message_path):
+            os.remove(message_path)
+            print(f"Successfully remove {message_path}")
+        else:
+            print(f"Fail to remove {message_path}")
 
 

@@ -19,6 +19,7 @@ class FileWriter:
     def __init__(self, file_path):
         self.file_path = file_path
         self.completed_tasks = 0
+        self.recieved_task = 0
 
     def write_file(self, nodes):
         try:
@@ -28,10 +29,13 @@ class FileWriter:
             self.completed_tasks += 1
         except Exception as e:
             print("write_file() fail to open file and to write message", e)
+
+    def Add_task(self):
+        self.recieved_task += 1
     
-    def complete_all_tasks(self, task_num):
+    def complete_all_tasks(self):
         print(self.completed_tasks)
-        if self.completed_tasks == task_num:
+        if self.completed_tasks == self.recieved_task:
             return True
         else:
             return False
@@ -51,9 +55,13 @@ class LeonModel:
 
     def __init__(self):
         self.__model = self.load_model("model.pth")
-        ray.init(_temp_dir="/data1/zengximu/LEON-research/ray") # ray should be init in sub process
+        ray.init(namespace='server_namespace', _temp_dir="/data1/zengximu/LEON-research/ray") # ray should be init in sub process
         node_path = "messages.pkl"
-        self.writer_hander = FileWriter.remote(node_path)
+        # self.writer_hander = FileWriter.remote(node_path)
+        # ray.shutdown()
+        # context = ray.init(namespace='server_namespace')
+        # ray.init(namespace='server_namespace')
+        self.writer_hander = FileWriter.options(name="leon_server").remote(node_path)
 
     def load_model(self, path):
         if not os.path.exists(path):
@@ -118,6 +126,7 @@ class LeonModel:
 
         t1 = time.time()
         try:
+            self.writer_hander.Add_task.remote()
             self.writer_hander.write_file.remote(X)
         except:
             print("The ray writer_hander cannot write file.")

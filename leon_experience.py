@@ -1,6 +1,6 @@
 class Experience:
     def __init__(self, eq_set) -> None:
-        # 经验 [[logcost, sql, hint, latency, [query_vector, node], join, joinids]]
+        # 经验 [[logcost, sql, hint, latency, [query_vector, node], join, joinids]] 
         self._exp = dict() # k is the join_ids of an eq (str), v is experience of an eq (list)
         self._eqSet = dict() # save limited # of eq. Some eqs are in _exp, but not in _eqSet
         for i in eq_set:
@@ -87,26 +87,23 @@ class Experience:
                     self._exp[eq] = []
 
     def Getpair(self):
+        """
+        a train pair
+        [[j cost, j latency, j query_vector, j node], [k ...]], ...
+        """
         pairs = []
         for eq in self.GetEqSetKeys():
             for j in self.GetExp(eq):
                 for k in self.GetExp(eq):
-                    if (j[2] == k[2]) and (j[1] == k[1]):
+                    if (j[2] == k[2]) and (j[1] == k[1]): # sql 和 hint 都相同
                         continue
-                    if (j[3] == k[3]):
+                    if (j[3] == k[3]): # latency 相同
                         continue
                     tem = []
-                    # encoding
-                    tem.append(j[4])
-                    # latency
-                    tem.append(j[3])
-                    # cost
-                    tem.append(j[0])
-                    tem.append(k[4])
-                    tem.append(k[3])
-                    tem.append(k[0])
-                    tem.append(j[1]+j[2])
-                    tem.append(k[1]+k[2])
+                    tem.append([j[0], j[3], j[4][0], j[4][1]])
+                    tem.append([k[0], k[3], k[4][0], k[4][1]])
+                    # tem.append(j[1]+j[2])
+                    # tem.append(k[1]+k[2])
                     # 初始pairloss
                     pairs.append(tem)
         return pairs
