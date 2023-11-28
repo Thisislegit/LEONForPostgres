@@ -99,13 +99,13 @@ compare_path_costs(Path *path1, Path *path2, CostSelector criterion)
 			Cost calCost1, calCost2;
 			if (not_cali)
 			{
-				Cost calCost1 = path1->calibration;
-				Cost calCost2 = path2->calibration;
+				calCost1 = path1->calibration;
+				calCost2 = path2->calibration;
 			}
 			else
 			{
-				Cost calCost1 = (path1->calibration) * log(path1->total_cost);
-				Cost calCost2 = (path2->calibration) * log(path2->total_cost);
+				calCost1 = (path1->calibration) * log(path1->total_cost);
+				calCost2 = (path2->calibration) * log(path2->total_cost);
 			}
 			if (calCost1 < calCost2)
 				return -1;
@@ -200,13 +200,13 @@ compare_path_costs_fuzzily(Path *path1, Path *path2, double fuzz_factor)
 		Cost calCost1, calCost2;
 		if (not_cali)
 		{
-			Cost calCost1 = path1->calibration;
-			Cost calCost2 = path2->calibration;
+			calCost1 = path1->calibration;
+			calCost2 = path2->calibration;
 		}
 		else
 		{
-			Cost calCost1 = (path1->calibration) * log(path1->total_cost);
-			Cost calCost2 = (path2->calibration) * log(path2->total_cost);
+			calCost1 = (path1->calibration) * log(path1->total_cost);
+			calCost2 = (path2->calibration) * log(path2->total_cost);
 		}
 		if (calCost1 > calCost2 * fuzz_factor)
 		{
