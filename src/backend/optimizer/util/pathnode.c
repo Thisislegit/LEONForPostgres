@@ -111,6 +111,9 @@ compare_path_costs(Path *path1, Path *path2, CostSelector criterion)
 				return -1;
 			if (calCost1 > calCost2)
 				return +1;
+			// FIXME: Here I break tie arbitrarily
+			if (calCost1 == calCost2)
+				return -1;
 		}
 		else
 		{
