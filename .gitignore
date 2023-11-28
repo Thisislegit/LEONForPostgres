@@ -43,6 +43,7 @@ lib*.pc
 /Release/
 /tmp_install/
 __pycache__/
+/log/
 .vscode/**
 log/
 logs/

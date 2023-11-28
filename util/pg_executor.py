@@ -96,7 +96,6 @@ def _SetGeneticOptimizer(flag, cursor):
     cursor.execute('set geqo = {};'.format(flag))
     assert cursor.statusmessage == 'SET'
 
-
 def ExecuteRemote(sql, verbose=False, geqo_off=False, timeout_ms=None):
     return _ExecuteRemoteImpl.remote(sql, verbose, geqo_off, timeout_ms)
 
