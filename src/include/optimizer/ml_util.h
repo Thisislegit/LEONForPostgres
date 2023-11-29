@@ -10,6 +10,7 @@ static int leon_port = 9999;
 
 // JSON tags for sending to the leon server.
 static const char* START_QUERY_MESSAGE = "{\"type\": \"query\"}\n";
+static const char* START_SHOULD_OPT_MESSAGE = "{\"type\": \"should_opt\"}\n";
 static const char *START_FEEDBACK_MESSAGE = "{\"type\": \"reward\"}\n";
 static const char* START_PREDICTION_MESSAGE = "{\"type\": \"predict\"}\n";
 static const char* TERMINAL_MESSAGE = "{\"final\": true}\n";
@@ -44,9 +45,6 @@ extern char *deparse_expression_pretty(Node *expr, List *dpcontext,
 									   bool forceprefix, bool showimplicit,
 									   int prettyFlags, int startIndent);
 
-static bool should_leon_optimize(int level) {
-  return true;
-}
 
 static void get_calibrations(double calibrations[], uint32 queryid, int32_t length, int conn_fd){
   		// Read the response from the server and store it in the calibrations array
@@ -681,6 +679,64 @@ static char* plan_to_json(PlannerInfo * root, Path* plan) {
   fclose(stream);
   
   return buf;
+}
+
+static bool should_leon_optimize(int level, PlannerInfo * root, RelOptInfo * rel) {
+
+	int conn_fd = connect_to_leon(leon_host, leon_port);
+	if (conn_fd < 0) {
+		elog(WARNING, "Unable to connect to LEON server, reward for query will be dropped.");
+		exit(0);
+	}
+	write_all_to_socket(conn_fd, START_SHOULD_OPT_MESSAGE);
+
+	char* buf;
+	size_t json_size;
+	FILE* stream;
+
+  	stream = open_memstream(&buf, &json_size);
+	fprintf(stream, "{\"QueryId\": \"%d\",", root->parse->queryId);
+	fprintf(stream, "\"Relation IDs\": \"");
+	debug_print_relids(root, rel->relids, stream);
+	fprintf(stream, "\"}\n");
+  	fclose(stream);
+
+	write_all_to_socket(conn_fd, buf);
+	free(buf);
+	
+	write_all_to_socket(conn_fd, TERMINAL_MESSAGE);
+	shutdown(conn_fd, SHUT_WR);
+
+	char *response = (char *)calloc(5, sizeof(char));
+
+	if (read(conn_fd, response, 5) > 0) 
+	{
+		if (strcmp(response, "1") == 0)
+		{
+			free(response);
+			shutdown(conn_fd, SHUT_RDWR);
+			return true;
+		}
+		else if (strcmp(response, "0") == 0)
+		{
+			free(response);
+			shutdown(conn_fd, SHUT_RDWR);
+			return false;
+		}
+		else
+		{	// Show response
+			elog(WARNING, "LEON could not read the response: %s from the server.", response);
+			free(response);
+			shutdown(conn_fd, SHUT_RDWR);
+			return false;
+		}
+	}
+	else
+	{
+		elog(WARNING, "LEON could not read the response from the server.");
+		shutdown(conn_fd, SHUT_RDWR);
+		return false;
+	}
 }
 
 #endif
