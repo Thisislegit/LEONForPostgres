@@ -41,6 +41,7 @@ lib*.pc
 /pgsql.sln.cache
 /Debug/
 /Release/
+/wandb/
 /tmp_install/
 /util/__pycache__/
 __pycache__/
