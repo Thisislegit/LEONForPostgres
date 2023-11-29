@@ -42,122 +42,122 @@
 # feats = weights(gather)
 # print("feats", feats.shape)
 
-import torch
-import loralib as lora
-import torch.nn as nn
-import numpy as np
-from torch.nn.functional import pad
-import torch.nn.functional as F
-import lightning.pytorch as pl
+# import torch
+# import loralib as lora
+# import torch.nn as nn
+# import numpy as np
+# from torch.nn.functional import pad
+# import torch.nn.functional as F
+# import lightning.pytorch as pl
 
-class SeqFormer(nn.Module):
-    def __init__(
-        self,
-        input_dim,
-        hidden_dim,
-        output_dim,
-        mlp_activation="ReLU",
-        transformer_activation="gelu",
-        mlp_dropout=0.3,
-        transformer_dropout=0.2,
-    ):
-        super(SeqFormer, self).__init__()
-        # input_dim: node bits
-        self.tranformer_encoder = nn.TransformerEncoder(
-            nn.TransformerEncoderLayer(
-                d_model=input_dim,
-                dim_feedforward=hidden_dim,
-                nhead=1,
-                batch_first=True,
-                activation=transformer_activation,
-                dropout=transformer_dropout,
-            ),
-            num_layers=1,
-        )
-        self.node_length = input_dim
-        if mlp_activation == "ReLU":
-            self.mlp_activation = nn.ReLU()
-        elif mlp_activation == "GELU":
-            self.mlp_activation = nn.GELU()
-        elif mlp_activation == "LeakyReLU":
-            self.mlp_activation = nn.LeakyReLU()
-        # self.mlp_hidden_dims = [128, 64, 32]
-        self.mlp_hidden_dims = [128, 64, 1]
-        self.mlp = nn.Sequential(
-            *[
-                lora.Linear(self.node_length, self.mlp_hidden_dims[0], r=16),
-                nn.Dropout(mlp_dropout),
-                self.mlp_activation,
-                lora.Linear(self.mlp_hidden_dims[0], self.mlp_hidden_dims[1], r=8),
-                nn.Dropout(mlp_dropout),
-                self.mlp_activation,
-                lora.Linear(self.mlp_hidden_dims[1], output_dim, r=4),
-            ]
-        )
-        self.sigmoid = nn.Sigmoid()
+# class SeqFormer(nn.Module):
+#     def __init__(
+#         self,
+#         input_dim,
+#         hidden_dim,
+#         output_dim,
+#         mlp_activation="ReLU",
+#         transformer_activation="gelu",
+#         mlp_dropout=0.3,
+#         transformer_dropout=0.2,
+#     ):
+#         super(SeqFormer, self).__init__()
+#         # input_dim: node bits
+#         self.tranformer_encoder = nn.TransformerEncoder(
+#             nn.TransformerEncoderLayer(
+#                 d_model=input_dim,
+#                 dim_feedforward=hidden_dim,
+#                 nhead=1,
+#                 batch_first=True,
+#                 activation=transformer_activation,
+#                 dropout=transformer_dropout,
+#             ),
+#             num_layers=1,
+#         )
+#         self.node_length = input_dim
+#         if mlp_activation == "ReLU":
+#             self.mlp_activation = nn.ReLU()
+#         elif mlp_activation == "GELU":
+#             self.mlp_activation = nn.GELU()
+#         elif mlp_activation == "LeakyReLU":
+#             self.mlp_activation = nn.LeakyReLU()
+#         # self.mlp_hidden_dims = [128, 64, 32]
+#         self.mlp_hidden_dims = [128, 64, 1]
+#         self.mlp = nn.Sequential(
+#             *[
+#                 lora.Linear(self.node_length, self.mlp_hidden_dims[0], r=16),
+#                 nn.Dropout(mlp_dropout),
+#                 self.mlp_activation,
+#                 lora.Linear(self.mlp_hidden_dims[0], self.mlp_hidden_dims[1], r=8),
+#                 nn.Dropout(mlp_dropout),
+#                 self.mlp_activation,
+#                 lora.Linear(self.mlp_hidden_dims[1], output_dim, r=4),
+#             ]
+#         )
+#         self.sigmoid = nn.Sigmoid()
 
-    def forward(self, x, attn_mask=None):
-        # change x shape to (batch, seq_len, input_size) from (batch, len)
-        # one node is 18 bits
-        x = x.view(x.shape[0], -1, self.node_length)
-        # attn_mask = attn_mask.repeat(4,1,1)
-        out = self.tranformer_encoder(x, mask=attn_mask)
-        # out = self.transformer_decoder(out, out, tgt_mask=attn_mask)
-        out = self.mlp(out)
-        out = self.sigmoid(out).squeeze(dim=2)
-        return out * 2 # [0, 1] -> [1, 2] [??]
-class PL_DACE(pl.LightningModule):
-    def __init__(self, model):
-        super(PL_DACE, self).__init__()
-        self.model = model
+#     def forward(self, x, attn_mask=None):
+#         # change x shape to (batch, seq_len, input_size) from (batch, len)
+#         # one node is 18 bits
+#         x = x.view(x.shape[0], -1, self.node_length)
+#         # attn_mask = attn_mask.repeat(4,1,1)
+#         out = self.tranformer_encoder(x, mask=attn_mask)
+#         # out = self.transformer_decoder(out, out, tgt_mask=attn_mask)
+#         out = self.mlp(out)
+#         out = self.sigmoid(out).squeeze(dim=2)
+#         return out * 2 # [0, 1] -> [1, 2] [??]
+# class PL_DACE(pl.LightningModule):
+#     def __init__(self, model):
+#         super(PL_DACE, self).__init__()
+#         self.model = model
 
-    def forward(self, x, attn_mask=None):
-        return self.model(x, attn_mask)
+#     def forward(self, x, attn_mask=None):
+#         return self.model(x, attn_mask)
 
-    def DACE_loss(self, est_run_times, run_times, loss_mask):
-        # est_run_times: (batch, seq_len)
-        # run_times: (batch, seq_len)
-        # seqs_length: (batch,)
-        # return: loss (batch,)
-        # don't calculate the loss of padding nodes, set them to 0
-        loss = torch.max(est_run_times / run_times, run_times / est_run_times)
-        loss = loss * loss_mask
-        loss = torch.log(torch.where(loss > 1, loss, 1))
-        loss = torch.sum(loss, dim=1)
-        return loss
+#     def DACE_loss(self, est_run_times, run_times, loss_mask):
+#         # est_run_times: (batch, seq_len)
+#         # run_times: (batch, seq_len)
+#         # seqs_length: (batch,)
+#         # return: loss (batch,)
+#         # don't calculate the loss of padding nodes, set them to 0
+#         loss = torch.max(est_run_times / run_times, run_times / est_run_times)
+#         loss = loss * loss_mask
+#         loss = torch.log(torch.where(loss > 1, loss, 1))
+#         loss = torch.sum(loss, dim=1)
+#         return loss
 
-    def training_step(self, batch, batch_idx):
-        seqs_padded, attn_masks, loss_mask, run_times = batch
-        est_run_times = self.model(seqs_padded, attn_masks)
-        loss = self.DACE_loss(est_run_times, run_times, loss_mask)
-        loss = torch.mean(loss)
-        self.log("train_loss", loss)
-        return loss
+#     def training_step(self, batch, batch_idx):
+#         seqs_padded, attn_masks, loss_mask, run_times = batch
+#         est_run_times = self.model(seqs_padded, attn_masks)
+#         loss = self.DACE_loss(est_run_times, run_times, loss_mask)
+#         loss = torch.mean(loss)
+#         self.log("train_loss", loss)
+#         return loss
 
-    def validation_step(self, batch, batch_idx):
-        seqs_padded, attn_masks, loss_mask, run_times = batch
-        est_run_times = self.model(seqs_padded, attn_masks)
-        est_run_times = est_run_times[:, 0]
-        run_times = run_times[:, 0]
-        # calculate q-error
-        loss = 0
-        self.log("val_loss", loss)
-        return loss
+#     def validation_step(self, batch, batch_idx):
+#         seqs_padded, attn_masks, loss_mask, run_times = batch
+#         est_run_times = self.model(seqs_padded, attn_masks)
+#         est_run_times = est_run_times[:, 0]
+#         run_times = run_times[:, 0]
+#         # calculate q-error
+#         loss = 0
+#         self.log("val_loss", loss)
+#         return loss
 
-    def test_step(self, batch, batch_idx):
-        seqs_padded, attn_masks, loss_mask, run_times = batch
-        est_run_times = self.model(seqs_padded, attn_masks)
-        loss = self.DACE_loss(est_run_times, run_times, loss_mask)
-        loss = torch.mean(loss)
-        return loss
+#     def test_step(self, batch, batch_idx):
+#         seqs_padded, attn_masks, loss_mask, run_times = batch
+#         est_run_times = self.model(seqs_padded, attn_masks)
+#         loss = self.DACE_loss(est_run_times, run_times, loss_mask)
+#         loss = torch.mean(loss)
+#         return loss
 
-    def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
-        return optimizer
-model = SeqFormer(18, 128, 1)
-model = PL_DACE(model)
-model_dict = torch.load("/data1/wyz/online/LEONForPostgres/checkpoints/DACE.ckpt")
-model.load_state_dict(model_dict["state_dict"])
+#     def configure_optimizers(self):
+#         optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
+#         return optimizer
+# model = SeqFormer(18, 128, 1)
+# model = PL_DACE(model)
+# model_dict = torch.load("/data1/wyz/online/LEONForPostgres/checkpoints/DACE.ckpt")
+# model.load_state_dict(model_dict["state_dict"])
 
 # import json
 
@@ -196,3 +196,21 @@ model.load_state_dict(model_dict["state_dict"])
 # print("Average Analysis Time:", average_analysis_time)
 # print("Average Encoding Time:", average_encoding_time)
 # print("Average Inference Time:", average_inference_time)
+
+
+from leon_experience import *
+
+def initEqSet():
+    equ_tem = ['title,movie_keyword,keyword', 'kind_type,title,comp_cast_type,complete_cast,movie_companies', 'kind_type,title,comp_cast_type,complete_cast,movie_companies,company_name', 'movie_companies,company_name', 'movie_companies,company_name,title',
+            'movie_companies,company_name,title,aka_title', 'company_name,movie_companies,title,cast_info', 'name,aka_name', 'name,aka_name,cast_info', 'info_type,movie_info_idx', 'company_type,movie_companies',
+            'company_type,movie_companies,title', 'company_type,movie_companies,title,movie_info', 'movie_companies,company_name', 'keyword,movie_keyword', 'keyword,movie_keyword,movie_info_idx']
+    equ_set = set() # 用集合 方便 eq keys 中去重
+    # 'title,movie_keyword,keyword' -> 'keyword,movie_keyword,title'
+    for i in equ_tem:
+        e_tem = i.split(',')
+        e_tem = ','.join(sorted(e_tem))
+        equ_set.add(e_tem)
+
+    return equ_set
+
+Exp = Experience(eq_set=initEqSet())

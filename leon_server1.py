@@ -16,6 +16,7 @@ import time
 from test_case1 import SeqFormer, SeqFormer_tree, PL_DACE, SeqFormer_Transformer
 from test_case1 import get_plan_encoding, configs, load_json, get_op_name_to_one_hot, plan_parameters, add_numerical_scalers
 import wandb
+from leon_experience import *
 
 import json
 
@@ -59,6 +60,7 @@ class LeonModel:
         self.inference_all_time = 0
         self.n = 0
         self.curr_file = '1a'
+        self.Exp = Experience(eq_set=self.initEqSet())
         # 初始化
         if self.encoding_model == 'tree':
             self.workload = envs.JoinOrderBenchmark(envs.JoinOrderBenchmark.Params())
@@ -102,6 +104,19 @@ class LeonModel:
             add_numerical_scalers(self.feature_statistics)
             self.op_name_to_one_hot = get_op_name_to_one_hot(self.feature_statistics)
             
+    def initEqSet():
+        equ_tem = ['title,movie_keyword,keyword', 'kind_type,title,comp_cast_type,complete_cast,movie_companies', 'kind_type,title,comp_cast_type,complete_cast,movie_companies,company_name', 'movie_companies,company_name', 'movie_companies,company_name,title',
+                'movie_companies,company_name,title,aka_title', 'company_name,movie_companies,title,cast_info', 'name,aka_name', 'name,aka_name,cast_info', 'info_type,movie_info_idx', 'company_type,movie_companies',
+                'company_type,movie_companies,title', 'company_type,movie_companies,title,movie_info', 'movie_companies,company_name', 'keyword,movie_keyword', 'keyword,movie_keyword,movie_info_idx']
+        equ_set = set() # 用集合 方便 eq keys 中去重
+        # 'title,movie_keyword,keyword' -> 'keyword,movie_keyword,title'
+        for i in equ_tem:
+            e_tem = i.split(',')
+            e_tem = ','.join(sorted(e_tem))
+            equ_set.add(e_tem)
+
+        return equ_set  
+
     def plans_encoding(self, plans):
         '''
         input. a list of plans in type of json
@@ -191,6 +206,13 @@ class LeonModel:
     def load_model(self, path):
         pass
     
+    def infer_equ(self, messages):
+        if messages in self.Exp._eqSet:
+            return '1'
+        else:
+            return '0'
+
+
     def predict_plan(self, messages):
         if self.eval_time:
             data = read_to_json()
