@@ -61,11 +61,11 @@ class LeonModel:
         self.n = 0
         self.curr_file = '1a'
         self.Exp = Experience(eq_set=self.initEqSet())
+        self.workload = envs.JoinOrderBenchmark(envs.JoinOrderBenchmark.Params())
+        self.workload.workload_info.alias_to_names = postgres.GetAllAliasToNames(self.workload.workload_info.rel_ids)
         # 初始化
         if self.encoding_model == 'tree':
-            self.workload = envs.JoinOrderBenchmark(envs.JoinOrderBenchmark.Params())
             self.workload.workload_info.table_num_rows = postgres.GetAllTableNumRows(self.workload.workload_info.rel_names)
-            self.workload.workload_info.alias_to_names = postgres.GetAllAliasToNames(self.workload.workload_info.rel_ids)
             self.queryFeaturizer = plans_lib.QueryFeaturizer(self.workload.workload_info)
             self.nodeFeaturizer = plans_lib.PhysicalTreeNodeFeaturizer(self.workload.workload_info)
             if self.inference_model == 'tree_conv':
@@ -104,7 +104,7 @@ class LeonModel:
             add_numerical_scalers(self.feature_statistics)
             self.op_name_to_one_hot = get_op_name_to_one_hot(self.feature_statistics)
             
-    def initEqSet():
+    def initEqSet(self):
         equ_tem = ['title,movie_keyword,keyword', 'kind_type,title,comp_cast_type,complete_cast,movie_companies', 'kind_type,title,comp_cast_type,complete_cast,movie_companies,company_name', 'movie_companies,company_name', 'movie_companies,company_name,title',
                 'movie_companies,company_name,title,aka_title', 'company_name,movie_companies,title,cast_info', 'name,aka_name', 'name,aka_name,cast_info', 'info_type,movie_info_idx', 'company_type,movie_companies',
                 'company_type,movie_companies,title', 'company_type,movie_companies,title,movie_info', 'movie_companies,company_name', 'keyword,movie_keyword', 'keyword,movie_keyword,movie_info_idx']
@@ -168,8 +168,6 @@ class LeonModel:
             nodes = []
             queryencoding = []
             for i in range(0, len(X)):
-                # print(X[i])
-                # print(node)
                 node = postgres.ParsePostgresPlanJson_1(X[i], self.workload.workload_info.alias_to_names)
                 if node.info['join_cond'] == ['']: # return 1.00
                     return None, None, None
@@ -207,7 +205,12 @@ class LeonModel:
         pass
     
     def infer_equ(self, messages):
-        if messages in self.Exp._eqSet:
+        X = messages
+        if not isinstance(X, list):
+            X = [X]
+        Relation_IDs = X[0]['Relation IDs']
+        out = ','.join(self.workload.workload_info.alias_to_names[token] for token in Relation_IDs.split())
+        if out in self.Exp.GetEqSet():
             return '1'
         else:
             return '0'
@@ -268,7 +271,7 @@ class LeonModel:
             self.encoding_all_time += encoding_time
             self.inference_all_time += inference_time
             self.n += 1
-        print(cali_strs)
+        # print(cali_strs)
         return cali_strs
 
 class JSONTCPHandler(socketserver.BaseRequestHandler):
@@ -316,6 +319,12 @@ class LeonJSONHandler(JSONTCPHandler):
                 result = self.server.leon_model.predict_plan(self.__messages)
                 response = str(result).encode()
                 # self.request.sendall(struct.pack("I", result))
+                self.request.sendall(response)
+                self.request.close()
+            elif message_type == "should_opt":
+                result = self.server.leon_model.infer_equ(self.__messages)
+                print(result)
+                response = str(result).encode()
                 self.request.sendall(response)
                 self.request.close()
             else:
