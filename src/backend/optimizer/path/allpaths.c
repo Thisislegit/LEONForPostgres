@@ -3105,17 +3105,17 @@ standard_join_search(PlannerInfo *root, int levels_needed, List *initial_rels)
 				free(calibrations);
 
 
-				// Add Path At Last
-
-				//FIXME: Not Really? Assert(rel->pathlist == NIL);
-				foreach(p, rel->savedpaths)
-				{	
-					Path *path = (Path *)lfirst(p);
-					add_path(rel, path);
-				}
-				rel->savedpaths = NIL;
 			}
+			// Add Path At Last
 
+			//FIXME: Not Really? Assert(rel->pathlist == NIL);
+			ListCell *p;
+			foreach(p, rel->savedpaths)
+			{	
+				Path *path = (Path *)lfirst(p);
+				add_path(rel, path);
+			}
+			rel->savedpaths = NIL;
 
 			/* Find and save the cheapest paths for this rel */
 			set_cheapest(rel);
