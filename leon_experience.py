@@ -1,24 +1,32 @@
 class Experience:
     def __init__(self, eq_set) -> None:
         # 经验 [[logcost, sql, hint, latency, [query_vector, node], join, joinids]] 
-        self._exp = dict() # k is the join_ids of an eq (str), v is experience of an eq (list)
-        self._eqSet = dict() # save limited # of eq. Some eqs are in _exp, but not in _eqSet
+        self.__exp = dict() # k is the join_ids of an eq (str), v is experience of an eq (list)
+        self.__eqSet = dict() # save limited # of eq. Some eqs are in __exp, but not in __eqSet
         for i in eq_set:
+
             # todo: hand crafted tuned
-            self._eqSet[i] = 2000
-            self._exp[i] = []
+            # self.__eqSet[i] = 2000
+            # self.__exp[i] = []
+            self.AddEqSet(i)
+            self.AppendExp(i, [])
         self.MinEqNum = 9
         self.LargeTimout = 90000
 
     def GetEqSetKeys(self):
-        return self._eqSet.keys()
+        return self.__eqSet.keys()
 
     def AppendExp(self, eq, plan: list):
        #     print(plan)
+        temp = eq.split(',') # sort
+        eq = ','.join(sorted(temp))
         if self.haveEq(eq):
             self.GetExp(eq).append(plan)
         else:
-            self._exp[eq] = [plan]
+            if plan:
+                self.__exp[eq] = [plan]
+            else:
+                self.__eqSet[eq] = []
     
     def haveEq(self, eq):
         return self.GetExp(eq)
@@ -37,10 +45,10 @@ class Experience:
         return False
 
     def GetExp(self, eq) -> list:
-        return self._exp.get(eq)
+        return self.__exp.get(eq)
 
     def GetEqSet(self) -> dict:
-        return self._eqSet
+        return self.__eqSet
 
     def _getEqNum(self):
         return len(self.GetEqSet())
@@ -81,10 +89,12 @@ class Experience:
 
     def AddEqSet(self, eq):
         if len(self.GetEqSetKeys()) < 25: # Limit the Total Number of EqSet
+            temp = eq.split(',') # sort
+            eq = ','.join(sorted(temp))
             if eq not in self.GetEqSetKeys():
                 self.GetEqSet()[eq] = 90000
                 if not self.GetExp(eq):
-                    self._exp[eq] = []
+                    self.__exp[eq] = []
 
     def Getpair(self):
         """
