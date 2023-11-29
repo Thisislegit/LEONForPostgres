@@ -50,6 +50,19 @@ for chunk in chunks:
 - [x] Test inference efficiency and bottleneck
 ![Effciency](./Figs/efficiency.jpg)
 - [x] Test trained model ([SeqTransformer](https://github.com/liang-zibo/DACE))
-![seqformer](./Figs/pre_train_model.jpg)
+
+    **pre-trained model for 10 templates**
+    ![seqformer](./Figs/pre_train_model.jpg)
+    **pre-trained model for 30 templates (omit 28c)**
+    ![seqformer](./Figs/pre_train_model_all.jpg)
+    **Warning: Query Regression on 28C**
+    ![seqformer](./Figs/28c.jpg)
+    **End to End Runtime**
+    |        | Runtime       |          |
+    | :------: | :------: | ------: |
+    ｜          | Postgres | SeqFormer |
+    | with 28c      | 190.9s   | 26006.6s  |
+    | without 28c   | 190.9s   | 233.7s    |
+
 - [x] Multiple Database Execution for acceleration.
 - [ ] Add Eqset Judgement for model inference
