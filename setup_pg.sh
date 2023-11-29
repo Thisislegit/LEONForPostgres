@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # 设置 PostgreSQL 安装目录
-PREFIX_DIR="/data1/wyz/DATA_1120"
+PREFIX_DIR="/data1/wyz/DATA_1130"
 
 # 执行 configure
 ./configure --prefix="$PREFIX_DIR"
