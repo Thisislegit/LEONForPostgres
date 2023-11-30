@@ -241,7 +241,7 @@ class LeonModel:
             
         # json解析
         start_time = time.time()
-        # print("Predicting plan for ", len(messages))
+        print("Predicting plan for ", len(messages))
         X = messages
         if not isinstance(X, list):
             X = [X]
@@ -323,7 +323,7 @@ class LeonJSONHandler(JSONTCPHandler):
                 self.request.close()
             elif message_type == "should_opt":
                 result = self.server.leon_model.infer_equ(self.__messages)
-                print(result)
+                # print(result)
                 response = str(result).encode()
                 self.request.sendall(response)
                 self.request.close()

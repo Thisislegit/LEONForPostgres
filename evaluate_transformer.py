@@ -219,13 +219,13 @@ if __name__ == '__main__':
         tf_json.append(json)
         # print(json)
         print("-- query_latency leon --", query_latency)
-    with open("./log/pg4.txt", 'wb') as f:
+    with open("./log/pg5.txt", 'wb') as f:
         pickle.dump(pg, f)
-    with open("./log/tf4.txt", 'wb') as f:
+    with open("./log/tf5.txt", 'wb') as f:
         pickle.dump(tf, f)
-    with open("./log/tf4_json.txt", 'wb') as f:
+    with open("./log/tf5_json.txt", 'wb') as f:
         pickle.dump(tf_json, f)
-    with open("./log/pg4_json.txt", 'wb') as f:
+    with open("./log/pg5_json.txt", 'wb') as f:
         pickle.dump(pg_json, f)
 
 

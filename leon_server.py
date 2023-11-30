@@ -209,7 +209,7 @@ class LeonModel:
             
         # json解析
         start_time = time.time()
-        # print("Predicting plan for ", len(messages))
+        print("Predicting plan for ", len(messages))
         X = messages
         if not isinstance(X, list):
             X = [X]
