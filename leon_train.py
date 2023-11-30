@@ -6,6 +6,7 @@ from util import envs
 from util import plans_lib
 import pickle
 import torch
+from torch import nn
 import math
 import json
 from test_case import SeqFormer
@@ -71,9 +72,10 @@ def getPG_latency(query, hint=None, ENABLE_LEON=False):
     output. the average latency of a query get from pg
     """
     latency_sum = 0
+    timeout_limit = 1000 # 90000
     cnt = 1 # 3 1 
     for c in range(cnt):
-        latency_sum = latency_sum + postgres.GetLatencyFromPg(query, hint, ENABLE_LEON, verbose=False, check_hint_used=False, timeout=90000,
+        latency_sum = latency_sum + postgres.GetLatencyFromPg(query, hint, ENABLE_LEON, verbose=False, check_hint_used=False, timeout=timeout_limit,
                                                 dropbuffer=False)
     pg_latency = latency_sum / cnt
     return pg_latency
@@ -137,7 +139,7 @@ def get_ucb_idx(cali_all, pgcosts):
     # ucb = cali_var / cali_var.max() - cali_min / cali_min.max()
 
     ucb = cali_var / cali_var.max() - cost_t / cost_t.max() # [# of plan]
-    print("len(ucb)", len(ucb))
+    # print("len(ucb)", len(ucb))
     ucb_sort_idx = torch.argsort(ucb, descending=True) # 张量排序索引 | ucb_sort[0] 是uncertainty高的plan在plan_info中的索引
     ucb_sort_idx = ucb_sort_idx.tolist()
 
@@ -188,9 +190,58 @@ def initEqSet():
 
     return equ_set
 
+def getBatchPairsLoss(model, batch_pairs):
+    """
+    batch_pairs: a batch of train pairs
+    return. a batch of loss
+    """
+    loss_fn = nn.MarginRankingLoss(margin=15)
+
+    # step 1. retrieve encoded_plans and attns from pairs
+    encoded_plans = []
+    attns = []
+    latencies = []
+    costs = []
+    for pair in batch_pairs:
+        latencies.append(pair[0][0].info['latency'])
+        latencies.append(pair[1][0].info['latency'])
+        costs.append(pair[0][0].cost)
+        costs.append(pair[1][0].cost)
+        encoded_plans.append(pair[0][1])
+        encoded_plans.append(pair[1][1])
+        attns.append(pair[0][2])
+        attns.append(pair[1][2])
+
+    encoded_plans = torch.stack(encoded_plans, dim=0)
+    attns = torch.stack(attns, dim=0)
+
+    # step 2. calculate batch_cali and calied_cost
+    batch_cali = get_calibrations(model, encoded_plans, attns, IF_TRAIN=False) # pair0的cali1, pair0的cali2, ...
+    # print("len(cali_all)", len(batch_cali))
+    batch_cali = batch_cali.view(-1, 2)
+    costs = torch.tensor(costs).view(-1, 2) # torch.Size([3, 2])
+    # print("costs.shape", costs.shape)
+    calied_cost = batch_cali * costs # torch.Size([3, 2])
+    print("calied_Cost.shape", calied_cost.shape)
+    c1, c2 = torch.chunk(calied_cost, 2, dim=1) # torch.Size([3, 1]) c1 取 0 2 4 ...
+    # print("c1.shape", c1.shape)
+    c1 = torch.squeeze(c1)
+    c2 = torch.squeeze(c2)
+
+    assert (2 * len(calied_cost) == len(latencies)) and (len(latencies) % 2 == 0)
+    res = []
+    for i in range(0, len(latencies), 2):
+        if latencies[i] > latencies[i + 1]:
+            res.append(1)
+        else:
+            res.append(-1)
+    res = torch.tensor(res)
+
+    return loss_fn(c1, c2, res)
+
 if __name__ == '__main__':
-    train_files = ['1a', '2a', '3a', '4a']
-    # train_files = ['1a']
+    # train_files = ['1a', '2a', '3a', '4a']
+    train_files = ['1a', '2a']
     chunk_size = 2 # the # of sqls in a chunk
     IF_TRAIN = True
     model_path = "model.pth"
@@ -200,7 +251,7 @@ if __name__ == '__main__':
     Exp = Experience(eq_set=initEqSet())
     print("Init workload and equal set keys")
     workload = envs.JoinOrderBenchmark(envs.JoinOrderBenchmark.Params())
-    workload.workload_info.table_num_rows = postgres.GetAllTableNumRows(workload.workload_info.rel_names)
+    # workload.workload_info.table_num_rows = postgres.GetAllTableNumRows(workload.workload_info.rel_names)
     workload.workload_info.alias_to_names = postgres.GetAllAliasToNames(workload.workload_info.rel_ids)
 
     # ===== ITERATION OF CHUNKS ====
@@ -224,7 +275,7 @@ if __name__ == '__main__':
         curr_QueryId = "" # to imply the difference of QueryId between two messages
         model = load_model(model_path)
 
-        # to ensure that all sent sqls are processed as messages before sending the next chunk of sqls
+        # to ensure that all sent sqls are processed as messages before loading .pkl file
         same_actor = ray.get_actor('leon_server')
         PKL_READY = ray.get(same_actor.complete_all_tasks.remote())
         while(not PKL_READY):
@@ -239,18 +290,18 @@ if __name__ == '__main__':
                 try:
                     message = pickle.load(file)
                 except:
-                    PKL_exist = False
+                    PKL_exist = False # the last message is already loaded
                     break
 
                 if curr_QueryId != message[0]['QueryId']: # the QueryId of the first plan in the message
                     print(f"------------- recieving query {q_recieved_cnt} starting from idx {ch_start_idx} ------------")
-                    q_recieved_cnt = q_recieved_cnt + 1 # start recieve equal sets from a new sql
+                    q_recieved_cnt = q_recieved_cnt + 1 # start to recieve equal sets from a new sql
                     curr_QueryId = message[0]['QueryId']
                 print(f">>> message with {len(message)} plans")
 
                 # STEP 1) get node
                 nodes = PlanToNode(workload, message)
-                encoded_plans, _, attns, loss_mask = plans_encoding(message, IF_TRAIN) # encoding. plan -> plan_encoding / seqs torch.Size([26, 1, 760])
+                encoded_plans, _, attns, _ = plans_encoding(message, IF_TRAIN) # encoding. plan -> plan_encoding / seqs torch.Size([26, 1, 760])
 
                 # STEP 2) pick node to execute
                 pct = 0.1 # 执行 percent 比例的 plan
@@ -258,60 +309,60 @@ if __name__ == '__main__':
                 cali_all = get_calibrations(model, encoded_plans, attns, IF_TRAIN)
                 ucb_idx = get_ucb_idx(cali_all, costs)
                 num_to_exe = math.ceil(pct * len(ucb_idx))
-                print("ucb_idx to exe", ucb_idx[:num_to_exe])
+                # print("ucb_idx to exe", ucb_idx[:num_to_exe])
+                print("num_to_exe", num_to_exe)
 
                 # STEP 3) execute with ENABLE_LEON=False and add exp
                 # 经验 [[logcost, sql, hint, latency, [query_vector, node], join, joinids], ...]
                 for i in range(num_to_exe):
-                    node_idx = ucb_idx[i] # 第 i 大ucb 的 node idx
-                    print("node_idx", node_idx)
-                    a_node = nodes[node_idx]
-                    a_node.info['latency'] = getPG_latency(a_node.info['sql_str'], a_node.hint_str(), ENABLE_LEON=False)
+                    if i < 3: # 后续删掉！！这里只是为了节省代码运行时间！！！！
+                        node_idx = ucb_idx[i] # 第 i 大ucb 的 node idx
+                        a_node = nodes[node_idx]
+                        a_node.info['latency'] = getPG_latency(a_node.info['sql_str'], a_node.hint_str(), ENABLE_LEON=False)
 
-                    # (1) add new EqSet key in exp
-                    if i == 0:
-                        eqKey = a_node.info['join_tables']
-                        Exp.AddEqSet(eqKey)
-                    # (2) add experience of certain EqSet key
-                    a_plan = [a_node.cost,
-                                a_node.info['sql_str'],
-                                a_node.hint_str(),
-                                a_node.info['latency'],
-                                [encoded_plans[node_idx], a_node],
-                                None,
-                                a_node.info['join_tables']]
-                    if not Exp.isCache(eqKey, a_plan):
-                        Exp.AppendExp(eqKey, a_plan)
+                        # (1) add new EqSet key in exp
+                        if i == 0:
+                            eqKey = a_node.info['join_tables']
+                            Exp.AddEqSet(eqKey)
+                        # (2) add experience of certain EqSet key
+                        a_plan = [a_node, # with sql, hint, latency, cost
+                                  encoded_plans[node_idx],
+                                  attns[node_idx]]
+                        if not Exp.isCache(eqKey, a_plan): # 该行放 get latency 前面 ！！！
+                            Exp.AppendExp(eqKey, a_plan)
 
                 print("len(Exp.GetExp(eqKey))", len(Exp.GetExp(eqKey)))
         
+        Exp.DeleteEqSet()
+        
         # ++++ PHASE 3. ++++ model training
-        # batchsize = 3 # 128
-        # train_pairs = Exp.Getpair()
-        # if len(train_pairs) < batchsize:
-        #     pass # !!! 加上 iter 后 改为 continue !!!
-        # for i in train_pairs:
-        #     print(i[0][0], i[1][0]) # cost
-        # # STEP 1) get train pairs of a batch
-        # shuffled_idx = np.random.permutation(len(train_pairs))
+        # PHASE 3 还有小问题
+        batchsize = 3 # 128
+        optimizer = torch.optim.AdamW(model.parameters(), lr=0.001)
+
+        train_pairs = Exp.Getpair()
+        if len(train_pairs) < batchsize:
+            pass # !!! 加上 iter 后 改为 continue; 一个 chunk 的pairs不足时, 与下一个 chunk 的pairs合并 !!!
+
+        # STEP 1) get train pairs of a batch, calculate the cali of the batch
+        shuffled_idx = np.random.permutation(len(train_pairs))
         # print(shuffled_idx)
-        # curr_idx = 0
-        # while curr_idx + batchsize < len(shuffled_idx):
-        #     batch_pairs = [train_pairs[i] for i in shuffled_idx[shuffled_idx: shuffled_idx + batchsize]]
-        #     costs = []
-        #     latencies = []
-        #     # query_feats = []
-        #     nodes = []
-        #     for pair in batch_pairs:
-        #         costs.append(pair[0][0])
-        #         costs.append(pair[1][0])
-        #         latencies.append(pair[0][1])
-        #         latencies.append(pair[1][1])
-        #         nodes.append(pair[0][3])
-        #         nodes.append(pair[1][3])
+        curr_idx = 0
+        while curr_idx + batchsize <= len(shuffled_idx):
+            print(f"------- start to process train pairs from {curr_idx} with {len(train_pairs)} total pairs -------")
+            batch_pairs = [train_pairs[i] for i in shuffled_idx[curr_idx: curr_idx + batchsize]]
+            
+            batch_loss  = getBatchPairsLoss(model, batch_pairs)
+            loss = torch.mean(batch_loss, 0)
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            curr_idx = curr_idx + batchsize
         
         ch_start_idx = ch_start_idx + chunk_size
         # save model
+        torch.save(model, model_path)
+        # 模型更新需要通知到server.py
         # clear pkl
         if os.path.exists(message_path):
             os.remove(message_path)

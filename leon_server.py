@@ -20,6 +20,7 @@ class FileWriter:
         self.file_path = file_path
         self.completed_tasks = 0
         self.recieved_task = 0
+        self.RELOAD = True
 
     def write_file(self, nodes):
         try:
@@ -65,7 +66,7 @@ class LeonModel:
 
     def load_model(self, path):
         if not os.path.exists(path):
-            model = Transformer_model
+            model = Transformer_model # server.py 和 train.py 中的模型初始化也需要相同, 这里还没加上！！！
         else:
             model = torch.load(path)
         return model
@@ -126,7 +127,8 @@ class LeonModel:
 
         t1 = time.time()
         try:
-            self.writer_hander.Add_task.remote()
+            ray.get(self.writer_hander.Add_task.remote())
+            # .recieved_task += 1 需要试一下能不能直接成员变量 +1?
             self.writer_hander.write_file.remote(X)
         except:
             print("The ray writer_hander cannot write file.")
@@ -142,7 +144,7 @@ class LeonModel:
 
         cali_str = ['{:.2f}'.format(i) for i in cali_all[:, -1].tolist()] # 最后一次 cali
         cali_strs = ','.join(cali_str)
-        return cali_strs, seqs
+        return cali_strs
 
         # return ",".join(['1.00' for _ in X])
 

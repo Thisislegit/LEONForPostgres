@@ -32,7 +32,7 @@ class Experience:
     def isCache(self, eq, plan):
         if self.haveEq(eq):
             for curr_plan in self.GetExp(eq):
-                if curr_plan[1] == plan[1] and curr_plan[2] == plan[2]: # sql 和 hint 都相同
+                if curr_plan[0].info['sql_str'] == plan[0].info['sql_str'] and curr_plan[0].hint_str() == plan[0].hint_str(): # sql 和 hint 都相同
                     return True
         return False
 
@@ -95,13 +95,13 @@ class Experience:
         for eq in self.GetEqSetKeys():
             for j in self.GetExp(eq):
                 for k in self.GetExp(eq):
-                    if (j[2] == k[2]) and (j[1] == k[1]): # sql 和 hint 都相同
+                    if (j[0].info['sql_str'] == k[0].info['sql_str']) and (j[0].hint_str() == k[0].hint_str()): # sql 和 hint 都相同
                         continue
-                    if (j[3] == k[3]): # latency 相同
+                    if (j[0].info['latency'] == k[0].info['latency']): # latency 相同
                         continue
-                    tem = []
-                    tem.append([j[0], j[3], j[4][0], j[4][1]])
-                    tem.append([k[0], k[3], k[4][0], k[4][1]])
+                    tem = [j, k]
+                    # tem.append(j)
+                    # tem.append(k)
                     # tem.append(j[1]+j[2])
                     # tem.append(k[1]+k[2])
                     # 初始pairloss
