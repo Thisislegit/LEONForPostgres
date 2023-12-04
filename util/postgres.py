@@ -176,36 +176,32 @@ def getPlans(sql, hint, verbose=False, check_hint_used=False):
     return result
 
 
-def GetLatencyFromPg(sql, hint, verbose=False, check_hint_used=False, timeout=10000, dropbuffer=False):
+def GetLatencyFromPg(sql, hint, ENABLE_LEON, verbose=False, check_hint_used=False, timeout=10000, dropbuffer=False):
     if dropbuffer:
         DropBufferCache()
     with pg_executor.Cursor() as cursor:
         # GEQO must be disabled for hinting larger joins to work.
         # Why 'verbose': makes ParsePostgresPlanJson() able to access required
         # fields, e.g., 'Output' and 'Alias'.  Also see SqlToPlanNode() comment.
-        geqo_off = hint is not None and len(hint) > 0
+        if ENABLE_LEON:
+            cursor.execute('SET enable_leon=on')
+        else:
+            cursor.execute('SET enable_leon=off')
+        geqo_off = True
         result = _run_explain('explain(verbose, format json, analyze)',
                               sql,
                               hint,
                               verbose=True,
                               geqo_off=geqo_off,
-                              cursor=cursor, timeout_ms=timeout * 1.5).result
+                              cursor=cursor, timeout_ms=timeout).result # remote改这里！！！
 
     if (result == []):
-        return 90000
+        return timeout, []
     json_dict = result[0][0][0]
     latency = float(json_dict['Execution Time'])
-    # node0 = ParsePostgresPlanJson(json_dict)
-    # node = plans_lib.FilterScansOrJoins(node0)
-    #
-    # if check_hint_used:
-    #     expected = hint
-    #     actual = node.hint_str(with_physical_hints=ContainsPhysicalHints(hint))
-    #     assert expected == actual, 'Expected={}\nActual={}, actual node:\n{}\nSQL=\n{}'.format(
-    #         expected, actual, node, sql)
+    # print("latency", latency)
 
-    return latency
-
+    return latency, json_dict
 
 def GetCardinalityEstimateFromPg(sql, verbose=False):
     _, json_dict = SqlToPlanNode(sql, verbose=verbose)
@@ -352,6 +348,10 @@ def ParsePostgresPlanJson_1(json_dict, AliasToNames):
             if not has_whitespace(json_dict['Relation IDs']):
                 curr_node.table_alias = json_dict['Relation IDs']
                 curr_node.table_name = AliasToNames[curr_node.table_alias]
+            else:
+                # multiple tables exist
+                tbls = [AliasToNames[tbl] for tbl in sorted(json_dict['Relation IDs'].split())] # 'ct mc' -> ['ct', 'mc'] -> ['company_type', 'movie_companies']
+                curr_node.info['join_tables'] = ','.join(tbls) # company_type,movie_companies
 
         if 'Join Cond' in json_dict:
             curr_node.info['join_cond'] = [item.strip() for item in json_dict['Join Cond'].split(', ')]

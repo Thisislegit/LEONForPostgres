@@ -46,6 +46,7 @@ lib*.pc
 /util/__pycache__/
 __pycache__/
 /log/
+/logs/
 .vscode/**
 log/
 logs/

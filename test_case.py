@@ -213,8 +213,8 @@ class SeqFormer(nn.Module):
         output_dim,
         mlp_activation="ReLU",
         transformer_activation="gelu",
-        mlp_dropout=0.3,
-        transformer_dropout=0.2,
+        mlp_dropout=0.1,
+        transformer_dropout=0.1,
     ):
         super(SeqFormer, self).__init__()
         # input_dim: node bits
@@ -249,18 +249,20 @@ class SeqFormer(nn.Module):
                 nn.Linear(self.mlp_hidden_dims[1], output_dim),
             ]
         )
-        self.sigmoid = nn.Sigmoid()
+        # self.sigmoid = nn.Sigmoid()
 
     def forward(self, x, attn_mask=None):
         # change x shape to (batch, seq_len, input_size) from (batch, len)
         # one node is 18 bits
+        # x = x.view(x.shape[0], self.node_length, -1)
+        # x = x.transpose(1,2)
         x = x.view(x.shape[0], -1, self.node_length)
         # attn_mask = attn_mask.repeat(4,1,1)
         out = self.tranformer_encoder(x, mask=attn_mask)
         # out = self.transformer_decoder(out, out, tgt_mask=attn_mask)
         out = self.mlp(out)
-        out = self.sigmoid(out).squeeze(dim=2)
-        return out * 2 # [0, 1] -> [1, 2] [??]
+        out = torch.tanh(out).squeeze(dim=2).add(1)
+        return out # [0, 1] -> [1, 2] [??]
 
 # 树形编码结构
 class SeqFormer_tree(nn.Module):
