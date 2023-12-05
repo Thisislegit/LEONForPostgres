@@ -24,7 +24,7 @@ import time
 from argparse import ArgumentParser
 import copy
 import wandb
-
+DEVICE = 'cuda:3' if torch.cuda.is_available() else 'cpu'
 Transformer_model = SeqFormer(
                         input_dim=configs['node_length'],
                         hidden_dim=128,
@@ -54,10 +54,10 @@ def load_sql(file_list: list):
 
 def load_model(model_path: str, prev_optimizer_state_dict=None):
     if not os.path.exists(model_path):
-        model = Transformer_model
+        model = Transformer_model.to(DEVICE)
         model = PL_Leon(model, prev_optimizer_state_dict)
     else:
-        model = torch.load(model_path)
+        model = torch.load(model_path).to(DEVICE)
         model = PL_Leon(model, prev_optimizer_state_dict)
     
     return model
@@ -74,6 +74,8 @@ def getPG_latency(query, hint=None, ENABLE_LEON=False, timeout_limit=None):
     for c in range(cnt):
         latency, json_dict = postgres.GetLatencyFromPg(query, hint, ENABLE_LEON, verbose=False, check_hint_used=False, timeout=timeout_limit, dropbuffer=False)
         latency_sum = latency_sum + latency
+    if latency_sum == timeout_limit:
+        latency_sum = 90000
     pg_latency = latency_sum / cnt
     return pg_latency, json_dict
 
@@ -102,6 +104,8 @@ def get_calibrations(model, seqs, attns, IF_TRAIN):
     if IF_TRAIN:
         cost_iter = 10 # training 用模型推理 10 次 获得模型不确定性
         model.model.eval()
+        seqs = seqs.to(DEVICE)
+        attns = attns.to(DEVICE)
         with torch.no_grad():
             for i in range(cost_iter):
                 cali = model.model(seqs, attns) # cali.shape [# of plan, pad_length] cali 是归一化后的基数估计
@@ -119,7 +123,7 @@ def get_calibrations(model, seqs, attns, IF_TRAIN):
 def get_ucb_idx(cali_all, pgcosts):    
     cali_mean = cali_all.mean(dim = 1) # 每个 plan 的 cali 均值 [# of plan] | 值为 1 左右
     cali_var = cali_all.var(dim = 1) # [# of plan] | 值为 0 左右
-    costs = torch.tensor(pgcosts) # [# of plan]
+    costs = torch.tensor(pgcosts).to(DEVICE) # [# of plan]
     cost_t = torch.mul(cali_mean, costs) # 计算 calibration mean * pg返回的cost [# of plan]
 
     # cali_min, _ = cost_t.min(dim = 0) # plan 的 cali 最小值 [# of plan] 【cali_min只有一个值？】
@@ -470,6 +474,7 @@ if __name__ == '__main__':
                     costs = getNodesCost(nodes)
                     cali_all = get_calibrations(model, encoded_plans, attns, IF_TRAIN)
                     ucb_idx = get_ucb_idx(cali_all, costs)
+                    costs_index = torch.argsort(torch.tensor(costs), descending=False)
                     num_to_exe = math.ceil(pct * len(ucb_idx))
                     # print("ucb_idx to exe", ucb_idx[:num_to_exe])
                     # print("num_to_exe", num_to_exe)
@@ -478,8 +483,9 @@ if __name__ == '__main__':
                     for i in range(num_to_exe):
                         # if i < 3: # 后续删掉！！这里只是为了节省代码运行时间！！！！
                         node_idx = ucb_idx[i] # 第 i 大ucb 的 node idx
+                        cost_index = costs_index[i]
                         a_node = nodes[node_idx]
-                        
+                        b_node = nodes[cost_index]
                         # (1) add new EqSet key in exp
                         if i == 0:
                             eqKey = a_node.info['join_tables']
@@ -488,12 +494,20 @@ if __name__ == '__main__':
                                                         
                         # (2) add experience of certain EqSet key
                         a_plan = [a_node, # with sql, hint, latency, cost
-                                    encoded_plans[node_idx],
-                                    attns[node_idx]]
+                                  encoded_plans[node_idx],
+                                  attns[node_idx]]
+                        b_plan = [b_node,
+                                  encoded_plans[cost_index],
+                                  attns[cost_index]]
+                        
                         if not Exp.isCache(eqKey, a_plan): # 该行放 get latency 前面 ！！！
                             a_node.info['latency'], _ = getPG_latency(a_node.info['sql_str'], a_node.hint_str(), ENABLE_LEON=False, timeout_limit=None) # timeout 10s
                             a_plan[0].info['latency'] = a_node.info['latency']
                             Exp.AppendExp(eqKey, a_plan)
+                        # if not Exp.isCache(eqKey, b_plan): # 该行放 get latency 前面 ！！！
+                        #     b_node.info['latency'], _ = getPG_latency(b_node.info['sql_str'], b_node.hint_str(), ENABLE_LEON=False, timeout_limit=pg_time) # timeout 10s
+                        #     b_plan[0].info['latency'] = b_node.info['latency']
+                        #     Exp.AppendExp(eqKey, b_plan)
                         
 
                     # print("len(Exp.GetExp(eqKey))", len(Exp.GetExp(eqKey)))
@@ -512,11 +526,15 @@ if __name__ == '__main__':
 
         if len(train_pairs) > 16:
             leon_dataset = prepare_dataset(train_pairs)
-            dataloader_train = DataLoader(leon_dataset, batch_size=16, shuffle=True, num_workers=0)
-            dataloader_val = DataLoader(leon_dataset, batch_size=16, shuffle=True, num_workers=0)
-            model = load_model(model_path, prev_optimizer_state_dict)
+            dataloader_train = DataLoader(leon_dataset, batch_size=16, shuffle=True, num_workers=23)
+            dataloader_val = DataLoader(leon_dataset, batch_size=16, shuffle=False, num_workers=23)
+            model = load_model(model_path, prev_optimizer_state_dict).to(DEVICE)
             callbacks = load_callbacks(logger=None)
-            trainer = pl.Trainer(accelerator="cpu", max_epochs=100, callbacks=callbacks, logger=logger)
+            trainer = pl.Trainer(accelerator="gpu",
+                                 devices=[3],
+                                 max_epochs=100,
+                                 callbacks=callbacks,
+                                 logger=logger)
             trainer.fit(model, dataloader_train, dataloader_val)
             prev_optimizer_state_dict = trainer.optimizers[0].state_dict()
 
