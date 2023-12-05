@@ -135,7 +135,13 @@ class LeonModel:
                 ).to(DEVICE) # server.py 和 train.py 中的模型初始化也需要相同, 这里还没加上！！！
             torch.save(model, path)
         else:
-            model = torch.load(path)
+            model = torch.load(path, map_location='cuda:3')
+            # ckpt = ckpt["state_dict"]
+            # new_state_dict = OrderedDict()
+            # for key, value in ckpt.items():
+            # new_key = key.replace("model.", "")
+            # new_state_dict[new_key] = value
+            # self.net.load_state_dict(new_state_dict, strict=False)
         return model
     
     def infer_equ(self, messages):
