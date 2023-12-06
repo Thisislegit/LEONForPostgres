@@ -31,7 +31,7 @@ class FileWriter:
         self.RELOAD = True
         # self.eqset = ['cast_info,company_name,movie_companies,title', 'company_name,movie_companies,title']
         # self.eqset = ['company_name,movie_companies', 'company_type,movie_companies', 'company_type,movie_companies,title']
-        self.eqset = ['company_name,movie_companies', 'company_type,movie_companies', 'company_type,movie_companies,title', 'cast_info,company_name,movie_companies,title', 'company_name,movie_companies,title']
+        self.eqset = ['cn,mc', 'ct,mc', 'ct,mc,t', 'ci,cn,mc,t', 'cn,mc,t']
         # self.eqset = ['title,movie_keyword,keyword', 'kind_type,title,comp_cast_type,complete_cast,movie_companies', 'kind_type,title,comp_cast_type,complete_cast,movie_companies,company_name', 'movie_companies,company_name', 'movie_companies,company_name,title',
                 # 'movie_companies,company_name,title,aka_title', 'company_name,movie_companies,title,cast_info', 'name,aka_name', 'name,aka_name,cast_info', 'info_type,movie_info_idx', 'company_type,movie_companies',
                 # 'company_type,movie_companies,title', 'company_type,movie_companies,title,movie_info', 'movie_companies,company_name', 'keyword,movie_keyword', 'keyword,movie_keyword,movie_info_idx']
@@ -133,8 +133,6 @@ class LeonModel:
                 mlp_dropout=0.3,
                 transformer_dropout=0.2,
                 ).to(DEVICE) # server.py 和 train.py 中的模型初始化也需要相同, 这里还没加上！！！
-            torch.save(model, path)
-        else:
             model = torch.load(path, map_location='cuda:3')
             # ckpt = ckpt["state_dict"]
             # new_state_dict = OrderedDict()
@@ -153,7 +151,7 @@ class LeonModel:
         if not isinstance(X, list):
             X = [X]
         Relation_IDs = X[0]['Relation IDs']
-        out = ','.join(self.workload.workload_info.alias_to_names[token] for token in Relation_IDs.split())
+        out = ','.join(token for token in Relation_IDs.split())
         if out in self.eqset:
             return '1'
         else:
@@ -185,7 +183,7 @@ class LeonModel:
         # 推理
         cali_strs = self.inference(seqs, attns)
 
-        # print(cali_strs)
+        print(cali_strs)
         return cali_strs
 
 class JSONTCPHandler(socketserver.BaseRequestHandler):

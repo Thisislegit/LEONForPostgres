@@ -249,7 +249,16 @@ class SeqFormer(nn.Module):
                 nn.Linear(self.mlp_hidden_dims[1], output_dim),
             ]
         )
+        self.apply(self._init_weights)
         # self.sigmoid = nn.Sigmoid()
+
+    def _init_weights(self, module):
+        if isinstance(module, nn.Linear):
+            torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
+            if module.bias is not None:
+                torch.nn.init.zeros_(module.bias)
+        elif isinstance(module, nn.Embedding):
+            torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
 
     def forward(self, x, attn_mask=None):
         # change x shape to (batch, seq_len, input_size) from (batch, len)

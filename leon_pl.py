@@ -101,11 +101,11 @@ def plans_encoding(plans):
     return seqs, run_times, attns, loss_mask
 
 def get_calibrations(model, seqs, attns, IF_TRAIN):
+    seqs = seqs.to(DEVICE)
+    attns = attns.to(DEVICE)
     if IF_TRAIN:
         cost_iter = 10 # training 用模型推理 10 次 获得模型不确定性
         model.model.eval()
-        seqs = seqs.to(DEVICE)
-        attns = attns.to(DEVICE)
         with torch.no_grad():
             for i in range(cost_iter):
                 cali = model.model(seqs, attns) # cali.shape [# of plan, pad_length] cali 是归一化后的基数估计
@@ -123,7 +123,7 @@ def get_calibrations(model, seqs, attns, IF_TRAIN):
 def get_ucb_idx(cali_all, pgcosts):    
     cali_mean = cali_all.mean(dim = 1) # 每个 plan 的 cali 均值 [# of plan] | 值为 1 左右
     cali_var = cali_all.var(dim = 1) # [# of plan] | 值为 0 左右
-    costs = torch.tensor(pgcosts).to(DEVICE) # [# of plan]
+    costs = pgcosts # [# of plan]
     cost_t = torch.mul(cali_mean, costs) # 计算 calibration mean * pg返回的cost [# of plan]
 
     # cali_min, _ = cost_t.min(dim = 0) # plan 的 cali 最小值 [# of plan] 【cali_min只有一个值？】
@@ -148,11 +148,6 @@ def PlanToNode(workload, plans):
     for i in range(len(plans)):
         # print("plans[{}]\n".format(i))
         node = postgres.ParsePostgresPlanJson_1(plans[i], workload.workload_info.alias_to_names)
-        if node.info['join_cond'] == ['']:
-            break
-        node = plans_lib.FilterScansOrJoins(node)
-        plans_lib.GatherUnaryFiltersInfo(node)
-        postgres.EstimateFilterRows(node)
         if i == 0:
             temp = node.to_sql(node.info['join_cond'], with_select_exprs=True)
             node.info['sql_str'] = temp
@@ -173,7 +168,7 @@ def getNodesCost(nodes):
 def initEqSet():
     # equ_tem = ['cast_info,company_name,movie_companies,title', 'company_name,movie_companies,title']
     # equ_tem = ['company_name,movie_companies', 'company_type,movie_companies', 'company_type,movie_companies,title']
-    equ_tem = ['company_name,movie_companies', 'company_type,movie_companies', 'company_type,movie_companies,title', 'cast_info,company_name,movie_companies,title', 'company_name,movie_companies,title']
+    equ_tem = ['cn,mc', 'ct,mc', 'ct,mc,t', 'ci,cn,mc,t', 'cn,mc,t']
     # equ_tem = ['title,movie_keyword,keyword', 'kind_type,title,comp_cast_type,complete_cast,movie_companies', 'kind_type,title,comp_cast_type,complete_cast,movie_companies,company_name', 'movie_companies,company_name', 'movie_companies,company_name,title',
     #         'movie_companies,company_name,title,aka_title', 'company_name,movie_companies,title,cast_info', 'name,aka_name', 'name,aka_name,cast_info', 'info_type,movie_info_idx', 'company_type,movie_companies',
     #         'company_type,movie_companies,title', 'company_type,movie_companies,title,movie_info', 'movie_companies,company_name', 'keyword,movie_keyword', 'keyword,movie_keyword,movie_info_idx']
@@ -265,7 +260,7 @@ def load_callbacks(logger):
     callbacks.append(plc.EarlyStopping(
         monitor='v_acc',
         mode='max',
-        patience=5,
+        patience=3,
         min_delta=0.001
     ))
     if logger:
@@ -383,6 +378,8 @@ if __name__ == '__main__':
     pg_time = 0
     pg = []
     tf = []
+    last_train_pair = 0
+    retrain_count = 0
     max_query_latency1 = 0
     logger =  pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs', name="10a", project='leon')
     
@@ -408,9 +405,6 @@ if __name__ == '__main__':
             # todo : 如果timeout执行explain拿json
             print("latency leon ", query_latency2)
             node = postgres.ParsePostgresPlanJson(json_dict)
-            node = plans_lib.FilterScansOrJoins(node)
-            plans_lib.GatherUnaryFiltersInfo(node)
-            postgres.EstimateFilterRows(node)
             max_query_latency1 = max(max_query_latency1, query_latency1)
             Nodes.append(node)
             hints.append(node.hint_str())
@@ -422,12 +416,27 @@ if __name__ == '__main__':
         logger.log_metrics({"leon_latency": query_latency2})
         if pg_time_flag:
             pg_time_flag = False
-            pg_time = max_query_latency1 * 3
+            pg_time = max_query_latency1 * 5
         # for q_send_cnt in range(chunk_size):
         #     if time_ratio[q_send_cnt] > 1.2 and tf_time[q_send_cnt] > 1000:
         #         curNode = Nodes[q_send_cnt]
         #         if curNode:
         #             collects(curNode, workload, Exp, None, tf_time[q_send_cnt], sqls_chunk[q_send_cnt])
+        leon_node = []
+        for node in Nodes:
+            # print(node)
+            all_node = []
+            plans_lib.MapNode(node, lambda l: all_node.append(l))
+            for child_node in all_node:
+                tbls = [table.split(' ')[-1] for table in child_node.leaf_ids(with_alias=True)]
+                if ','.join(sorted(tbls)) in Exp.GetEqSet():
+                    print(','.join(sorted(tbls)))
+                    child_node.info['join_tables'] = ','.join(sorted(tbls))
+                    print(child_node)
+                    leon_node.append(child_node)
+
+
+            
 
         
 
@@ -469,13 +478,35 @@ if __name__ == '__main__':
 
                     # STEP 2) pick node to execute
                     
-
                     pct = 0.1 # 执行 percent 比例的 plan
-                    costs = getNodesCost(nodes)
+                    costs = torch.tensor(getNodesCost(nodes)).to(DEVICE)
                     cali_all = get_calibrations(model, encoded_plans, attns, IF_TRAIN)
                     ucb_idx = get_ucb_idx(cali_all, costs)
-                    costs_index = torch.argsort(torch.tensor(costs), descending=False)
+                    costs_index = torch.argsort(costs, descending=False)
                     num_to_exe = math.ceil(pct * len(ucb_idx))
+
+                    ##############################拿leon所选的执行计划#################
+                    for node2 in leon_node:
+                        for i, node1 in enumerate(nodes):
+                            temp = node1.info['join_tables'].split(',') # sort
+                            temp = ','.join(sorted(temp))
+                            if temp == node2.info['join_tables']:
+                                if round(node1.cost,2) == node2.cost:
+                                    # print(node1)
+                                    # print(node2)
+                                    node2.info['sql_str'] = node2.to_sql(node1.info['join_cond'], with_select_exprs=True)
+                                    c_node = node2
+                                    Exp.AddEqSet(c_node.info['join_tables'])
+                                    c_plan = [c_node,
+                                              encoded_plans[i],
+                                              attns[i]]
+                                    if not Exp.isCache(c_node.info['join_tables'], c_plan): # 该行放 get latency 前面 ！！！
+                                        c_plan[0].info['latency'] = c_node.actual_time_ms
+                                        Exp.AppendExp(c_node.info['join_tables'], c_plan)
+                                        print(node1.info['sql_str'], node1.hint_str())
+                            else:
+                                break
+                    ##################################################################
                     # print("ucb_idx to exe", ucb_idx[:num_to_exe])
                     # print("num_to_exe", num_to_exe)
                     # STEP 3) execute with ENABLE_LEON=False and add exp
@@ -501,13 +532,14 @@ if __name__ == '__main__':
                                   attns[cost_index]]
                         
                         if not Exp.isCache(eqKey, a_plan): # 该行放 get latency 前面 ！！！
-                            a_node.info['latency'], _ = getPG_latency(a_node.info['sql_str'], a_node.hint_str(), ENABLE_LEON=False, timeout_limit=None) # timeout 10s
+                            print(a_node.info['sql_str'], a_node.hint_str())
+                            a_node.info['latency'], _ = getPG_latency(a_node.info['sql_str'], a_node.hint_str(), ENABLE_LEON=False, timeout_limit=pg_time) # timeout 10s
                             a_plan[0].info['latency'] = a_node.info['latency']
                             Exp.AppendExp(eqKey, a_plan)
-                        # if not Exp.isCache(eqKey, b_plan): # 该行放 get latency 前面 ！！！
-                        #     b_node.info['latency'], _ = getPG_latency(b_node.info['sql_str'], b_node.hint_str(), ENABLE_LEON=False, timeout_limit=pg_time) # timeout 10s
-                        #     b_plan[0].info['latency'] = b_node.info['latency']
-                        #     Exp.AppendExp(eqKey, b_plan)
+                        if not Exp.isCache(eqKey, b_plan): # 该行放 get latency 前面 ！！！
+                            b_node.info['latency'], _ = getPG_latency(b_node.info['sql_str'], b_node.hint_str(), ENABLE_LEON=False, timeout_limit=pg_time) # timeout 10s
+                            b_plan[0].info['latency'] = b_node.info['latency']
+                            Exp.AppendExp(eqKey, b_plan)
                         
 
                     # print("len(Exp.GetExp(eqKey))", len(Exp.GetExp(eqKey)))
@@ -522,21 +554,31 @@ if __name__ == '__main__':
         # ++++ PHASE 3. ++++ model training
         # PHASE 3 还有小问题
         train_pairs = Exp.Getpair()
+        logger.log_metrics({"train_pairs": len(train_pairs)})
         print("len(train_pairs)" ,len(train_pairs))
-
-        if len(train_pairs) > 16:
-            leon_dataset = prepare_dataset(train_pairs)
-            dataloader_train = DataLoader(leon_dataset, batch_size=16, shuffle=True, num_workers=23)
-            dataloader_val = DataLoader(leon_dataset, batch_size=16, shuffle=False, num_workers=23)
-            model = load_model(model_path, prev_optimizer_state_dict).to(DEVICE)
-            callbacks = load_callbacks(logger=None)
-            trainer = pl.Trainer(accelerator="gpu",
-                                 devices=[3],
-                                 max_epochs=100,
-                                 callbacks=callbacks,
-                                 logger=logger)
-            trainer.fit(model, dataloader_train, dataloader_val)
-            prev_optimizer_state_dict = trainer.optimizers[0].state_dict()
+        if retrain_count == 2 and tf[-1] < pg[-1] and False:
+            pass
+        else:
+            if len(train_pairs) > 0 and last_train_pair > 0:
+                if max(len(train_pairs), last_train_pair) / min(len(train_pairs), last_train_pair) < 1.1 and tf[-1] < pg[-1]:
+                    retrain_count += 1
+                else:
+                    retrain_count = 0
+            last_train_pair = len(train_pairs)
+            print(retrain_count)
+            if len(train_pairs) > 16:
+                leon_dataset = prepare_dataset(train_pairs)
+                dataloader_train = DataLoader(leon_dataset, batch_size=16, shuffle=True, num_workers=0)
+                dataloader_val = DataLoader(leon_dataset, batch_size=16, shuffle=False, num_workers=0)
+                model = load_model(model_path, prev_optimizer_state_dict).to(DEVICE)
+                callbacks = load_callbacks(logger=None)
+                trainer = pl.Trainer(accelerator="gpu",
+                                    devices=[3],
+                                    max_epochs=100,
+                                    callbacks=callbacks,
+                                    logger=logger)
+                trainer.fit(model, dataloader_train, dataloader_val)
+                prev_optimizer_state_dict = trainer.optimizers[0].state_dict()
 
         ch_start_idx = ch_start_idx + chunk_size
         # save model

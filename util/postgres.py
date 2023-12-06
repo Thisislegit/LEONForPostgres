@@ -186,6 +186,7 @@ def GetLatencyFromPg(sql, hint, ENABLE_LEON, verbose=False, check_hint_used=Fals
         if ENABLE_LEON:
             cursor.execute('SET enable_leon=on')
         else:
+            cursor.execute("load 'pg_hint_plan';")
             cursor.execute('SET enable_leon=off')
         geqo_off = True
         result = _run_explain('explain(verbose, format json, analyze)',
@@ -336,11 +337,14 @@ def ParsePostgresPlanJson_1(json_dict, AliasToNames):
                 # E.g., ['min(mi.info)', 'min(miidx.info)', 'min(t.title)'].
                 select_exprs = json_dict['Path Target'].split(', ')
 
+
         # Record relevant info.
         curr_node = plans_lib.Node(op)
         curr_node.cost = cost
         # Only available if 'analyze' is set (actual execution).
         curr_node.actual_time_ms = json_dict.get('Actual Total Time')
+        if 'Path Target' in json_dict:
+            curr_node.info['select_exprs'] = json_dict['Path Target'].split(', ')
         # Special case.
         def has_whitespace(s):
             return any(char.isspace() for char in s)
@@ -350,7 +354,7 @@ def ParsePostgresPlanJson_1(json_dict, AliasToNames):
                 curr_node.table_name = AliasToNames[curr_node.table_alias]
             else:
                 # multiple tables exist
-                tbls = [AliasToNames[tbl] for tbl in sorted(json_dict['Relation IDs'].split())] # 'ct mc' -> ['ct', 'mc'] -> ['company_type', 'movie_companies']
+                tbls = [tbl for tbl in sorted(json_dict['Relation IDs'].split())] # 'ct mc' -> ['ct', 'mc'] -> ['company_type', 'movie_companies']
                 curr_node.info['join_tables'] = ','.join(tbls) # company_type,movie_companies
 
         if 'Join Cond' in json_dict:
@@ -366,14 +370,14 @@ def ParsePostgresPlanJson_1(json_dict, AliasToNames):
                     curr_node.info['filter'] = json_dict['Base Restrict Info'].replace(', ',' AND ')
                     # print(curr_node.info['filter'])
 
-        if 'Scan' in op and select_exprs:
-            # Record select exprs that belong to this leaf.
-            # Assume: SELECT <exprs> are all expressed in terms of aliases.
-            if 'Relation IDs' in json_dict.key():
-                if not has_whitespace(json_dict['Relation IDs']):
-                    filtered = _FilterExprsByAlias(select_exprs, json_dict['Relation IDs'])
-                    if filtered:
-                        curr_node.info['select_exprs'] = filtered
+        # if 'Scan' in op and select_exprs:
+        #     # Record select exprs that belong to this leaf.
+        #     # Assume: SELECT <exprs> are all expressed in terms of aliases.
+        #     if 'Relation IDs' in json_dict.key():
+        #         if not has_whitespace(json_dict['Relation IDs']):
+        #             filtered = _FilterExprsByAlias(select_exprs, json_dict['Relation IDs'])
+        #             if filtered:
+        #                 curr_node.info['select_exprs'] = filtered
 
         # Recurse.
         if 'Plans' in json_dict:
