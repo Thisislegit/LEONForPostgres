@@ -247,7 +247,14 @@ class Node(object):
         from_str = ', '.join(from_str)
         # SELECT.
         if with_select_exprs:
-            select_exprs = self.GetSelectExprs()
+            if self.info.get('select_exprs') is not None:
+                select_exprs = self.info['select_exprs']
+            else:
+                select_exprs = self.GetSelectExprs()
+                
+            if len(select_exprs) != 0:
+                if isinstance(select_exprs[0], list):
+                    select_exprs = select_exprs[0]
         else:
             select_exprs = []
         # print(select_exprs)
