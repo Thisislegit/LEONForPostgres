@@ -431,7 +431,7 @@ debug_print_path(PlannerInfo *root, Path *path, int indent, FILE* stream)
 			}
 			break;
 		case T_IndexPath:
-			ptype = "IdxScan";
+			ptype = "IndexScan";
 			break;
 		case T_BitmapHeapPath:
 			ptype = "BitmapHeapScan";
