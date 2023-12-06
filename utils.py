@@ -92,16 +92,16 @@ plan_parameters = [
     # "est_children_card",
     # "workers_planned",
 ]
-statistics_file_path = "/data1/liangzibo/zero-shot/zero-shot-data/runs/parsed_plans/statistics_workload_combined.json"
-feature_statistics = load_json(statistics_file_path, namespace=False)
-op_name_to_one_hot = {}
-op_names = feature_statistics["op_name"]["value_dict"]
-op_names_no = len(op_names)
-for i, name in enumerate(op_names.keys()):
-    op_name_to_one_hot[name] = np.zeros((1, op_names_no), dtype=np.int32)
-    op_name_to_one_hot[name][0][i] = 1
+# statistics_file_path = "/data1/liangzibo/zero-shot/zero-shot-data/runs/parsed_plans/statistics_workload_combined.json"
+# feature_statistics = load_json(statistics_file_path, namespace=False)
+# op_name_to_one_hot = {}
+# op_names = feature_statistics["op_name"]["value_dict"]
+# op_names_no = len(op_names)
+# for i, name in enumerate(op_names.keys()):
+#     op_name_to_one_hot[name] = np.zeros((1, op_names_no), dtype=np.int32)
+#     op_name_to_one_hot[name][0][i] = 1
 
-add_numerical_scalers(feature_statistics)
+# add_numerical_scalers(feature_statistics)
 
 # node type
 '''

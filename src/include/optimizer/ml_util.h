@@ -49,17 +49,42 @@ extern char *deparse_expression_pretty(Node *expr, List *dpcontext,
 static void get_calibrations(double calibrations[], uint32 queryid, int32_t length, int conn_fd){
   		// Read the response from the server and store it in the calibrations array
       // one element is like "1.12," length 5
-      char *response = (char *)calloc(5 * length, sizeof(char));
-      if (read(conn_fd, response, 5 * length * sizeof(char)) > 0) 
+	  // one element is like "1.12,0,6;"
+      char *response = (char *)calloc(9 * length, sizeof(char));
+      if (read(conn_fd, response, 9 * length * sizeof(char)) > 0) 
       {
-        char *token = strtok(response, ",");
-        int i = 0;
-        while (token != NULL) 
-        {
-          calibrations[i] = atof(token);
-          token = strtok(NULL, ",");
-          i++;
-        }
+		char* unit;
+		char* token;
+		char* restUnit;
+		char* restToken;
+		int i = 0;
+
+        unit = strtok_r(response, ";", &restUnit);
+    	while (unit != NULL && i < length) {
+        // Split each unit into components using comma
+        token = strtok_r(unit, ",", &restToken);
+        if (token == NULL) break;
+        double mantissa = atof(token); // Get mantissa
+
+        token = strtok_r(NULL, ",", &restToken);
+        if (token == NULL) break;
+        int exponentSignValue = atoi(token); // Get sign of exponent
+
+        token = strtok_r(NULL, ",", &restToken);
+        if (token == NULL) break;
+        int exponent = atoi(token); // Get exponent
+
+		// Determine actual sign of exponent
+        int actualExponent = exponentSignValue == 0 ? -exponent : exponent;
+
+        // Calculate the actual value
+        calibrations[i] = mantissa * pow(10, actualExponent);
+
+        // Move to the next unit for the next iteration
+        unit = strtok_r(NULL, ";", &restUnit);
+        i++; // Increment index after processing a unit
+    	}
+
         Assert(i == length);
         if (i != length)
         {
