@@ -43,6 +43,14 @@ class Experience:
                 if curr_plan[0].info['sql_str'] == plan[0].info['sql_str'] and curr_plan[0].hint_str() == plan[0].hint_str(): # sql 和 hint 都相同
                     return True
         return False
+    
+    def ChangeTime(self, eq, plan):
+        temp = eq.split(',') # sort
+        eq = ','.join(sorted(temp))
+        for i, curr_plan in enumerate(self.__exp[eq]):
+            if curr_plan[0].info['sql_str'] == plan[0].info['sql_str'] and curr_plan[0].hint_str() == plan[0].hint_str():
+                self.__exp[eq][i][0].info['latency'] = curr_plan[0].info['latency']
+        
 
     def GetExp(self, eq) -> list:
         temp = eq.split(',') # sort
@@ -97,6 +105,7 @@ class Experience:
                 self.GetEqSet()[eq] = 90000
                 if not self.GetExp(eq):
                     self.__exp[eq] = []
+    
 
     def Getpair(self):
         """

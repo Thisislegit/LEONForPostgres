@@ -31,7 +31,9 @@ class FileWriter:
         self.RELOAD = True
         # self.eqset = ['cast_info,company_name,movie_companies,title', 'company_name,movie_companies,title']
         # self.eqset = ['company_name,movie_companies', 'company_type,movie_companies', 'company_type,movie_companies,title']
-        self.eqset = ['cn,mc', 'ct,mc', 'ct,mc,t', 'ci,cn,mc,t', 'cn,mc,t']
+        self.eqset = {'ci,cn,mc,t': 90000, 'it,mi': 90000, 'k,mk': 90000, 'cc,cct2,k,mc,t': 90000, 'k,mk,t': 90000, 'cc,cct1,k,mc,t': 90000, 'k,miidx,mk': 90000, 'cn,mc': 90000,
+                      'k,mi_idx,mk': 90000, 'a1,ci,n1': 90000, 'cn,mc,t': 90000, 'ct,mc,mi,t': 90000, 'ct,mc': 90000, 'at,cn,mc,t': 90000,
+                      'a1,n1': 90000, 'ct,mc,t': 90000, 'an,n': 90000, 'an,ci,n': 90000}
         # self.eqset = ['title,movie_keyword,keyword', 'kind_type,title,comp_cast_type,complete_cast,movie_companies', 'kind_type,title,comp_cast_type,complete_cast,movie_companies,company_name', 'movie_companies,company_name', 'movie_companies,company_name,title',
                 # 'movie_companies,company_name,title,aka_title', 'company_name,movie_companies,title,cast_info', 'name,aka_name', 'name,aka_name,cast_info', 'info_type,movie_info_idx', 'company_type,movie_companies',
                 # 'company_type,movie_companies,title', 'company_type,movie_companies,title,movie_info', 'movie_companies,company_name', 'keyword,movie_keyword', 'keyword,movie_keyword,movie_info_idx']
@@ -118,11 +120,20 @@ class LeonModel:
     def inference(self, seqs, attns):
         cali_all = self.get_calibrations(seqs, attns)
         
-        print(cali_all)
+        # print(cali_all)
         # cali_str = ['{:.2f}'.format(i) for i in cali_all.tolist()] # 最后一次 cali
-        cali_str = ['{:.2f}'.format(9.99 if i * 10 >= 10 else i * 10) for i in cali_all.tolist()] # 最后一次 cali
+        def format_scientific_notation(number):
+            str_number = "{:e}".format(number)
+            mantissa, exponent = str_number.split('e')
+            mantissa = 9.994 if float(mantissa) >= 9.995 else float(mantissa)
+            mantissa = format(mantissa, '.2f')
+            exponent = int(exponent)
+            exponent = max(-9, min(9, exponent))
+            result = "{},{},{:d}".format(mantissa, '1' if exponent >= 0 else '0', abs(exponent))
+            return result
+        cali_str = [format_scientific_notation(i) for i in cali_all.tolist()] # 最后一次 cali
         # print("cali_str len", len(cali_str))
-        cali_strs = ','.join(cali_str)
+        cali_strs = ';'.join(cali_str)
         return cali_strs
     
     def load_model(self, path):
@@ -156,7 +167,8 @@ class LeonModel:
         if not isinstance(X, list):
             X = [X]
         Relation_IDs = X[0]['Relation IDs']
-        out = ','.join(token for token in Relation_IDs.split())
+
+        out = ','.join(sorted(Relation_IDs.split()))
         if out in self.eqset:
             print(out)
             return '1'
@@ -188,11 +200,6 @@ class LeonModel:
 
         # 推理
         cali_strs = self.inference(seqs, attns)
-
-        print(cali_strs)
-        if X[0]['Plan']['Relation IDs'] == 'cn mc':
-            print(X[2])
-            print(X[3])
         return cali_strs
 
 class JSONTCPHandler(socketserver.BaseRequestHandler):
