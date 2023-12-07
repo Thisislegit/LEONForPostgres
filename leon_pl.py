@@ -166,12 +166,10 @@ def getNodesCost(nodes):
     return pgcosts
 
 def initEqSet():
-    # equ_tem = ['cast_info,company_name,movie_companies,title', 'company_name,movie_companies,title']
-    # equ_tem = ['company_name,movie_companies', 'company_type,movie_companies', 'company_type,movie_companies,title']
-    equ_tem = ['cn,mc', 'ct,mc', 'ct,mc,t', 'ci,cn,mc,t', 'cn,mc,t']
-    # equ_tem = ['title,movie_keyword,keyword', 'kind_type,title,comp_cast_type,complete_cast,movie_companies', 'kind_type,title,comp_cast_type,complete_cast,movie_companies,company_name', 'movie_companies,company_name', 'movie_companies,company_name,title',
-    #         'movie_companies,company_name,title,aka_title', 'company_name,movie_companies,title,cast_info', 'name,aka_name', 'name,aka_name,cast_info', 'info_type,movie_info_idx', 'company_type,movie_companies',
-    #         'company_type,movie_companies,title', 'company_type,movie_companies,title,movie_info', 'movie_companies,company_name', 'keyword,movie_keyword', 'keyword,movie_keyword,movie_info_idx']
+    # equ_tem = ['cn,mc', 'ct,mc', 'ct,mc,t', 'ci,cn,mc,t', 'cn,mc,t']
+    equ_tem = ['t,mk,k', 'k,t,cct2,cc,mc', 'k,t,cct1,cc,mc', 'kt,t,cct2,cc,mc,cn', 'kt,t,cct1,cc,mc,cn',
+               'mc,cn', 'mc,cn,t','mc,cn,t,at', 'cn,mc,t,ci', 'n,an', 'n,an,ci', 'it,mi', 'ct,mc',
+               'ct,mc,t', 'ct,mc,t,mi', 'mc,cn', 'k,mk', 'k,mk,mi_idx', 'k,mk,miidx', 'a1,n1', 'a1,n1,ci']
     equ_set = set() # 用集合 方便 eq keys 中去重
     # 'title,movie_keyword,keyword' -> 'keyword,movie_keyword,title'
     for i in equ_tem:
@@ -189,15 +187,15 @@ def collects(finnode: plans_lib.Node, workload, exp: Experience, timeout, currTo
         allPlans.extend(currentNode.children)
         if currentNode.IsJoin() and (currentNode.actual_time_ms > 0.6 * currTotalLatency):
             cur_join_ids = ','.join(
-                sorted([i.split(" AS ")[0] for i in currentNode.leaf_ids()]))
+                sorted([i.split(" AS ")[-1] for i in currentNode.leaf_ids()]))
             join_ids_to_append.append(cur_join_ids)
 
     first_join_ids = join_ids_to_append.pop(0)
-    print(f'SQL:{sql} degradation collect:', first_join_ids)
+    print('degradation collect:', first_join_ids)
     exp.AddEqSet(first_join_ids)
     if join_ids_to_append:
         last_join_ids = join_ids_to_append.pop(-1)
-        print(f'SQL:{sql} degradation collect:', last_join_ids)
+        print('degradation collect:', last_join_ids)
         exp.AddEqSet(last_join_ids)
 
 # create dataset
@@ -359,8 +357,8 @@ class PL_Leon(pl.LightningModule):
 
 if __name__ == '__main__':
     # train_files = ['1a', '2a', '3a', '4a']
-    train_files = ['10a'] * 100
-    chunk_size = 1 # the # of sqls in a chunk
+    train_files = ['10a', '8c'] * 100
+    chunk_size = 2 # the # of sqls in a chunk
     IF_TRAIN = True
     model_path = "./log/model.pth"
     message_path = "./log/messages.pkl"
@@ -376,8 +374,6 @@ if __name__ == '__main__':
     op_name_to_one_hot = get_op_name_to_one_hot(feature_statistics)
     pg_time_flag = True
     pg_time = 0
-    pg = []
-    tf = []
     last_train_pair = 0
     retrain_count = 0
     max_query_latency1 = 0
@@ -410,18 +406,17 @@ if __name__ == '__main__':
             hints.append(node.hint_str())
             time_ratio.append(query_latency2 / query_latency1)
             tf_time.append(query_latency2)
-        pg.append(query_latency1)
-        tf.append(query_latency2)
-        logger.log_metrics({"pg_latency": query_latency1})
-        logger.log_metrics({"leon_latency": query_latency2})
+            logger.log_metrics({f"{train_files[q_send_cnt]}pg_latency": query_latency1})
+            logger.log_metrics({f"{train_files[q_send_cnt]}leon_latency": query_latency2})
         if pg_time_flag:
             pg_time_flag = False
             pg_time = max_query_latency1 * 5
-        # for q_send_cnt in range(chunk_size):
-        #     if time_ratio[q_send_cnt] > 1.2 and tf_time[q_send_cnt] > 1000:
-        #         curNode = Nodes[q_send_cnt]
-        #         if curNode:
-        #             collects(curNode, workload, Exp, None, tf_time[q_send_cnt], sqls_chunk[q_send_cnt])
+        for q_send_cnt in range(chunk_size):
+            if time_ratio[q_send_cnt] > 1.2 and retrain_count >= 5: # and tf_time[q_send_cnt] > 1000
+            # if retrain_count >= 5:
+                curNode = Nodes[q_send_cnt]
+                if curNode:
+                    collects(curNode, workload, Exp, None, tf_time[q_send_cnt], sqls_chunk[q_send_cnt])
         leon_node = []
         for node in Nodes:
             # print(node)
@@ -434,10 +429,6 @@ if __name__ == '__main__':
                     child_node.info['join_tables'] = ','.join(sorted(tbls))
                     print(child_node)
                     leon_node.append(child_node)
-
-
-            
-
         
 
         # ==== ITERATION OF RECIEVED QUERIES IN A CHUNK ====
@@ -497,15 +488,16 @@ if __name__ == '__main__':
                                     c_plan = [c_node,
                                               encoded_plans[i],
                                               attns[i]]
-                                    print(c_node.info['sql_str'])
-                                    print(c_node.hint_str())
-                                    print('actual_time_ms', node2.actual_time_ms)
-                                    hint_node = plans_lib.FilterScansOrJoins(c_node.Copy())
-                                    hint_node.info['latency'], _ = getPG_latency(hint_node.info['sql_str'], hint_node.hint_str(), ENABLE_LEON=False, timeout_limit=pg_time) # timeout 10s
-                                    print('hint_time', hint_node.info['latency'])
+                                    c_plan[0].info['latency'] = node2.actual_time_ms
+                                    # print('actual_time_ms', node2.actual_time_ms)
+                                    # hint_node = plans_lib.FilterScansOrJoins(c_node.Copy())
+                                    # hint_node.info['latency'], _ = getPG_latency(hint_node.info['sql_str'], hint_node.hint_str(), ENABLE_LEON=False, timeout_limit=pg_time) # timeout 10s
+                                    # print('hint_time', hint_node.info['latency'])
                                     if not Exp.isCache(c_node.info['join_tables'], c_plan):
-                                        c_plan[0].info['latency'] = node2.actual_time_ms
                                         Exp.AppendExp(c_node.info['join_tables'], c_plan)
+                                    else:
+                                        Exp.ChangeTime(c_node.info['join_tables'], c_plan)
+                                    break
                             else:
                                 break
                     ##################################################################
@@ -549,6 +541,7 @@ if __name__ == '__main__':
 
         Exp.DeleteEqSet()
         eqset = Exp.GetEqSet()
+        logger.log_metrics({"len_eqset": Exp._getEqNum()})
         for eq in eqset:
             print(f"{eq}: {len(Exp.GetExp(eq))}")
         # print(eqset)
@@ -558,29 +551,27 @@ if __name__ == '__main__':
         train_pairs = Exp.Getpair()
         logger.log_metrics({"train_pairs": len(train_pairs)})
         print("len(train_pairs)" ,len(train_pairs))
-        if retrain_count == 2 and tf[-1] < pg[-1] and False:
-            pass
-        else:
-            if len(train_pairs) > 0 and last_train_pair > 0:
-                if max(len(train_pairs), last_train_pair) / min(len(train_pairs), last_train_pair) < 1.1 and tf[-1] < pg[-1]:
-                    retrain_count += 1
-                else:
-                    retrain_count = 0
-            last_train_pair = len(train_pairs)
-            print(retrain_count)
-            if len(train_pairs) > 16:
-                leon_dataset = prepare_dataset(train_pairs)
-                dataloader_train = DataLoader(leon_dataset, batch_size=16, shuffle=True, num_workers=0)
-                dataloader_val = DataLoader(leon_dataset, batch_size=16, shuffle=False, num_workers=0)
-                model = load_model(model_path, prev_optimizer_state_dict).to(DEVICE)
-                callbacks = load_callbacks(logger=None)
-                trainer = pl.Trainer(accelerator="gpu",
-                                    devices=[3],
-                                    max_epochs=100,
-                                    callbacks=callbacks,
-                                    logger=logger)
-                trainer.fit(model, dataloader_train, dataloader_val)
-                prev_optimizer_state_dict = trainer.optimizers[0].state_dict()
+
+        if len(train_pairs) > 0 and last_train_pair > 0:
+            if max(len(train_pairs), last_train_pair) / min(len(train_pairs), last_train_pair) < 1.1:
+                retrain_count += 1
+            else:
+                retrain_count = 0
+        last_train_pair = len(train_pairs)
+        print(retrain_count)
+        if len(train_pairs) > 16:
+            leon_dataset = prepare_dataset(train_pairs)
+            dataloader_train = DataLoader(leon_dataset, batch_size=16, shuffle=True, num_workers=0)
+            dataloader_val = DataLoader(leon_dataset, batch_size=16, shuffle=False, num_workers=0)
+            model = load_model(model_path, prev_optimizer_state_dict).to(DEVICE)
+            callbacks = load_callbacks(logger=None)
+            trainer = pl.Trainer(accelerator="gpu",
+                                devices=[3],
+                                max_epochs=100,
+                                callbacks=callbacks,
+                                logger=logger)
+            trainer.fit(model, dataloader_train, dataloader_val)
+            prev_optimizer_state_dict = trainer.optimizers[0].state_dict()
 
         ch_start_idx = ch_start_idx + chunk_size
         # save model
@@ -594,10 +585,6 @@ if __name__ == '__main__':
         else:
             print(f"Fail to remove {message_path}")
         
-        with open("./log/pg10.txt", 'wb') as f:
-            pickle.dump(pg, f)
-        with open("./log/tf10.txt", 'wb') as f:
-            pickle.dump(tf, f)
 
 
 
