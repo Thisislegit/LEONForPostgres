@@ -310,7 +310,7 @@ class PL_Leon(pl.LightningModule):
         # print(costs2)
         # print(labels)
         # print(cali)
-        calied_cost = torch.log(costs + 1) * cali
+        calied_cost = torch.log(costs) * cali
         try:
             sigmoid = F.sigmoid(-(calied_cost[:batsize] - calied_cost[batsize:]))
             loss = loss_fn(sigmoid, labels.float())
@@ -492,18 +492,20 @@ if __name__ == '__main__':
                             temp = ','.join(sorted(temp))
                             if temp == node2.info['join_tables']:
                                 if round(node1.cost,2) == node2.cost:
-                                    # print(node1)
-                                    # print(node2)
-                                    node2.info['sql_str'] = node2.to_sql(node1.info['join_cond'], with_select_exprs=True)
-                                    c_node = node2
+                                    c_node = node1
                                     Exp.AddEqSet(c_node.info['join_tables'])
                                     c_plan = [c_node,
                                               encoded_plans[i],
                                               attns[i]]
-                                    if not Exp.isCache(c_node.info['join_tables'], c_plan): # 该行放 get latency 前面 ！！！
-                                        c_plan[0].info['latency'] = c_node.actual_time_ms
+                                    print(c_node.info['sql_str'])
+                                    print(c_node.hint_str())
+                                    print('actual_time_ms', node2.actual_time_ms)
+                                    hint_node = plans_lib.FilterScansOrJoins(c_node.Copy())
+                                    hint_node.info['latency'], _ = getPG_latency(hint_node.info['sql_str'], hint_node.hint_str(), ENABLE_LEON=False, timeout_limit=pg_time) # timeout 10s
+                                    print('hint_time', hint_node.info['latency'])
+                                    if not Exp.isCache(c_node.info['join_tables'], c_plan):
+                                        c_plan[0].info['latency'] = node2.actual_time_ms
                                         Exp.AppendExp(c_node.info['join_tables'], c_plan)
-                                        print(node1.info['sql_str'], node1.hint_str())
                             else:
                                 break
                     ##################################################################
@@ -532,13 +534,13 @@ if __name__ == '__main__':
                                   attns[cost_index]]
                         
                         if not Exp.isCache(eqKey, a_plan): # 该行放 get latency 前面 ！！！
-                            print(a_node.info['sql_str'], a_node.hint_str())
-                            a_node.info['latency'], _ = getPG_latency(a_node.info['sql_str'], a_node.hint_str(), ENABLE_LEON=False, timeout_limit=pg_time) # timeout 10s
-                            a_plan[0].info['latency'] = a_node.info['latency']
+                            hint_node = plans_lib.FilterScansOrJoins(a_node.Copy())
+                            # print(hint_node.info['sql_str'], hint_node.hint_str())
+                            a_plan[0].info['latency'], _ = getPG_latency(hint_node.info['sql_str'], hint_node.hint_str(), ENABLE_LEON=False, timeout_limit=pg_time) # timeout 10s
                             Exp.AppendExp(eqKey, a_plan)
                         if not Exp.isCache(eqKey, b_plan): # 该行放 get latency 前面 ！！！
-                            b_node.info['latency'], _ = getPG_latency(b_node.info['sql_str'], b_node.hint_str(), ENABLE_LEON=False, timeout_limit=pg_time) # timeout 10s
-                            b_plan[0].info['latency'] = b_node.info['latency']
+                            hint_node = plans_lib.FilterScansOrJoins(b_node.Copy())
+                            b_plan[0].info['latency'], _ = getPG_latency(hint_node.info['sql_str'], hint_node.hint_str(), ENABLE_LEON=False, timeout_limit=pg_time) # timeout 10s
                             Exp.AppendExp(eqKey, b_plan)
                         
 

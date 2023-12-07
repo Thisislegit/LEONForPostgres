@@ -117,7 +117,10 @@ class LeonModel:
     
     def inference(self, seqs, attns):
         cali_all = self.get_calibrations(seqs, attns)
-        cali_str = ['{:.2f}'.format(i) for i in cali_all.tolist()] # 最后一次 cali
+        
+        print(cali_all)
+        # cali_str = ['{:.2f}'.format(i) for i in cali_all.tolist()] # 最后一次 cali
+        cali_str = ['{:.2f}'.format(9.99 if i * 10 >= 10 else i * 10) for i in cali_all.tolist()] # 最后一次 cali
         # print("cali_str len", len(cali_str))
         cali_strs = ','.join(cali_str)
         return cali_strs
@@ -133,6 +136,8 @@ class LeonModel:
                 mlp_dropout=0.3,
                 transformer_dropout=0.2,
                 ).to(DEVICE) # server.py 和 train.py 中的模型初始化也需要相同, 这里还没加上！！！
+            torch.save(model, path)
+        else:
             model = torch.load(path, map_location='cuda:3')
             # ckpt = ckpt["state_dict"]
             # new_state_dict = OrderedDict()
@@ -153,6 +158,7 @@ class LeonModel:
         Relation_IDs = X[0]['Relation IDs']
         out = ','.join(token for token in Relation_IDs.split())
         if out in self.eqset:
+            print(out)
             return '1'
         else:
             return '0'
@@ -184,6 +190,9 @@ class LeonModel:
         cali_strs = self.inference(seqs, attns)
 
         print(cali_strs)
+        if X[0]['Plan']['Relation IDs'] == 'cn mc':
+            print(X[2])
+            print(X[3])
         return cali_strs
 
 class JSONTCPHandler(socketserver.BaseRequestHandler):

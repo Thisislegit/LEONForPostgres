@@ -686,7 +686,6 @@ class PhysicalTreeNodeFeaturizer(TreeNodeFeaturizer):
         self.join_ops = np.array([entry.replace(' ', '') for entry in workload_info.join_types])
         self.join_ops = np.where(self.join_ops == 'NestedLoop', 'NestLoop', self.join_ops)
         self.scan_ops = np.array([entry.replace(' ', '') for entry in workload_info.scan_types])
-        self.scan_ops = np.where(self.scan_ops == 'IndexScan', 'IdxScan', self.scan_ops)
         self.rel_ids = workload_info.rel_ids
         self.join_one_hot = np.eye(len(self.join_ops), dtype=np.float32)
 
