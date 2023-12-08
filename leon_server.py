@@ -63,6 +63,11 @@ class LeonJSONHandler(JSONTCPHandler):
                 response = str("1").encode()
                 self.request.sendall(response)
                 self.request.close()
+            elif message_type == "execute":
+                print("Executing Plan Node:", self.__messages)
+                response = self.__messages[0]['PlanString'].encode()
+                self.request.sendall(response)
+
             else:
                 print("Unknown message type:", message_type)
             return True

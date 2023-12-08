@@ -10,6 +10,7 @@ static int leon_port = 9999;
 
 // JSON tags for sending to the leon server.
 static const char* START_QUERY_MESSAGE = "{\"type\": \"query\"}\n";
+static const char* START_EXE_MESSAGE = "{\"type\": \"execute\"}\n";
 static const char* START_SHOULD_OPT_MESSAGE = "{\"type\": \"should_opt\"}\n";
 static const char *START_FEEDBACK_MESSAGE = "{\"type\": \"reward\"}\n";
 static const char* START_PREDICTION_MESSAGE = "{\"type\": \"predict\"}\n";
@@ -689,6 +690,27 @@ debug_print_path(PlannerInfo *root, Path *path, int indent, FILE* stream)
   fprintf(stream, "}");
 }
 
+
+static Plan* string_to_plannode(char *buffer){
+	Plan* node;
+	node = stringToNode(buffer);
+	return node;
+}
+
+static char* plannode_to_string(Plan* plan) {
+  char* buf;
+  size_t json_size;
+  FILE* stream;
+  
+  stream = open_memstream(&buf, &json_size);
+  char * planString = nodeToString(plan);
+
+  fprintf(stream, "{\"PlanString\": \"%s\" }\n", planString);
+  fclose(stream);
+  
+  pfree(planString);
+  return buf;
+}
 
 
 static char* plan_to_json(PlannerInfo * root, Path* plan) {

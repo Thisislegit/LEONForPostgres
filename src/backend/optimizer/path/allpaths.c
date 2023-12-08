@@ -51,7 +51,7 @@
 #include "utils/lsyscache.h"
 
 #include "optimizer/ml_util.h"
-
+#include "optimizer/planmain.h"
 
 /* results of subquery_is_pushdown_safe */
 typedef struct pushdown_safety_info
@@ -3141,7 +3141,65 @@ standard_join_search(PlannerInfo *root, int levels_needed, List *initial_rels)
 	rel = (RelOptInfo *) linitial(root->join_rel_level[levels_needed]);
 
 	root->join_rel_level = NULL;
+	// TODO: Execution Predefined Plan
+	if (enable_leon)
+	{
 
+		// connect to leon server
+		conn_fd = connect_to_leon(leon_host, leon_port);
+		if (conn_fd < 0) {
+			elog(WARNING, "Unable to connect to LEON server.");
+			exit(0);
+		}
+		write_all_to_socket(conn_fd, START_EXE_MESSAGE);
+		// serialize a node to string
+		Plan * to_plan = create_plan(root, rel->cheapest_total_path);
+		char* json_plan = plannode_to_string(to_plan);
+		write_all_to_socket(conn_fd, json_plan);
+		write_all_to_socket(conn_fd, TERMINAL_MESSAGE);
+
+		free(json_plan);
+		pfree(to_plan);
+		shutdown(conn_fd, SHUT_WR);
+
+		// Read Response From LEON
+		int INITIAL_BUFFER_SIZE = 1024;
+		int CHUNK_SIZE = 512;
+
+		char *buffer = calloc(INITIAL_BUFFER_SIZE, sizeof(char));
+		if (buffer == NULL) {
+			// Handle memory allocation error
+			elog(WARNING, "Unable to allocate memory for buffer.");
+			exit(0);
+		}
+		int total_size = INITIAL_BUFFER_SIZE;
+		int bytes_received;
+		int current_size = 0;
+
+		while ((bytes_received = read(conn_fd, buffer + current_size, CHUNK_SIZE)) > 0) 
+		{
+			current_size += bytes_received;
+			if (current_size + CHUNK_SIZE > total_size) 
+			{
+				total_size += CHUNK_SIZE;
+				buffer = realloc(buffer, total_size);
+				if (buffer == NULL)
+				{
+					// Handle memory allocation error
+					elog(WARNING, "Unable to allocate memory for buffer.");
+					exit(0);
+				}
+		
+			}
+		}
+
+		// Deserialize a node from string
+		Plan* node = string_to_plannode(buffer);
+  		pfree(node);
+		// rel->cheapest_total_path = string_to_pathnode(buffer);
+		free(buffer);
+		shutdown(conn_fd, SHUT_RDWR);
+	}
 	return rel;
 }
 
