@@ -3114,18 +3114,24 @@ standard_join_search(PlannerInfo *root, int levels_needed, List *initial_rels)
 			//FIXME: Not Really? Assert(rel->pathlist == NIL);
 			if (rel->savedpaths != NIL)
 			{
-				if (Opt_rel)
-				{
-					rel->pathlist = list_concat(rel->pathlist, rel->savedpaths);
-				}
-				else
+				// if (Opt_rel)
+				// {
+				// 	rel->pathlist = list_concat(rel->pathlist, rel->savedpaths);
+				// }
+				// else
+				// {	
+				// 	ListCell *p;
+				// 	foreach(p, rel->savedpaths)
+				// 	{	
+				// 		Path *path = (Path *)lfirst(p);
+				// 		add_path(rel, path);
+				// 	}
+				// }
+				ListCell *p;
+				foreach(p, rel->savedpaths)
 				{	
-					ListCell *p;
-					foreach(p, rel->savedpaths)
-					{	
-						Path *path = (Path *)lfirst(p);
-						add_path(rel, path);
-					}
+					Path *path = (Path *)lfirst(p);
+					add_path(rel, path);
 				}
 				rel->savedpaths = NIL;
 			}
