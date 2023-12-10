@@ -82,6 +82,7 @@ class LeonModel:
         self.feature_statistics = load_json(statistics_file_path)
         add_numerical_scalers(self.feature_statistics)
         self.op_name_to_one_hot = get_op_name_to_one_hot(self.feature_statistics)
+        print("finish init")
             
 
     def plans_encoding(self, plans):
@@ -119,7 +120,7 @@ class LeonModel:
     
     def inference(self, seqs, attns):
         cali_all = self.get_calibrations(seqs, attns)
-        
+        cali_all = 1000 * torch.rand(cali_all.shape[0])
         print(cali_all)
         # cali_str = ['{:.2f}'.format(i) for i in cali_all.tolist()] # 最后一次 cali
         def format_scientific_notation(number):
@@ -132,6 +133,7 @@ class LeonModel:
             result = "{},{},{:d}".format(mantissa, '1' if exponent >= 0 else '0', abs(exponent))
             return result
         cali_str = [format_scientific_notation(i) for i in cali_all.tolist()] # 最后一次 cali
+        
         # print("cali_str len", len(cali_str))
         cali_strs = ';'.join(cali_str)
         return cali_strs
