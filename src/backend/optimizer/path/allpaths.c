@@ -3060,7 +3060,9 @@ standard_join_search(PlannerInfo *root, int levels_needed, List *initial_rels)
 			if (lev < levels_needed)
 				generate_useful_gather_paths(root, rel, false);
 
-			bool Opt_rel = should_leon_optimize(lev, root, rel);
+			bool Opt_rel = false;
+			if (enable_leon)
+				Opt_rel = should_leon_optimize(lev, root, rel);
 			if (enable_leon && Opt_rel)
 			{
 				ListCell *p;
