@@ -44,3 +44,4 @@ lib*.pc
 /tmp_install/
 __pycache__/
 .vscode/**
+log/

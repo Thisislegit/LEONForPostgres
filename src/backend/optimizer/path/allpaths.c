@@ -3109,13 +3109,18 @@ standard_join_search(PlannerInfo *root, int levels_needed, List *initial_rels)
 			// Add Path At Last
 
 			//FIXME: Not Really? Assert(rel->pathlist == NIL);
-			ListCell *p;
-			foreach(p, rel->savedpaths)
-			{	
-				Path *path = (Path *)lfirst(p);
-				add_path(rel, path);
+			if (rel->savedpaths != NIL)
+			{
+				// ListCell *p;
+				// foreach(p, rel->savedpaths)
+				// {	
+				// 	Path *path = (Path *)lfirst(p);
+				// 	add_path(rel, path);
+				// }
+				rel->pathlist = list_concat(rel->pathlist, rel->savedpaths);
+				rel->savedpaths = NIL;
 			}
-			rel->savedpaths = NIL;
+	
 
 			/* Find and save the cheapest paths for this rel */
 			set_cheapest(rel);
@@ -3126,7 +3131,7 @@ standard_join_search(PlannerInfo *root, int levels_needed, List *initial_rels)
 		}
 	}
 
-	if (enable_leon)
+	if (enable_leon && conn_fd > 0)
 	{
 		shutdown(conn_fd, SHUT_RDWR);
 	}
