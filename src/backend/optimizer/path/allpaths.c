@@ -3060,7 +3060,8 @@ standard_join_search(PlannerInfo *root, int levels_needed, List *initial_rels)
 			if (lev < levels_needed)
 				generate_useful_gather_paths(root, rel, false);
 
-			if (enable_leon && should_leon_optimize(lev, root, rel))
+			bool Opt_rel = should_leon_optimize(lev, root, rel);
+			if (enable_leon && Opt_rel)
 			{
 				ListCell *p;
 				int length = list_length(rel->savedpaths);
@@ -3111,13 +3112,19 @@ standard_join_search(PlannerInfo *root, int levels_needed, List *initial_rels)
 			//FIXME: Not Really? Assert(rel->pathlist == NIL);
 			if (rel->savedpaths != NIL)
 			{
-				// ListCell *p;
-				// foreach(p, rel->savedpaths)
-				// {	
-				// 	Path *path = (Path *)lfirst(p);
-				// 	add_path(rel, path);
-				// }
-				rel->pathlist = list_concat(rel->pathlist, rel->savedpaths);
+				if (Opt_rel)
+				{
+					rel->pathlist = list_concat(rel->pathlist, rel->savedpaths);
+				}
+				else
+				{	
+					ListCell *p;
+					foreach(p, rel->savedpaths)
+					{	
+						Path *path = (Path *)lfirst(p);
+						add_path(rel, path);
+					}
+				}
 				rel->savedpaths = NIL;
 			}
 	
