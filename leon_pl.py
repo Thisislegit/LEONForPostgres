@@ -167,9 +167,12 @@ def getNodesCost(nodes):
 
 def initEqSet():
     # equ_tem = ['cn,mc', 'ct,mc', 'ct,mc,t', 'ci,cn,mc,t', 'cn,mc,t']
-    equ_tem = ['t,mk,k', 'k,t,cct2,cc,mc', 'k,t,cct1,cc,mc', 'kt,t,cct2,cc,mc,cn', 'kt,t,cct1,cc,mc,cn',
-               'mc,cn', 'mc,cn,t','mc,cn,t,at', 'cn,mc,t,ci', 'n,an', 'n,an,ci', 'it,mi', 'ct,mc',
-               'ct,mc,t', 'ct,mc,t,mi', 'mc,cn', 'k,mk', 'k,mk,mi_idx', 'k,mk,miidx', 'a1,n1', 'a1,n1,ci']
+    # equ_tem = ['t,mk,k', 'k,t,cct2,cc,mc', 'k,t,cct1,cc,mc', 'kt,t,cct2,cc,mc,cn', 'kt,t,cct1,cc,mc,cn',
+    #            'mc,cn', 'mc,cn,t','mc,cn,t,at', 'cn,mc,t,ci', 'n,an', 'n,an,ci', 'it,mi', 'ct,mc',
+    #            'ct,mc,t', 'ct,mc,t,mi', 'mc,cn', 'k,mk', 'k,mk,mi_idx', 'k,mk,miidx', 'a1,n1', 'a1,n1,ci']
+    equ_tem = ['an,chn', 'an,ci', 'an,cn', 'an,mc', 'an,n', 'an,rt', 'an,t', 'chn,ci', 'chn,cn', 'chn,mc',
+               'chn,n', 'chn,rt', 'chn,t', 'ci,cn', 'ci,mc', 'ci,n', 'ci,rt', 'ci,t', 'cn,mc', 'cn,n',
+               'cn,rt', 'cn,t', 'mc,n', 'mc,rt', 'mc,t', 'n,rt', 'n,t', 'rt,t']
     equ_set = set() # 用集合 方便 eq keys 中去重
     # 'title,movie_keyword,keyword' -> 'keyword,movie_keyword,title'
     for i in equ_tem:
@@ -179,24 +182,45 @@ def initEqSet():
 
     return equ_set
 
+# def collects(finnode: plans_lib.Node, workload, exp: Experience, timeout, currTotalLatency, sql):
+#     join_ids_to_append = []
+#     allPlans = [finnode]
+#     while (allPlans):
+#         currentNode = allPlans.pop(0)
+#         allPlans.extend(currentNode.children)
+#         if currentNode.IsJoin() and (currentNode.actual_time_ms > 0.6 * currTotalLatency):
+#             cur_join_ids = ','.join(
+#                 sorted([i.split(" AS ")[-1] for i in currentNode.leaf_ids()]))
+#             join_ids_to_append.append(cur_join_ids)
+
+#     first_join_ids = join_ids_to_append.pop(0)
+#     print('degradation collect:', first_join_ids)
+#     exp.AddEqSet(first_join_ids)
+#     if join_ids_to_append:
+#         last_join_ids = join_ids_to_append.pop(-1)
+#         print('degradation collect:', last_join_ids)
+#         exp.AddEqSet(last_join_ids)
+
 def collects(finnode: plans_lib.Node, workload, exp: Experience, timeout, currTotalLatency, sql):
     join_ids_to_append = []
     allPlans = [finnode]
     while (allPlans):
         currentNode = allPlans.pop(0)
         allPlans.extend(currentNode.children)
-        if currentNode.IsJoin() and (currentNode.actual_time_ms > 0.6 * currTotalLatency):
+        if currentNode.IsJoin():
             cur_join_ids = ','.join(
                 sorted([i.split(" AS ")[-1] for i in currentNode.leaf_ids()]))
             join_ids_to_append.append(cur_join_ids)
 
-    first_join_ids = join_ids_to_append.pop(0)
-    print('degradation collect:', first_join_ids)
-    exp.AddEqSet(first_join_ids)
-    if join_ids_to_append:
-        last_join_ids = join_ids_to_append.pop(-1)
-        print('degradation collect:', last_join_ids)
-        exp.AddEqSet(last_join_ids)
+    for join_id in reversed(join_ids_to_append):
+        exp_key = Exp.GetExpKeys()
+        temp = join_id.split(',') # sort
+        join_id = ','.join(sorted(temp))
+        if join_id not in exp_key:
+            print('degradation collect:', join_id)
+            exp.AddEqSet(join_id)
+            break
+
 
 # create dataset
 class LeonDataset(Dataset):
@@ -357,8 +381,8 @@ class PL_Leon(pl.LightningModule):
 
 if __name__ == '__main__':
     # train_files = ['1a', '2a', '3a', '4a']
-    train_files = ['10a', '8c'] * 100
-    chunk_size = 2 # the # of sqls in a chunk
+    train_files = ['9c'] * 50
+    chunk_size = 1 # the # of sqls in a chunk
     IF_TRAIN = True
     model_path = "./log/model.pth"
     message_path = "./log/messages.pkl"
@@ -388,7 +412,7 @@ if __name__ == '__main__':
         print(train_files[ch_start_idx : ch_start_idx + chunk_size])
         time_ratio = []
         tf_time = []
-        hints = []
+        pg_time1 = []
         Nodes = []
 
         # ++++ PHASE 1. ++++ send a chunk of queries with ENABLE_LEON=True
@@ -403,28 +427,37 @@ if __name__ == '__main__':
             node = postgres.ParsePostgresPlanJson(json_dict)
             max_query_latency1 = max(max_query_latency1, query_latency1)
             Nodes.append(node)
-            hints.append(node.hint_str())
             time_ratio.append(query_latency2 / query_latency1)
             tf_time.append(query_latency2)
+            pg_time1.append(query_latency1)
             logger.log_metrics({f"{train_files[q_send_cnt]}pg_latency": query_latency1})
             logger.log_metrics({f"{train_files[q_send_cnt]}leon_latency": query_latency2})
         if pg_time_flag:
             pg_time_flag = False
-            pg_time = max_query_latency1 * 5
-        for q_send_cnt in range(chunk_size):
-            if time_ratio[q_send_cnt] > 1.2 and retrain_count >= 5: # and tf_time[q_send_cnt] > 1000
-            # if retrain_count >= 5:
-                curNode = Nodes[q_send_cnt]
-                if curNode:
-                    collects(curNode, workload, Exp, None, tf_time[q_send_cnt], sqls_chunk[q_send_cnt])
+            pg_time = max_query_latency1 * 3
+        ###############收集新的等价类##############################
+        # for q_send_cnt in range(chunk_size):
+        #     if time_ratio[q_send_cnt] > 0.75 and retrain_count >= 3: # and tf_time[q_send_cnt] > 1000
+        #     # if retrain_count >= 5:
+        #         curNode = Nodes[q_send_cnt]
+        #         if curNode:
+        #             collects(curNode, workload, Exp, None, tf_time[q_send_cnt], sqls_chunk[q_send_cnt])
+        ##########################################################
         leon_node = []
         for node in Nodes:
             # print(node)
             all_node = []
-            plans_lib.MapNode(node, lambda l: all_node.append(l))
+            all_plan = [node]
+            while (all_plan):
+                currentNode = all_plan.pop(0)
+                all_plan.extend(currentNode.children)
+                if currentNode.IsJoin():
+                    all_node.append(currentNode)
             for child_node in all_node:
                 tbls = [table.split(' ')[-1] for table in child_node.leaf_ids(with_alias=True)]
-                if ','.join(sorted(tbls)) in Exp.GetEqSet():
+                eq_temp = ','.join(sorted(tbls))
+                # print(eq_temp)
+                if eq_temp in Exp.GetEqSet():
                     print(','.join(sorted(tbls)))
                     child_node.info['join_tables'] = ','.join(sorted(tbls))
                     print(child_node)
@@ -469,13 +502,7 @@ if __name__ == '__main__':
 
                     # STEP 2) pick node to execute
                     
-                    pct = 0.1 # 执行 percent 比例的 plan
-                    costs = torch.tensor(getNodesCost(nodes)).to(DEVICE)
-                    cali_all = get_calibrations(model, encoded_plans, attns, IF_TRAIN)
-                    ucb_idx = get_ucb_idx(cali_all, costs)
-                    costs_index = torch.argsort(costs, descending=False)
-                    num_to_exe = math.ceil(pct * len(ucb_idx))
-
+                    
                     ##############################拿leon所选的执行计划#################
                     for node2 in leon_node:
                         for i, node1 in enumerate(nodes):
@@ -501,6 +528,13 @@ if __name__ == '__main__':
                             else:
                                 break
                     ##################################################################
+                    pct = 0.1 # 执行 percent 比例的 plan
+                    costs = torch.tensor(getNodesCost(nodes)).to(DEVICE)
+                    cali_all = get_calibrations(model, encoded_plans, attns, IF_TRAIN)
+                    ucb_idx = get_ucb_idx(cali_all, costs)
+                    costs_index = torch.argsort(costs, descending=False)
+                    num_to_exe = math.ceil(pct * len(ucb_idx))
+
                     # print("ucb_idx to exe", ucb_idx[:num_to_exe])
                     # print("num_to_exe", num_to_exe)
                     # STEP 3) execute with ENABLE_LEON=False and add exp
@@ -514,7 +548,8 @@ if __name__ == '__main__':
                         # (1) add new EqSet key in exp
                         if i == 0:
                             eqKey = a_node.info['join_tables']
-                            Exp.AddEqSet(eqKey)
+                            Exp.collectRate(eqKey, pg_time1[q_recieved_cnt - 1], tf_time[q_recieved_cnt - 1])
+                            # Exp.AddEqSet(eqKey)
 
                                                         
                         # (2) add experience of certain EqSet key
@@ -528,19 +563,20 @@ if __name__ == '__main__':
                         if not Exp.isCache(eqKey, a_plan): # 该行放 get latency 前面 ！！！
                             hint_node = plans_lib.FilterScansOrJoins(a_node.Copy())
                             # print(hint_node.info['sql_str'], hint_node.hint_str())
-                            a_plan[0].info['latency'], _ = getPG_latency(hint_node.info['sql_str'], hint_node.hint_str(), ENABLE_LEON=False, timeout_limit=pg_time) # timeout 10s
+                            a_plan[0].info['latency'], _ = getPG_latency(hint_node.info['sql_str'], hint_node.hint_str(), ENABLE_LEON=False, timeout_limit=(pg_time1[q_recieved_cnt - 1] * 3)) # timeout 10s
                             Exp.AppendExp(eqKey, a_plan)
                         if not Exp.isCache(eqKey, b_plan): # 该行放 get latency 前面 ！！！
                             hint_node = plans_lib.FilterScansOrJoins(b_node.Copy())
-                            b_plan[0].info['latency'], _ = getPG_latency(hint_node.info['sql_str'], hint_node.hint_str(), ENABLE_LEON=False, timeout_limit=pg_time) # timeout 10s
+                            b_plan[0].info['latency'], _ = getPG_latency(hint_node.info['sql_str'], hint_node.hint_str(), ENABLE_LEON=False, timeout_limit=(pg_time1[q_recieved_cnt - 1] * 3)) # timeout 10s
                             Exp.AppendExp(eqKey, b_plan)
                         
 
                     # print("len(Exp.GetExp(eqKey))", len(Exp.GetExp(eqKey)))
         
-
-        Exp.DeleteEqSet()
+        ##########删除等价类#############
+        # Exp.DeleteEqSet()
         eqset = Exp.GetEqSet()
+        print("len_eqset", Exp._getEqNum())
         logger.log_metrics({"len_eqset": Exp._getEqNum()})
         for eq in eqset:
             print(f"{eq}: {len(Exp.GetExp(eq))}")
@@ -559,10 +595,10 @@ if __name__ == '__main__':
                 retrain_count = 0
         last_train_pair = len(train_pairs)
         print(retrain_count)
-        if len(train_pairs) > 16:
+        if len(train_pairs) > 64:
             leon_dataset = prepare_dataset(train_pairs)
-            dataloader_train = DataLoader(leon_dataset, batch_size=16, shuffle=True, num_workers=0)
-            dataloader_val = DataLoader(leon_dataset, batch_size=16, shuffle=False, num_workers=0)
+            dataloader_train = DataLoader(leon_dataset, batch_size=64, shuffle=True, num_workers=0)
+            dataloader_val = DataLoader(leon_dataset, batch_size=64, shuffle=False, num_workers=0)
             model = load_model(model_path, prev_optimizer_state_dict).to(DEVICE)
             callbacks = load_callbacks(logger=None)
             trainer = pl.Trainer(accelerator="gpu",

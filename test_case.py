@@ -270,7 +270,8 @@ class SeqFormer(nn.Module):
         out = self.tranformer_encoder(x, mask=attn_mask)
         # out = self.transformer_decoder(out, out, tgt_mask=attn_mask)
         out = self.mlp(out)
-        out = torch.tanh(out).squeeze(dim=2).add(1)
+        out = (torch.tanh(out).squeeze(dim=2) * 5).add(5) 
+        # out = torch.tanh(out).squeeze(dim=2).add(1)  * 5
         return out # [0, 1] -> [1, 2] [??]
 
 # 树形编码结构
