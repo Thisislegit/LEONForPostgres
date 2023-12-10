@@ -15,6 +15,9 @@ class Experience:
 
     def GetEqSetKeys(self):
         return self.__eqSet.keys()
+    
+    def GetExpKeys(self):
+        return self.__exp.keys()
 
     def AppendExp(self, eq, plan: list):
        #     print(plan)
@@ -61,7 +64,7 @@ class Experience:
         return self.__eqSet
 
     def _getEqNum(self):
-        return sum(value < 90000 for value in self.GetEqSet().values())
+        return sum(value[0] < 90000 for value in self.GetEqSet().values())
 
     def GetPlanNum(self):
         num = 0
@@ -69,40 +72,53 @@ class Experience:
             num += len(self.GetExp(eq))
         return num
 
-    def _collectTime(self):
-        for eq in self.GetEqSetKeys():
-            average = 0
-            cnt = 0
-            if len(self.GetExp(eq)) > 0:
-                for plan in self.GetExp(eq):
-                    if plan[0].info['latency'] != 90000:
-                        cnt += 1
-                        average += plan[0].info['latency']
-                if cnt == 0:
-                    self.GetEqSet()[eq] = 90000
-                else:
-                    self.GetEqSet()[eq] = average / cnt
+    # def _collectTime(self):
+    #     for eq in self.GetEqSetKeys():
+    #         average = 0
+    #         cnt = 0
+    #         if len(self.GetExp(eq)) > 0:
+    #             for plan in self.GetExp(eq):
+    #                 if plan[0].info['latency'] != 90000:
+    #                     cnt += 1
+    #                     average += plan[0].info['latency']
+    #             if cnt == 0:
+    #                 self.GetEqSet()[eq] = 90000
+    #             else:
+    #                 self.GetEqSet()[eq] = average / cnt
+
+    def collectRate(self, eq, pg, tf):
+        temp = eq.split(',') # sort
+        eq = ','.join(sorted(temp))
+        if eq in self.GetEqSetKeys():
+            # rate_old = self.GetEqSet()[eq][2]
+            pg_old = self.GetEqSet()[eq][0]
+            tf_old = self.GetEqSet()[eq][1]
+            # min_rate = min(tf/pg, rate_old)
+            min_pg = min(pg, pg_old)
+            min_tf = min(tf, tf_old)
+            self.GetEqSet()[eq] = [pg, tf, min_tf / min_pg]
+
 
     def DeleteEqSet(self):
-        self._collectTime()
-        if self._getEqNum() < self.MinEqNum:
+        # self._collectTime()
+        EqNum = self._getEqNum()
+        if EqNum < self.MinEqNum:
             return
         allSet = list(self.GetEqSet().items())
-        allSet.sort(key=lambda x: x[1], reverse=False)
-        deletenum = int(self._getEqNum() * 0.3)
-        if self._getEqNum() - deletenum < self.MinEqNum:
+        allSet.sort(key=lambda x: x[1][2], reverse=False)
+        deletenum = int(EqNum * 0.3)
+        if EqNum - deletenum < self.MinEqNum:
             return
         for i in range(deletenum):
-            k, v = allSet[i]
-            if v < 5000:
-                self.GetEqSet().pop(k)
+            k, _ = allSet[EqNum - 1 - i]
+            self.GetEqSet().pop(k)
 
     def AddEqSet(self, eq):
         if self._getEqNum() < 25: # Limit the Total Number of EqSet
             temp = eq.split(',') # sort
             eq = ','.join(sorted(temp))
             if eq not in self.GetEqSetKeys():
-                self.GetEqSet()[eq] = 90000
+                self.GetEqSet()[eq] = [90000, 90000, 2.0]
                 if not self.GetExp(eq):
                     self.__exp[eq] = []
     

@@ -188,7 +188,7 @@ def GetLatencyFromPg(sql, hint, ENABLE_LEON, verbose=False, check_hint_used=Fals
         else:
             cursor.execute("load 'pg_hint_plan';")
             cursor.execute('SET enable_leon=off')
-        geqo_off = True
+        geqo_off = hint is not None and len(hint) > 0
         result = _run_explain('explain(verbose, format json, analyze)',
                               sql,
                               hint,

@@ -31,9 +31,9 @@ class FileWriter:
         self.RELOAD = True
         # self.eqset = ['cast_info,company_name,movie_companies,title', 'company_name,movie_companies,title']
         # self.eqset = ['company_name,movie_companies', 'company_type,movie_companies', 'company_type,movie_companies,title']
-        self.eqset = {'ci,cn,mc,t': 90000, 'it,mi': 90000, 'k,mk': 90000, 'cc,cct2,k,mc,t': 90000, 'k,mk,t': 90000, 'cc,cct1,k,mc,t': 90000, 'k,miidx,mk': 90000, 'cn,mc': 90000,
-                      'k,mi_idx,mk': 90000, 'a1,ci,n1': 90000, 'cn,mc,t': 90000, 'ct,mc,mi,t': 90000, 'ct,mc': 90000, 'at,cn,mc,t': 90000,
-                      'a1,n1': 90000, 'ct,mc,t': 90000, 'an,n': 90000, 'an,ci,n': 90000}
+        self.eqset = ['an,chn', 'an,ci', 'an,cn', 'an,mc', 'an,n', 'an,rt', 'an,t', 'chn,ci', 'chn,cn', 'chn,mc',
+               'chn,n', 'chn,rt', 'chn,t', 'ci,cn', 'ci,mc', 'ci,n', 'ci,rt', 'ci,t', 'cn,mc', 'cn,n',
+               'cn,rt', 'cn,t', 'mc,n', 'mc,rt', 'mc,t', 'n,rt', 'n,t', 'rt,t']
         # self.eqset = ['title,movie_keyword,keyword', 'kind_type,title,comp_cast_type,complete_cast,movie_companies', 'kind_type,title,comp_cast_type,complete_cast,movie_companies,company_name', 'movie_companies,company_name', 'movie_companies,company_name,title',
                 # 'movie_companies,company_name,title,aka_title', 'company_name,movie_companies,title,cast_info', 'name,aka_name', 'name,aka_name,cast_info', 'info_type,movie_info_idx', 'company_type,movie_companies',
                 # 'company_type,movie_companies,title', 'company_type,movie_companies,title,movie_info', 'movie_companies,company_name', 'keyword,movie_keyword', 'keyword,movie_keyword,movie_info_idx']
@@ -120,7 +120,7 @@ class LeonModel:
     def inference(self, seqs, attns):
         cali_all = self.get_calibrations(seqs, attns)
         
-        # print(cali_all)
+        print(cali_all)
         # cali_str = ['{:.2f}'.format(i) for i in cali_all.tolist()] # 最后一次 cali
         def format_scientific_notation(number):
             str_number = "{:e}".format(number)
@@ -183,9 +183,9 @@ class LeonModel:
         X = messages
         if not isinstance(X, list):
             X = [X]
-        for x in X:
-            if not x:
-                return ','.join(['1.00' for _ in X])
+        # for x in X:
+        #     if not x:
+        #         return ','.join(['1.00' for _ in X])
         X = [json.loads(x) if isinstance(x, str) else x for x in X]
         # print(X)
         try:
