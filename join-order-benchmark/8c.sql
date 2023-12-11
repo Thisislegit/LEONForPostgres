@@ -1,5 +1,5 @@
-SELECT MIN(a1.name) AS writer_pseudo_name,
-       MIN(t.title) AS movie_title
+SELECT a1.name AS writer_pseudo_name,
+       t.title AS movie_title
 FROM aka_name AS a1,
      cast_info AS ci,
      company_name AS cn,
