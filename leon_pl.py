@@ -173,6 +173,7 @@ def initEqSet():
     equ_tem = ['an,chn', 'an,ci', 'an,cn', 'an,mc', 'an,n', 'an,rt', 'an,t', 'chn,ci', 'chn,cn', 'chn,mc',
                'chn,n', 'chn,rt', 'chn,t', 'ci,cn', 'ci,mc', 'ci,n', 'ci,rt', 'ci,t', 'cn,mc', 'cn,n',
                'cn,rt', 'cn,t', 'mc,n', 'mc,rt', 'mc,t', 'n,rt', 'n,t', 'rt,t']
+    # equ_tem = ["an,chn,ci,cn,mc,n,rt,t", "ci,k,mk,n,t", "a1,ci,cn,mc,n1,rt,t"]
     equ_set = set() # 用集合 方便 eq keys 中去重
     # 'title,movie_keyword,keyword' -> 'keyword,movie_keyword,title'
     for i in equ_tem:
@@ -381,7 +382,8 @@ class PL_Leon(pl.LightningModule):
 
 if __name__ == '__main__':
     # train_files = ['1a', '2a', '3a', '4a']
-    train_files = ['9c'] * 50
+    # train_files = ['6d', '9c', '8c'] * 75
+    train_files = ['9c'] * 75
     chunk_size = 1 # the # of sqls in a chunk
     IF_TRAIN = True
     model_path = "./log/model.pth"

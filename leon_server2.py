@@ -34,6 +34,7 @@ class FileWriter:
         self.eqset = ['an,chn', 'an,ci', 'an,cn', 'an,mc', 'an,n', 'an,rt', 'an,t', 'chn,ci', 'chn,cn', 'chn,mc',
                'chn,n', 'chn,rt', 'chn,t', 'ci,cn', 'ci,mc', 'ci,n', 'ci,rt', 'ci,t', 'cn,mc', 'cn,n',
                'cn,rt', 'cn,t', 'mc,n', 'mc,rt', 'mc,t', 'n,rt', 'n,t', 'rt,t']
+        # self.eqset = ["an,chn,ci,cn,mc,n,rt,t", "ci,k,mk,n,t", "a1,ci,cn,mc,n1,rt,t"]
         # self.eqset = ['title,movie_keyword,keyword', 'kind_type,title,comp_cast_type,complete_cast,movie_companies', 'kind_type,title,comp_cast_type,complete_cast,movie_companies,company_name', 'movie_companies,company_name', 'movie_companies,company_name,title',
                 # 'movie_companies,company_name,title,aka_title', 'company_name,movie_companies,title,cast_info', 'name,aka_name', 'name,aka_name,cast_info', 'info_type,movie_info_idx', 'company_type,movie_companies',
                 # 'company_type,movie_companies,title', 'company_type,movie_companies,title,movie_info', 'movie_companies,company_name', 'keyword,movie_keyword', 'keyword,movie_keyword,movie_info_idx']
@@ -120,7 +121,7 @@ class LeonModel:
     
     def inference(self, seqs, attns):
         cali_all = self.get_calibrations(seqs, attns)
-        cali_all = 1000 * torch.rand(cali_all.shape[0])
+        # cali_all = 1000 * torch.rand(cali_all.shape[0])
         print(cali_all)
         # cali_str = ['{:.2f}'.format(i) for i in cali_all.tolist()] # 最后一次 cali
         def format_scientific_notation(number):
