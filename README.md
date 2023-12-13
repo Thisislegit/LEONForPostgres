@@ -89,4 +89,22 @@ for chunk in chunks:
     | :------: | :------: | ------: |
     ｜          | Postgres | SeqFormer |
     |       | 181.7s   | 185.8s  |
+
+
+- [x] Offline training 
+
+        5 Queries
+
+    ![offline training](Figs/image.png)
+
+    **问题1**：等价类打分方式：我们给每个等价类的有效程度做了排序按照最大值排序（可能改为 平均），最终执行计划有的才更新。
+    
+    **问题2**：如果新添加进来的等价类下次执行计划中没有，删的方式：目前是不pick node后，直接删
+    可能改为分值是0 就就只picknode，不训练
+
+    **问题3**：leon timeout explain (突然出现裂化的情况，在某个已经训练的且稳定表现的等价类中，突然选择了另一个plan，这个可以参考PerGuard的做法，有可能解决)
+    
+    **问题4**：等价类数量增加15~25增加为20~30
+
+
     
