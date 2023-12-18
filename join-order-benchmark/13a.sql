@@ -1,6 +1,6 @@
-SELECT MIN(mi.info)    AS release_date,
-       MIN(miidx.info) AS rating,
-       MIN(t.title)    AS german_movie
+SELECT mi.info    AS release_date,
+       miidx.info AS rating,
+       t.title    AS german_movie
 FROM company_name AS cn,
      company_type AS ct,
      info_type AS it,

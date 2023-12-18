@@ -1,7 +1,7 @@
-SELECT mi.info     AS movie_budget,
-       mi_idx.info AS movie_votes,
-       n.name      AS writer,
-       t.title     AS complete_gore_movie
+SELECT MIN(mi.info)     AS movie_budget,
+       MIN(mi_idx.info) AS movie_votes,
+       MIN(n.name)      AS writer,
+       MIN(t.title)     AS complete_gore_movie
 FROM complete_cast AS cc,
      comp_cast_type AS cct1,
      comp_cast_type AS cct2,

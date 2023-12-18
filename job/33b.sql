@@ -1,9 +1,9 @@
-SELECT cn1.name     AS first_company,
-       cn2.name     AS second_company,
-       mi_idx1.info AS first_rating,
-       mi_idx2.info AS second_rating,
-       t1.title     AS first_movie,
-       t2.title     AS second_movie
+SELECT MIN(cn1.name)     AS first_company,
+       MIN(cn2.name)     AS second_company,
+       MIN(mi_idx1.info) AS first_rating,
+       MIN(mi_idx2.info) AS second_rating,
+       MIN(t1.title)     AS first_movie,
+       MIN(t2.title)     AS second_movie
 FROM company_name AS cn1,
      company_name AS cn2,
      info_type AS it1,
