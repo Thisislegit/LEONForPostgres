@@ -176,7 +176,8 @@ def initEqSet():
     # equ_tem = ['t,mk,k', 'k,t,cct2,cc,mc', 'k,t,cct1,cc,mc', 'kt,t,cct2,cc,mc,cn', 'kt,t,cct1,cc,mc,cn',
     #            'mc,cn', 'mc,cn,t','mc,cn,t,at', 'cn,mc,t,ci', 'n,an', 'n,an,ci', 'it,mi', 'ct,mc',
     #            'ct,mc,t', 'ct,mc,t,mi', 'mc,cn', 'k,mk', 'k,mk,mi_idx', 'k,mk,miidx', 'a1,n1', 'a1,n1,ci']
-    equ_tem = ['an,chn,ci,cn,mc,n,rt,t', 'ci,k,mk,n,t', 'a1,ci,cn,mc,n1,rt,t', 'cn,ct,it,it2,kt,mc,mi,miidx,t', 'an,chn,ci,cn,it,mc,mi,n,rt,t', 'cn,ct,k,lt,mc,mk,ml,t', 'an,ci,it,lt,ml,n,pi,t', 'it,k,mi_idx,mk,t']
+    # equ_tem = ['an,chn,ci,cn,mc,n,rt,t', 'ci,k,mk,n,t', 'a1,ci,cn,mc,n1,rt,t', 'cn,ct,it,it2,kt,mc,mi,miidx,t', 'an,chn,ci,cn,it,mc,mi,n,rt,t', 'cn,ct,k,lt,mc,mk,ml,t', 'an,ci,it,lt,ml,n,pi,t', 'it,k,mi_idx,mk,t']
+    equ_tem = []
     # equ_tem = ["an,chn,ci,cn,mc,n,rt,t", "ci,k,mk,n,t", "a1,ci,cn,mc,n1,rt,t"]
     # equ_tem = ["chn,ci,cn,mc,n,rt,t", "an,ci,cn,mc,n,rt,t", "an,chn,cn,mc,n,rt,t", "an,chn,ci,mc,n,rt,t", "an,chn,ci,cn,n,rt,t", "an,chn,ci,cn,mc,rt,t",
     #            "an,chn,ci,cn,mc,n,t", "an,chn,ci,cn,mc,n,rt"]
@@ -389,7 +390,7 @@ class PL_Leon(pl.LightningModule):
 if __name__ == '__main__':
     # train_files = ['1a', '2a', '3a', '4a']
     train_files = ['6d', '9c', '8c', '19d', '13a', '11a', '7a', '4b'] * 75
-    train_files = random.shuffle(['1a', '1b', '1c', '1d', '2a', '2b', '2c', '2d', '3a', '3b', '3c', '4a',
+    train_files = ['1a', '1b', '1c', '1d', '2a', '2b', '2c', '2d', '3a', '3b', '3c', '4a',
                     '4b', '4c', '5a', '5b', '5c', '6a', '6b', '6c', '6d', '6e', '6f', '7a', 
                     '7b', '7c', '8a', '8b', '8c', '8d', '9a', '9b', '9c', '9d', '10a', '10b', 
                     '10c', '11a', '11b', '11c', '11d', '12a', '12b', '12c', '13a', '13b', '13c', 
@@ -398,7 +399,9 @@ if __name__ == '__main__':
                     '19b', '19c', '19d', '20a', '20b', '20c', '21a', '21b', '21c', '22a', '22b',
                     '22c', '22d', '23a', '23b', '23c', '24a', '24b', '25a', '25b', '25c', '26a', 
                     '26b', '26c', '27a', '27b', '27c', '28a', '28b', '28c', '29a', '29b', '29c',
-                    '30a', '30b', '30c', '31a', '31b', '31c', '32a', '32b', '33a', '33b', '33c'])
+                    '30a', '30b', '30c', '31a', '31b', '31c', '32a', '32b', '33a', '33b', '33c']
+    random.shuffle(train_files)
+    train_files = train_files * 75
     chunk_size = 5 # the # of sqls in a chunk
     IF_TRAIN = True
     model_path = "./log/model.pth"
@@ -415,7 +418,7 @@ if __name__ == '__main__':
     op_name_to_one_hot = get_op_name_to_one_hot(feature_statistics)
     first_time = dict()
     last_train_pair = 0
-    retrain_count = 0
+    retrain_count = 3
     min_leon_time = dict()
     max_query_latency1 = 0
     logger =  pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs', name="10a", project='leon')

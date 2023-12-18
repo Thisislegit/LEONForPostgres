@@ -160,7 +160,7 @@ def getPlans(sql, hint, verbose=False, check_hint_used=False, ENABLE_LEON=False)
         # node (a Join).
         if ENABLE_LEON:
             cursor.execute('SET enable_leon=on')
-        geqo_off = hint is not None and len(hint) > 0
+        geqo_off = True
         result = _run_explain('explain(verbose, format json)',
                               sql,
                               hint,
@@ -190,7 +190,7 @@ def GetLatencyFromPg(sql, hint, ENABLE_LEON, verbose=False, check_hint_used=Fals
         else:
             cursor.execute("load 'pg_hint_plan';")
             cursor.execute('SET enable_leon=off')
-        geqo_off = hint is not None and len(hint) > 0
+        geqo_off = True
         result = _run_explain('explain(verbose, format json, analyze)',
                               sql,
                               hint,
