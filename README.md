@@ -107,7 +107,6 @@ for result in results:
 
 Replace the placeholders and example code with specifics relevant to your database and requirements.
 
->>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> 38571786bf (Fixed SQL_ Str error, causing node_ Error that grarh cannot generate)
 
     **pre-trained model for 10 templates**
 
