@@ -1,5 +1,5 @@
-SELECT MIN(mi_idx.info) AS rating,
-       MIN(t.title)     AS movie_title
+SELECT mi_idx.info AS rating,
+       t.title    AS movie_title
 FROM info_type AS it,
      keyword AS k,
      movie_info_idx AS mi_idx,

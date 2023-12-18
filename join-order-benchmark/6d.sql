@@ -1,6 +1,6 @@
-SELECT k.keyword AS movie_keyword,
-       n.name    AS actor_name,
-       t.title   AS hero_movie
+SELECT MIN(k.keyword) AS movie_keyword,
+       MIN(n.name) AS actor_name,
+       MIN(t.title) AS hero_movie
 FROM cast_info AS ci,
      keyword AS k,
      movie_keyword AS mk,
@@ -21,4 +21,3 @@ WHERE k.keyword IN ('superhero',
   AND t.id = ci.movie_id
   AND ci.movie_id = mk.movie_id
   AND n.id = ci.person_id;
-

@@ -1,5 +1,5 @@
-SELECT MIN(n.name)  AS of_person,
-       MIN(t.title) AS biography_movie
+SELECT n.name  AS of_person,
+       t.title AS biography_movie
 FROM aka_name AS an,
      cast_info AS ci,
      info_type AS it,

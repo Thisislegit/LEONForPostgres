@@ -1,8 +1,30 @@
+from dataclasses import dataclass, field
+from typing import List
+
+@dataclass
+class EqSetInfo:
+    """
+    first OVERALL latency of leon
+    current OVERALL latency of leon 
+    how leon opt this query?
+    what query?
+    """
+    first_latency: float = 90000.0
+    current_latency: float = 90000.0
+    opt_time: float = 0.0
+    query_ids: List[str] = field(default_factory=list)
+
+
+
 class Experience:
     def __init__(self, eq_set) -> None:
         # 经验 [[logcost, sql, hint, latency, [query_vector, node], join, joinids]] 
+        self.MinEqNum = 15
+        self.MaxEqSets = 25
+        self.LargeTimout = 90000
         self.__exp = dict() # k is the join_ids of an eq (str), v is experience of an eq (list)
         self.__eqSet = dict() # save limited # of eq. Some eqs are in __exp, but not in __eqSet
+        # self.__eqsetTime = dict() # 每个等价类
         for i in eq_set:
 
             # todo: hand crafted tuned
@@ -10,8 +32,10 @@ class Experience:
             # self.__exp[i] = []
             self.AddEqSet(i)
             self.AppendExp(i, [])
-        self.MinEqNum = 9
-        self.LargeTimout = 90000
+        
+
+    def GetQueryId(self, eq: EqSetInfo):
+        return self.GetEqSet()[eq].query_ids
 
     def GetEqSetKeys(self):
         return self.__eqSet.keys()
@@ -64,7 +88,8 @@ class Experience:
         return self.__eqSet
 
     def _getEqNum(self):
-        return sum(value[0] < 90000 for value in self.GetEqSet().values())
+        return len(self.GetEqSet())
+        # return sum(value[0] < 90000 for value in self.GetEqSet().values())
 
     def GetPlanNum(self):
         num = 0
@@ -86,41 +111,77 @@ class Experience:
     #             else:
     #                 self.GetEqSet()[eq] = average / cnt
 
-    def collectRate(self, eq, pg, tf):
+    def collectRate(self, eq, first_time, tf, query_id):
+        """
+        eq: 等价类
+        first_time: 第一次leon执行时间
+        tf: 当前leon在最终计划中使用该Eq的执行时间
+        query_id: 区分查询语句
+        """
         temp = eq.split(',') # sort
         eq = ','.join(sorted(temp))
+        """ Calculate Average Time to rank Eqs.  
+        if eq in self.__eqsetTime:
+            if query_id in self.__eqsetTime[eq]:
+                opt_time = self.__eqsetTime[eq][query_id]
+                self.__eqsetTime[eq][query_id] = max(first_time - tf, opt_time)
+            else:
+                self.__eqsetTime[eq] = dict()
+        """
+
         if eq in self.GetEqSetKeys():
             # rate_old = self.GetEqSet()[eq][2]
-            pg_old = self.GetEqSet()[eq][0]
-            tf_old = self.GetEqSet()[eq][1]
-            # min_rate = min(tf/pg, rate_old)
-            min_pg = min(pg, pg_old)
-            min_tf = min(tf, tf_old)
-            self.GetEqSet()[eq] = [pg, tf, min_tf / min_pg]
+            if self.GetEqSet()[eq].opt_time != 0: # 仅仅新增等价类的重要性
+                return
+            opt_time_old = self.GetEqSet()[eq].opt_time
+            opt_time = max(opt_time_old, first_time - tf)
+            query_ids = self.GetEqSet()[eq].query_ids
+            if query_id not in query_ids:
+                query_ids.append(query_id)
+            self.GetEqSet()[eq] = EqSetInfo(first_latency=first_time,
+                                            current_latency=tf,
+                                            opt_time=opt_time,
+                                            query_ids=query_ids)
 
-
-    def DeleteEqSet(self):
+    def DeleteEqSet(self, sql_id):
         # self._collectTime()
         EqNum = self._getEqNum()
         if EqNum < self.MinEqNum:
             return
         allSet = list(self.GetEqSet().items())
-        allSet.sort(key=lambda x: x[1][2], reverse=False)
-        deletenum = int(EqNum * 0.3)
+        # list of (key, value)
+        allSet.sort(key=lambda x: (x[1].opt_time, len(x[0])), reverse=True) # 优先删小的等价类
+        def remove_matching_sets(all_set, sql_id):
+            """
+            Remove sets from all_set if their query_ids contain common elements with sql_id.
+            """
+            updated_set = [item for item in all_set if not any(x in sql_id for x in item[1].query_ids)]
+            return updated_set
+        allSet = remove_matching_sets(allSet, sql_id)
+        deletenum = min(int(EqNum * 0.3), len(allSet))
         if EqNum - deletenum < self.MinEqNum:
             return
         for i in range(deletenum):
             k, _ = allSet[EqNum - 1 - i]
             self.GetEqSet().pop(k)
 
-    def AddEqSet(self, eq):
-        if self._getEqNum() < 25: # Limit the Total Number of EqSet
+    def DeleteOneEqset(self, eq):
+        del self.GetEqSet()[eq]
+
+    def AddEqSet(self, eq, query_id=None):
+        if self._getEqNum() < self.MaxEqSets: # Limit the Total Number of EqSet
             temp = eq.split(',') # sort
             eq = ','.join(sorted(temp))
             if eq not in self.GetEqSetKeys():
-                self.GetEqSet()[eq] = [90000, 90000, 2.0]
+                self.GetEqSet()[eq] = EqSetInfo()
+                if query_id:
+                    self.GetEqSet()[eq].query_ids.append(query_id)
                 if not self.GetExp(eq):
                     self.__exp[eq] = []
+            else:
+                if query_id is not None:
+                    if query_id not in self.GetEqSet()[eq].query_ids:
+                        self.GetEqSet()[eq].query_ids.append(query_id)
     
 
     def Getpair(self):

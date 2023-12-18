@@ -1,7 +1,7 @@
-SELECT an.name  AS alternative_name,
-       chn.name AS voiced_character_name,
-       n.name   AS voicing_actress,
-       t.title  AS american_movie
+SELECT MIN(an.name)  AS alternative_name,
+       MIN(chn.name) AS voiced_character_name,
+       MIN(n.name)   AS voicing_actress,
+       MIN(t.title)  AS american_movie
 FROM aka_name AS an,
      char_name AS chn,
      cast_info AS ci,

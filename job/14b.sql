@@ -1,5 +1,5 @@
-SELECT mi_idx.info AS rating,
-       t.title     AS western_dark_production
+SELECT MIN(mi_idx.info) AS rating,
+       MIN(t.title)     AS western_dark_production
 FROM info_type AS it1,
      info_type AS it2,
      keyword AS k,

@@ -1,6 +1,6 @@
-SELECT chn.name AS voiced_char_name,
-       n.name   AS voicing_actress_name,
-       t.title  AS kung_fu_panda
+SELECT MIN(chn.name) AS voiced_char_name,
+       MIN(n.name)   AS voicing_actress_name,
+       MIN(t.title)  AS kung_fu_panda
 FROM aka_name AS an,
      char_name AS chn,
      cast_info AS ci,
