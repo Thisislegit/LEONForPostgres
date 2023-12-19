@@ -68,6 +68,7 @@ int			min_parallel_table_scan_size;
 int			min_parallel_index_scan_size;
 bool 		enable_leon = false;
 bool		not_cali = false;
+char        *leon_model_path = NULL;
 
 /* Hook for plugins to get control in set_rel_pathlist() */
 set_rel_pathlist_hook_type set_rel_pathlist_hook = NULL;
@@ -3062,7 +3063,7 @@ standard_join_search(PlannerInfo *root, int levels_needed, List *initial_rels)
 
 			bool Opt_rel = false;
 			if (enable_leon)
-				Opt_rel = should_leon_optimize(lev, root, rel);
+				Opt_rel = should_leon_optimize(lev, root, rel, leon_query_name);
 			if (enable_leon && Opt_rel)
 			{
 				ListCell *p;

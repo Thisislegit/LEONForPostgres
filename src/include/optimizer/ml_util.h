@@ -706,7 +706,7 @@ static char* plan_to_json(PlannerInfo * root, Path* plan) {
   return buf;
 }
 
-static bool should_leon_optimize(int level, PlannerInfo * root, RelOptInfo * rel) {
+static bool should_leon_optimize(int level, PlannerInfo * root, RelOptInfo * rel, char* leon_query_name) {
 
 	int conn_fd = connect_to_leon(leon_host, leon_port);
 	if (conn_fd < 0) {
@@ -720,7 +720,7 @@ static bool should_leon_optimize(int level, PlannerInfo * root, RelOptInfo * rel
 	FILE* stream;
 
   	stream = open_memstream(&buf, &json_size);
-	fprintf(stream, "{\"QueryId\": \"%d\",", root->parse->queryId);
+	fprintf(stream, "{\"QueryId\": \"%s\",", leon_query_name);
 	fprintf(stream, "\"Relation IDs\": \"");
 	debug_print_relids(root, rel->relids, stream);
 	fprintf(stream, "\"}\n");

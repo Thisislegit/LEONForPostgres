@@ -1178,6 +1178,18 @@ static struct config_bool ConfigureNamesBool[] =
 		false,
 		NULL, NULL, NULL
 	},
+	
+	{
+		{"leon_query_name", PGC_USERSET, UNGROUPED,
+				gettext_noop("Sets the query name of ML-based execution query."),
+				NULL,
+				GUC_IS_NAME
+		},
+		&leon_query_name,
+		"",
+		check_cluster_name, NULL, NULL
+    },
+
 	{
 		{"not_cali", PGC_USERSET, QUERY_TUNING_COST,	
 			gettext_noop("Enable the leon calibration cost."),
