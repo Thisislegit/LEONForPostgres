@@ -68,7 +68,7 @@ int			min_parallel_table_scan_size;
 int			min_parallel_index_scan_size;
 bool 		enable_leon = false;
 bool		not_cali = false;
-char        *leon_model_path = NULL;
+char        *leon_query_name = "";
 
 /* Hook for plugins to get control in set_rel_pathlist() */
 set_rel_pathlist_hook_type set_rel_pathlist_hook = NULL;
