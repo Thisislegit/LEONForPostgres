@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
-from typing import List
+from typing import List, Dict
+from statistics import mean
 
 @dataclass
 class EqSetInfo:
@@ -11,16 +12,17 @@ class EqSetInfo:
     """
     first_latency: float = 90000.0
     current_latency: float = 90000.0
-    opt_time: float = 0.0
+    opt_time: float = -90000.0
     query_ids: List[str] = field(default_factory=list)
+    query_dict: Dict[str, float] = field(default_factory=dict)
 
 
 
 class Experience:
     def __init__(self, eq_set) -> None:
         # 经验 [[logcost, sql, hint, latency, [query_vector, node], join, joinids]] 
-        self.MinEqNum = 15
-        self.MaxEqSets = 25
+        self.MinEqNum = 35
+        self.MaxEqSets = 50
         self.LargeTimout = 90000
         self.__exp = dict() # k is the join_ids of an eq (str), v is experience of an eq (list)
         self.__eqSet = dict() # save limited # of eq. Some eqs are in __exp, but not in __eqSet
@@ -131,16 +133,21 @@ class Experience:
 
         if eq in self.GetEqSetKeys():
             # rate_old = self.GetEqSet()[eq][2]
-            if self.GetEqSet()[eq].opt_time != 0: # 仅仅新增等价类的重要性
-                return
-            opt_time_old = self.GetEqSet()[eq].opt_time
-            opt_time = max(opt_time_old, first_time - tf)
+            # if self.GetEqSet()[eq].opt_time != 0: # 仅仅新增等价类的重要性
+            #     return
+            opt_time = first_time - tf
             query_ids = self.GetEqSet()[eq].query_ids
+            query_dict = self.GetEqSet()[eq].query_dict
             if query_id not in query_ids:
                 query_ids.append(query_id)
+            if query_id not in query_dict.keys():
+                query_dict[query_id] = opt_time
+            else:
+                query_dict[query_id] = max(opt_time, query_dict[query_id])
+            
             self.GetEqSet()[eq] = EqSetInfo(first_latency=first_time,
                                             current_latency=tf,
-                                            opt_time=opt_time,
+                                            opt_time=mean(query_dict.values()),
                                             query_ids=query_ids)
 
     def DeleteEqSet(self, sql_id):
@@ -162,7 +169,7 @@ class Experience:
         if EqNum - deletenum < self.MinEqNum:
             return
         for i in range(deletenum):
-            k, _ = allSet[EqNum - 1 - i]
+            k, _ = allSet[len(allSet) - 1 - i]
             self.GetEqSet().pop(k)
 
     def DeleteOneEqset(self, eq):

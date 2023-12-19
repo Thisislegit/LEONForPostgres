@@ -1,6 +1,6 @@
-SELECT MIN(cn.name) AS from_company,
-       MIN(mc.note) AS production_note,
-       MIN(t.title) AS movie_based_on_book
+SELECT cn.name AS from_company,
+       mc.note AS production_note,
+       t.title AS movie_based_on_book
 FROM company_name AS cn,
      company_type AS ct,
      keyword AS k,

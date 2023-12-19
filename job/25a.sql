@@ -1,7 +1,7 @@
-SELECT MIN(mi.info)     AS movie_budget,
-       MIN(mi_idx.info) AS movie_votes,
-       MIN(n.name)      AS male_writer,
-       MIN(t.title)     AS violent_movie_title
+SELECT mi.info     AS movie_budget,
+       mi_idx.info AS movie_votes,
+       n.name      AS male_writer,
+       t.title     AS violent_movie_title
 FROM cast_info AS ci,
      info_type AS it1,
      info_type AS it2,

@@ -1,6 +1,6 @@
-SELECT MIN(lt.link)  AS link_type,
-       MIN(t1.title) AS first_movie,
-       MIN(t2.title) AS second_movie
+SELECT lt.link  AS link_type,
+       t1.title AS first_movie,
+       t2.title AS second_movie
 FROM keyword AS k,
      link_type AS lt,
      movie_keyword AS mk,

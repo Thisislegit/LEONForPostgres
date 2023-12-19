@@ -1,5 +1,5 @@
-SELECT MIN(kt.kind) AS movie_kind,
-       MIN(t.title) AS complete_nerdy_internet_movie
+SELECT kt.kind AS movie_kind,
+       t.title AS complete_nerdy_internet_movie
 FROM complete_cast AS cc,
      comp_cast_type AS cct1,
      company_name AS cn,

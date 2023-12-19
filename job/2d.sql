@@ -1,4 +1,4 @@
-SELECT MIN(t.title) AS movie_title
+SELECT t.title AS movie_title
 FROM company_name AS cn,
      keyword AS k,
      movie_companies AS mc,

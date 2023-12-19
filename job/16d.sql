@@ -1,5 +1,5 @@
-SELECT MIN(an.name) AS cool_actor_pseudonym,
-       MIN(t.title) AS series_named_after_char
+SELECT an.name AS cool_actor_pseudonym,
+       t.title AS series_named_after_char
 FROM aka_name AS an,
      cast_info AS ci,
      company_name AS cn,

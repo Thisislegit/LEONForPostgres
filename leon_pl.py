@@ -389,7 +389,8 @@ class PL_Leon(pl.LightningModule):
 
 if __name__ == '__main__':
     # train_files = ['1a', '2a', '3a', '4a']
-    train_files = ['6d', '9c', '8c', '19d', '13a', '11a', '7a', '4b'] * 75
+    ray.init(address='auto', namespace='server_namespace', _temp_dir="/data1/wyz/online/LEONForPostgres/log/ray") # init only once
+    dict_actor = ray.get_actor('querydict')
     train_files = ['1a', '1b', '1c', '1d', '2a', '2b', '2c', '2d', '3a', '3b', '3c', '4a',
                     '4b', '4c', '5a', '5b', '5c', '6a', '6b', '6c', '6d', '6e', '6f', '7a', 
                     '7b', '7c', '8a', '8b', '8c', '8d', '9a', '9b', '9c', '9d', '10a', '10b', 
@@ -401,13 +402,14 @@ if __name__ == '__main__':
                     '26b', '26c', '27a', '27b', '27c', '28a', '28b', '28c', '29a', '29b', '29c',
                     '30a', '30b', '30c', '31a', '31b', '31c', '32a', '32b', '33a', '33b', '33c']
     random.shuffle(train_files)
+    ray.get(dict_actor.write_sql_id.remote(train_files))
     train_files = train_files * 75
     chunk_size = 5 # the # of sqls in a chunk
     IF_TRAIN = True
     model_path = "./log/model.pth"
     message_path = "./log/messages.pkl"
 
-    ray.init(address='auto', namespace='server_namespace', _temp_dir="/data1/wyz/online/LEONForPostgres/log/ray") # init only once
+    
     Exp = Experience(eq_set=initEqSet())
     print("Init workload and equal set keys")
     workload = envs.JoinOrderBenchmark(envs.JoinOrderBenchmark.Params())
@@ -521,12 +523,16 @@ if __name__ == '__main__':
                         PKL_exist = False # the last message is already loaded
                         break
 
+                    curr_dict = ray.get(dict_actor.get_dict.remote())
+                    print(curr_dict)
+                    curr_sql_id = curr_dict[message[0]['QueryId']]
+                    q_recieved_cnt = curr_file.index(curr_sql_id) # start to recieve equal sets from a new sql
                     if curr_QueryId != message[0]['QueryId']: # the QueryId of the first plan in the message
                         print(f"------------- recieving query {q_recieved_cnt} starting from idx {ch_start_idx} ------------")
-                        q_recieved_cnt = q_recieved_cnt + 1 # start to recieve equal sets from a new sql
+                        
                         curr_QueryId = message[0]['QueryId']
                     print(f">>> message with {len(message)} plans")
-
+                    
                     # STEP 1) get node
                     nodes = PlanToNode(workload, message)
                     encoded_plans, _, attns, _ = plans_encoding(message) # encoding. plan -> plan_encoding / seqs torch.Size([26, 1, 760])
@@ -540,11 +546,10 @@ if __name__ == '__main__':
                             temp = node1.info['join_tables'].split(',') # sort
                             temp = ','.join(sorted(temp))
                             if temp == node2.info['join_tables']:
-                                
                                 if round(node1.cost,2) == node2.cost:
-                                    
+                                    Exp.collectRate(node2.info['join_tables'], first_time[curr_file[q_recieved_cnt]], tf_time[q_recieved_cnt], curr_file[q_recieved_cnt])
                                     c_node = node1
-                                    Exp.collectRate(c_node.info['join_tables'], first_time[curr_file[q_recieved_cnt - 1]], tf_time[q_recieved_cnt - 1], curr_file[q_recieved_cnt - 1])
+                                    
                                     c_plan = [c_node,
                                               encoded_plans[i],
                                               attns[i]]
@@ -583,12 +588,12 @@ if __name__ == '__main__':
                         b_node = nodes[cost_index]
                         # (1) add new EqSet key in exp
                         
-                        if i == 0: ##### 不pick node后,直接删
+                        if i == 0: 
                             eqKey = a_node.info['join_tables']
-                            Exp.AddEqSet(eqKey, curr_file[q_recieved_cnt - 1])
-                            if Exp.GetEqSet()[eqKey].first_latency == 90000.0: # 不pick node后,直接删
-                                Exp.DeleteOneEqset(eqKey)
-                                break
+                            Exp.AddEqSet(eqKey, curr_file[q_recieved_cnt])
+                            # if Exp.GetEqSet()[eqKey].first_latency == 90000.0: # 不pick node后,直接删
+                            #     Exp.DeleteOneEqset(eqKey)
+                            #     break
                             
                         
 
@@ -604,11 +609,11 @@ if __name__ == '__main__':
                         if not Exp.isCache(eqKey, a_plan): # 该行放 get latency 前面 ！！！
                             hint_node = plans_lib.FilterScansOrJoins(a_node.Copy())
                             # print(hint_node.hint_str(), hint_node.info['sql_str'])
-                            a_plan[0].info['latency'], _ = getPG_latency(hint_node.info['sql_str'], hint_node.hint_str(), ENABLE_LEON=False, timeout_limit=(pg_time1[q_recieved_cnt - 1] * 3)) # timeout 10s
+                            a_plan[0].info['latency'], _ = getPG_latency(hint_node.info['sql_str'], hint_node.hint_str(), ENABLE_LEON=False, timeout_limit=(pg_time1[q_recieved_cnt] * 3)) # timeout 10s
                             Exp.AppendExp(eqKey, a_plan)
                         if not Exp.isCache(eqKey, b_plan): # 该行放 get latency 前面 ！！！
                             hint_node = plans_lib.FilterScansOrJoins(b_node.Copy())
-                            b_plan[0].info['latency'], _ = getPG_latency(hint_node.info['sql_str'], hint_node.hint_str(), ENABLE_LEON=False, timeout_limit=(pg_time1[q_recieved_cnt - 1] * 3)) # timeout 10s
+                            b_plan[0].info['latency'], _ = getPG_latency(hint_node.info['sql_str'], hint_node.hint_str(), ENABLE_LEON=False, timeout_limit=(pg_time1[q_recieved_cnt] * 3)) # timeout 10s
                             Exp.AppendExp(eqKey, b_plan)
                         
 
