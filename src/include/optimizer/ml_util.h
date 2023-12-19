@@ -666,9 +666,9 @@ debug_print_path(PlannerInfo *root, Path *path, int indent, FILE* stream)
 		{
 			MergePath *mp = (MergePath *)path;
 
-			fprintf(stream, ", \"Sort Outer\": %f,", ((mp->outersortkeys) ? 1 : 0));
-			fprintf(stream, "\"Sort Inner\": %f,", ((mp->innersortkeys) ? 1 : 0));
-			fprintf(stream, "\"Materialize Inner\": %f", ((mp->materialize_inner) ? 1 : 0));
+			fprintf(stream, ", \"Sort Outer\": %d,", ((mp->outersortkeys) ? 1 : 0));
+			fprintf(stream, "\"Sort Inner\": %d,", ((mp->innersortkeys) ? 1 : 0));
+			fprintf(stream, "\"Materialize Inner\": %d", ((mp->materialize_inner) ? 1 : 0));
 		}
 
     fprintf(stream, ", \"Plans\": [");
