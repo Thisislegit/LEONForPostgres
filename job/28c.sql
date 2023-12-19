@@ -1,6 +1,6 @@
-SELECT MIN(cn.name)     AS movie_company,
-       MIN(mi_idx.info) AS rating,
-       MIN(t.title)     AS complete_euro_dark_movie
+SELECT cn.name     AS movie_company,
+       mi_idx.info AS rating,
+       t.title     AS complete_euro_dark_movie
 FROM complete_cast AS cc,
      comp_cast_type AS cct1,
      comp_cast_type AS cct2,

@@ -1,6 +1,6 @@
-SELECT MIN(cn.name) AS producing_company,
-       MIN(lt.link) AS link_type,
-       MIN(t.title) AS complete_western_sequel
+SELECT cn.name AS producing_company,
+       lt.link AS link_type,
+       t.title AS complete_western_sequel
 FROM complete_cast AS cc,
      comp_cast_type AS cct1,
      comp_cast_type AS cct2,

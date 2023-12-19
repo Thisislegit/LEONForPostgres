@@ -71,6 +71,31 @@ class FileWriter:
         self.RELOAD = True
         self.eqset = eqset
 
+    
+@ray.remote
+class QueryDict:
+    def __init__(self):
+        self.query_dict = dict()
+        self.sql_ids = None
+
+    def write_sql_id(self, sql_ids):
+        self.sql_ids = sql_ids
+    
+    def write_query_id(self, query_id):
+        if self.sql_ids != [] and query_id not in self.query_dict.keys():
+            sql_id = self.sql_ids.pop(0)
+            self.query_dict[query_id] = sql_id
+            print(sql_id, query_id)
+            return True
+        elif self.sql_ids != []:
+            return True
+        else:
+            return False
+    
+    def get_dict(self):
+        return self.query_dict
+
+
 class LeonModel:
 
     def __init__(self):
@@ -79,6 +104,8 @@ class LeonModel:
         ray.init(namespace='server_namespace', _temp_dir="/data1/wyz/online/LEONForPostgres/log/ray") # ray should be init in sub process
         node_path = "./log/messages.pkl"
         self.writer_hander = FileWriter.options(name="leon_server").remote(node_path)
+        self.query_dict = QueryDict.options(name="querydict").remote()
+        self.query_dict_flag = True
         self.eqset = None
         self.workload = envs.JoinOrderBenchmark(envs.JoinOrderBenchmark.Params())
         self.workload.workload_info.alias_to_names = postgres.GetAllAliasToNames(self.workload.workload_info.rel_ids)
@@ -126,7 +153,7 @@ class LeonModel:
     def inference(self, seqs, attns):
         cali_all = self.get_calibrations(seqs, attns)
         # cali_all = 1000 * torch.rand(cali_all.shape[0])
-        print(cali_all)
+        # print(cali_all)
         # cali_str = ['{:.2f}'.format(i) for i in cali_all.tolist()] # 最后一次 cali
         def format_scientific_notation(number):
             str_number = "{:e}".format(number)
@@ -174,10 +201,11 @@ class LeonModel:
         if not isinstance(X, list):
             X = [X]
         Relation_IDs = X[0]['Relation IDs']
-
+        if self.query_dict_flag:
+            self.query_dict_flag = ray.get(self.query_dict.write_query_id.remote(X[0]['QueryId']))
         out = ','.join(sorted(Relation_IDs.split()))
         if out in self.eqset:
-            print(out)
+            print(X[0]['QueryId'], out)
             return '1'
         else:
             return '0'

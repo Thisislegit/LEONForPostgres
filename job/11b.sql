@@ -1,6 +1,6 @@
-SELECT MIN(cn.name) AS from_company,
-       MIN(lt.link) AS movie_link_type,
-       MIN(t.title) AS sequel_movie
+SELECT cn.name AS from_company,
+       lt.link AS movie_link_type,
+       t.title AS sequel_movie
 FROM company_name AS cn,
      company_type AS ct,
      keyword AS k,

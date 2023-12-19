@@ -1,6 +1,6 @@
-SELECT MIN(chn.name) AS voiced_char,
-       MIN(n.name)   AS voicing_actress,
-       MIN(t.title)  AS voiced_animation
+SELECT chn.name AS voiced_char,
+       n.name   AS voicing_actress,
+       t.title  AS voiced_animation
 FROM aka_name AS an,
      complete_cast AS cc,
      comp_cast_type AS cct1,
