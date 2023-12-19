@@ -691,13 +691,13 @@ debug_print_path(PlannerInfo *root, Path *path, int indent, FILE* stream)
 
 
 
-static char* plan_to_json(PlannerInfo * root, Path* plan) {
+static char* plan_to_json(PlannerInfo * root, Path* plan, char* leon_query_name) {
   char* buf;
   size_t json_size;
   FILE* stream;
   
   stream = open_memstream(&buf, &json_size);
-  fprintf(stream, "{\"QueryId\": \"%d\",", root->parse->queryId);
+  fprintf(stream, "{\"QueryId\": \"%s\",", leon_query_name);
   fprintf(stream, "\"Plan\": ");
   debug_print_path(root, plan, 0, stream);
   fprintf(stream,"}\n");

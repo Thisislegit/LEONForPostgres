@@ -3079,7 +3079,7 @@ standard_join_search(PlannerInfo *root, int levels_needed, List *initial_rels)
 				foreach(p, rel->savedpaths)
 				{
 					Path *path = (Path *)lfirst(p);
-					char* json_plan = plan_to_json(root, path);
+					char* json_plan = plan_to_json(root, path, leon_query_name);
 					write_all_to_socket(conn_fd, json_plan);
 					free(json_plan);
 				}
