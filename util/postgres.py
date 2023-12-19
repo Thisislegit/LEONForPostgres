@@ -178,18 +178,21 @@ def getPlans(sql, hint, verbose=False, check_hint_used=False, ENABLE_LEON=False)
     return result
 
 
-def GetLatencyFromPg(sql, hint, ENABLE_LEON, verbose=False, check_hint_used=False, timeout=10000, dropbuffer=False):
+def GetLatencyFromPg(sql, hint, ENABLE_LEON, verbose=False, check_hint_used=False, timeout=10000, dropbuffer=False, curr_file=None):
     if dropbuffer:
         DropBufferCache()
     with pg_executor.Cursor() as cursor:
         # GEQO must be disabled for hinting larger joins to work.
         # Why 'verbose': makes ParsePostgresPlanJson() able to access required
         # fields, e.g., 'Output' and 'Alias'.  Also see SqlToPlanNode() comment.
+        
         if ENABLE_LEON:
-            cursor.execute('SET enable_leon=on')
+            cursor.execute('SET enable_leon=on;')
+            if curr_file:
+                cursor.execute(f"SET leon_query_name='{curr_file}';")
         else:
             cursor.execute("load 'pg_hint_plan';")
-            cursor.execute('SET enable_leon=off')
+            cursor.execute('SET enable_leon=off;')
         geqo_off = True
         result = _run_explain('explain(verbose, format json, analyze)',
                               sql,
