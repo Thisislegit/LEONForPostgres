@@ -34,6 +34,9 @@ class Experience:
             # self.__exp[i] = []
             self.AddEqSet(i)
             self.AppendExp(i, [])
+    
+    def OnlyGetExp(self):
+        return self.__exp
         
 
     def GetQueryId(self, eq: EqSetInfo):

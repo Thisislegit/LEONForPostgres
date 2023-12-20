@@ -149,7 +149,7 @@ def GetCostFromPg(sql, hint, verbose=False, check_hint_used=False):
     return node.cost
 
 
-def getPlans(sql, hint, verbose=False, check_hint_used=False, ENABLE_LEON=False):
+def getPlans(sql, hint, verbose=False, check_hint_used=False, ENABLE_LEON=False, curr_file=None):
     with pg_executor.Cursor() as cursor:
         # GEQO must be disabled for hinting larger joins to work.
         _SetGeneticOptimizer('off', cursor)
@@ -160,6 +160,8 @@ def getPlans(sql, hint, verbose=False, check_hint_used=False, ENABLE_LEON=False)
         # node (a Join).
         if ENABLE_LEON:
             cursor.execute('SET enable_leon=on')
+            if curr_file:
+                cursor.execute(f"SET leon_query_name='{curr_file}';")
         geqo_off = True
         result = _run_explain('explain(verbose, format json)',
                               sql,
