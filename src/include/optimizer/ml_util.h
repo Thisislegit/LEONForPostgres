@@ -15,6 +15,37 @@ static const char *START_FEEDBACK_MESSAGE = "{\"type\": \"reward\"}\n";
 static const char* START_PREDICTION_MESSAGE = "{\"type\": \"predict\"}\n";
 static const char* TERMINAL_MESSAGE = "{\"final\": true}\n";
 
+typedef struct LeonState
+{
+    MemoryContext leonContext;
+    // other state-related fields
+} LeonState;
+
+static int 
+custom_snprintf(char **buf, size_t *buf_size, const char *format, ...) {
+    va_list args;
+    int required, current_length, total_required;
+
+    current_length = strlen(*buf);
+    va_start(args, format);
+    required = vsnprintf(NULL, 0, format, args); // Get required space
+    va_end(args);
+
+    total_required = current_length + required + 1; // +1 for null terminator
+
+    if (total_required > *buf_size) {
+        *buf_size = total_required;
+        *buf = (char *) repalloc(*buf, *buf_size);
+    }
+
+    va_start(args, format);
+    vsnprintf(*buf + current_length, *buf_size - current_length, format, args);
+    va_end(args);
+
+    return total_required - 1; // Return total characters in buffer excluding null terminator
+}
+
+
 typedef struct
 {
 	List	   *rtable;			/* List of RangeTblEntry nodes */
@@ -50,7 +81,7 @@ static void get_calibrations(double calibrations[], uint32 queryid, int32_t leng
   		// Read the response from the server and store it in the calibrations array
       // one element is like "1.12," length 5
 	  // one element is like "1.12,0,6;"
-      char *response = (char *)calloc(9 * length, sizeof(char));
+	  char *response = (char *)palloc0(9 * length * sizeof(char));
       if (read(conn_fd, response, 9 * length * sizeof(char)) > 0) 
       {
 		char* unit;
@@ -96,7 +127,7 @@ static void get_calibrations(double calibrations[], uint32 queryid, int32_t leng
         elog(WARNING, "LEON could not read the response from the server.");
       }
     
-      free(response);
+      pfree(response);
 }
 
 
@@ -181,7 +212,7 @@ deparse_context_for_path(PlannerInfo *root, List *rtable_names)
 }
 
 static void
-debug_print_relids(PlannerInfo *root, Relids relids, FILE* stream)
+debug_print_relids(PlannerInfo *root, Relids relids, char **buf, size_t *buf_size)
 {
 	int			x;
 	bool		first = true;
@@ -190,18 +221,18 @@ debug_print_relids(PlannerInfo *root, Relids relids, FILE* stream)
 	while ((x = bms_next_member(relids, x)) >= 0)
 	{
 		if (!first)
-			fprintf(stream, " ");
+			custom_snprintf(buf, buf_size, " ");
 		if (x < root->simple_rel_array_size &&
 			root->simple_rte_array[x])
-			fprintf(stream, "%s", root->simple_rte_array[x]->eref->aliasname);
+			custom_snprintf(buf, buf_size, "%s", root->simple_rte_array[x]->eref->aliasname);
 		else
-			fprintf(stream, "%d", x);
+			custom_snprintf(buf, buf_size, "%d", x);
 		first = false;
 	}
 }
 
 void
-debug_print_joincond(PlannerInfo *root, RelOptInfo *rel, File* stream)
+debug_print_joincond(PlannerInfo *root, RelOptInfo *rel, char **stream, size_t *buf_size)
 {
 	ListCell   *lc;
 	List *rtable = root->parse->rtable;
@@ -232,10 +263,10 @@ debug_print_joincond(PlannerInfo *root, RelOptInfo *rel, File* stream)
 						bms_is_member(right_var->varno, rel->relids))
 					{	
 						if (!first)
-							fprintf(stream, ", ");
-						debug_print_expr(left_node, rtable, stream);
-						fprintf(stream, " %s ", ((opname != NULL) ? opname : "(invalid operator)"));
-						debug_print_expr(right_node, rtable, stream);
+							custom_snprintf(stream, buf_size, ", ");
+						debug_print_expr(left_node, rtable, stream, buf_size);
+						custom_snprintf(stream, buf_size, " %s ", ((opname != NULL) ? opname : "(invalid operator)"));
+						debug_print_expr(right_node, rtable, stream, buf_size);
 						first = false;
 					}
 				}
@@ -249,11 +280,11 @@ debug_print_joincond(PlannerInfo *root, RelOptInfo *rel, File* stream)
  *	  print an expression to a file
  */
 void
-debug_print_expr(const Node *expr, const List *rtable, FILE* stream)
+debug_print_expr(const Node *expr, const List *rtable, char **stream, size_t *buf_size)
 {
 	if (expr == NULL)
 	{
-		fprintf(stream, "<>");
+		custom_snprintf(stream, buf_size, "<>");
 		return;
 	}
 
@@ -289,7 +320,7 @@ debug_print_expr(const Node *expr, const List *rtable, FILE* stream)
 				}
 				break;
 		}
-		fprintf(stream, "%s.%s", relname, attname);
+		custom_snprintf(stream, buf_size, "%s.%s", relname, attname);
 	}
 	else if (IsA(expr, Const))
 	{
@@ -300,7 +331,7 @@ debug_print_expr(const Node *expr, const List *rtable, FILE* stream)
 
 		if (c->constisnull)
 		{
-			fprintf(stream, "NULL");
+			custom_snprintf(stream, buf_size, "NULL");
 			return;
 		}
 
@@ -308,7 +339,7 @@ debug_print_expr(const Node *expr, const List *rtable, FILE* stream)
 						  &typoutput, &typIsVarlena);
 
 		outputstr = OidOutputFunctionCall(typoutput, c->constvalue);
-		fprintf(stream, "\'%s\'", outputstr);
+		custom_snprintf(stream, buf_size, "\'%s\'", outputstr);
 		pfree(outputstr);
 	}
 	else if (IsA(expr, OpExpr))
@@ -319,14 +350,14 @@ debug_print_expr(const Node *expr, const List *rtable, FILE* stream)
 		opname = get_opname(e->opno);
 		if (list_length(e->args) > 1)
 		{
-			debug_print_expr(get_leftop((const Expr *) e), rtable,  stream);
-			fprintf(stream, " %s ", ((opname != NULL) ? opname : "(invalid operator)"));
-			debug_print_expr(get_rightop((const Expr *) e), rtable, stream);
+			debug_print_expr(get_leftop((const Expr *) e), rtable,  stream, buf_size);
+			custom_snprintf(stream, buf_size, " %s ", ((opname != NULL) ? opname : "(invalid operator)"));
+			debug_print_expr(get_rightop((const Expr *) e), rtable, stream, buf_size);
 		}
 		else
 		{
-			fprintf(stream, "%s ", ((opname != NULL) ? opname : "(invalid operator)"));
-			debug_print_expr(get_leftop((const Expr *) e), rtable, stream);
+			custom_snprintf(stream, buf_size, "%s ", ((opname != NULL) ? opname : "(invalid operator)"));
+			debug_print_expr(get_leftop((const Expr *) e), rtable, stream, buf_size);
 		}
 	}
 	else if (IsA(expr, FuncExpr))
@@ -336,29 +367,29 @@ debug_print_expr(const Node *expr, const List *rtable, FILE* stream)
 		ListCell   *l;
 
 		funcname = get_func_name(e->funcid);
-		fprintf(stream, "%s(", ((funcname != NULL) ? funcname : "(invalid function)"));
+		custom_snprintf(stream, buf_size, "%s(", ((funcname != NULL) ? funcname : "(invalid function)"));
 		foreach(l, e->args)
 		{
-			debug_print_expr(lfirst(l), rtable, stream);
+			debug_print_expr(lfirst(l), rtable, stream, buf_size);
 			if (lnext(e->args, l))
-				fprintf(stream, ",");
+				custom_snprintf(stream, buf_size, ",");
 		}
-		fprintf(stream, ")");
+		custom_snprintf(stream, buf_size, ")");
 	}
 	else if (IsA(expr, RelabelType))
  	{
 		const RelabelType *r = (const RelabelType*) expr;
 
-		debug_print_expr((Node *) r->arg, rtable, stream);
+		debug_print_expr((Node *) r->arg, rtable, stream, buf_size);
 	}
 	else if (IsA(expr, RangeTblRef))
 	{
 		int	varno = ((RangeTblRef *) expr)->rtindex;
 		RangeTblEntry *rte = rt_fetch(varno, rtable);
-		fprintf(stream, "RTE %d (%s)", varno, rte->eref->aliasname);
+		custom_snprintf(stream, buf_size, "RTE %d (%s)", varno, rte->eref->aliasname);
 	}
 	else
-		fprintf(stream, "unknown expr");
+		custom_snprintf(stream, buf_size, "unknown expr");
 }
 
 List *
@@ -388,7 +419,7 @@ delete_context(List *context)
 }
 
 static void
-debug_print_restrictclauses(PlannerInfo *root, List *clauses, List *context, FILE* stream)
+debug_print_restrictclauses(PlannerInfo *root, List *clauses, List *context, char **stream, size_t *buf_size)
 {
 	ListCell   *l;
 	foreach(l, clauses)
@@ -397,17 +428,17 @@ debug_print_restrictclauses(PlannerInfo *root, List *clauses, List *context, FIL
 		// char * str = deparse_expression(c->clause, context, true, false);
 		char * str = deparse_expression_pretty(c->clause, context, true,
 									 false, true, 0);
-		fprintf(stream, "%s", str);
+		custom_snprintf(stream, buf_size, "%s", str);
 		if (str)
 			pfree(str);
 		// pfree context
 		if (lnext(clauses, l))
-			fprintf(stream, ", ");
+			custom_snprintf(stream, buf_size, ", ");
 	}
 }
 
 static void
-debug_print_path(PlannerInfo *root, Path *path, int indent, FILE* stream)
+debug_print_path(PlannerInfo *root, Path *path, int indent, char **stream, size_t *buf_size)
 {
 	const char *ptype;
 	bool join = false;
@@ -582,13 +613,13 @@ debug_print_path(PlannerInfo *root, Path *path, int indent, FILE* stream)
 			break;
 	}
 
-  fprintf(stream, "{\"Node Type\": \"%s\",", ptype);
-  fprintf(stream, "\"Node Type ID\": \"%d\",", path->type);
+	custom_snprintf(stream, buf_size, "{\"Node Type\": \"%s\",", ptype);
+	custom_snprintf(stream, buf_size, "\"Node Type ID\": \"%d\",", path->type);
 	if (path->parent)
 	{
-		fprintf(stream, "\"Relation IDs\": \"");
-		debug_print_relids(root, path->parent->relids, stream);
-		fprintf(stream, "\",");
+		custom_snprintf(stream, buf_size, "\"Relation IDs\": \"");
+		debug_print_relids(root, path->parent->relids, stream, buf_size);
+		custom_snprintf(stream, buf_size, "\",");
 
 		// Get context
 		List *context = NIL;
@@ -596,59 +627,59 @@ debug_print_path(PlannerInfo *root, Path *path, int indent, FILE* stream)
 		if (path->parent->baserestrictinfo)
 		{	
 			context = create_context(root);
-			fprintf(stream, "\"Base Restrict Info\": \"");
-			debug_print_restrictclauses(root, path->parent->baserestrictinfo, context, stream);
-			fprintf(stream, "\",");
+			custom_snprintf(stream, buf_size, "\"Base Restrict Info\": \"");
+			debug_print_restrictclauses(root, path->parent->baserestrictinfo, context, stream, buf_size);
+			custom_snprintf(stream, buf_size, "\",");
 		}
 
 		if (path->parent->joininfo)
 		{	
 			if (!context)
 				context = create_context(root);
-			fprintf(stream, "\"Join Info\": \"");
-			debug_print_restrictclauses(root, path->parent->joininfo, context, stream);
-			fprintf(stream, "\",");
+			custom_snprintf(stream, buf_size, "\"Join Info\": \"");
+			debug_print_restrictclauses(root, path->parent->joininfo, context, stream, buf_size);
+			custom_snprintf(stream, buf_size, "\",");
 		}
 		if (context)
 			delete_context(context);
 	}
 	if (path->param_info)
 	{
-    	fprintf(stream, "\"Required Outer\": \"");
-		debug_print_relids(root, path->param_info->ppi_req_outer, stream);
-		fprintf(stream, "\",");
+    	custom_snprintf(stream, buf_size, "\"Required Outer\": \"");
+		debug_print_relids(root, path->param_info->ppi_req_outer, stream, buf_size);
+		custom_snprintf(stream, buf_size, "\",");
 	}
 	if (path->parent->reloptkind == RELOPT_JOINREL)
 	{	
-		fprintf(stream, "\"Join Cond\": \"");
-		debug_print_joincond(root, path->parent, stream);
-		fprintf(stream, "\",");
+		custom_snprintf(stream, buf_size, "\"Join Cond\": \"");
+		debug_print_joincond(root, path->parent, stream, buf_size);
+		custom_snprintf(stream, buf_size, "\",");
 	}
 	if (path->pathtarget)
 	{	
-		fprintf(stream, "\"Path Target\": \"");
+		custom_snprintf(stream, buf_size, "\"Path Target\": \"");
 		PathTarget *pathtarget = path->pathtarget;
         ListCell *lc_expr;
 		bool first = true;
         foreach(lc_expr, pathtarget->exprs) {
 			if (!first)
-				fprintf(stream, ", ");
+				custom_snprintf(stream, buf_size, ", ");
             Node *expr = (Node *) lfirst(lc_expr);
-            debug_print_expr(expr, root->parse->rtable, stream);
+            debug_print_expr(expr, root->parse->rtable, stream, buf_size);
 			first = false;
         }
-		fprintf(stream, "\",");
+		custom_snprintf(stream, buf_size, "\",");
 	}
 
-  fprintf(stream, "\"Startup Cost\": %f,", path->startup_cost);
-  fprintf(stream, "\"Total Cost\": %f,", path->total_cost);
-  fprintf(stream, "\"Plan Rows\": %f", path->rows);
+  custom_snprintf(stream, buf_size, "\"Startup Cost\": %f,", path->startup_cost);
+  custom_snprintf(stream, buf_size, "\"Total Cost\": %f,", path->total_cost);
+  custom_snprintf(stream, buf_size, "\"Plan Rows\": %f", path->rows);
 
 
 
 	// if (path->pathkeys)
 	// {
-	// 	fprintf(stream, "\"Pathkeys\": ");
+	// 	custom_snprintf(stream, buf_size, "\"Pathkeys\": ");
 	// 	print_pathkeys(path->pathkeys, root->parse->rtable);
 	// }
 
@@ -666,47 +697,48 @@ debug_print_path(PlannerInfo *root, Path *path, int indent, FILE* stream)
 		{
 			MergePath *mp = (MergePath *)path;
 
-			fprintf(stream, ", \"Sort Outer\": %d,", ((mp->outersortkeys) ? 1 : 0));
-			fprintf(stream, "\"Sort Inner\": %d,", ((mp->innersortkeys) ? 1 : 0));
-			fprintf(stream, "\"Materialize Inner\": %d", ((mp->materialize_inner) ? 1 : 0));
+			custom_snprintf(stream, buf_size, ", \"Sort Outer\": %d,", ((mp->outersortkeys) ? 1 : 0));
+			custom_snprintf(stream, buf_size, "\"Sort Inner\": %d,", ((mp->innersortkeys) ? 1 : 0));
+			custom_snprintf(stream, buf_size, "\"Materialize Inner\": %d", ((mp->materialize_inner) ? 1 : 0));
 		}
 
-    fprintf(stream, ", \"Plans\": [");
-		debug_print_path(root, jp->outerjoinpath, indent + 1, stream);
-    fprintf(stream, ", ");
-		debug_print_path(root, jp->innerjoinpath, indent + 1, stream);
-    fprintf(stream, "]");
+    custom_snprintf(stream, buf_size, ", \"Plans\": [");
+		debug_print_path(root, jp->outerjoinpath, indent + 1, stream, buf_size);
+    custom_snprintf(stream, buf_size, ", ");
+		debug_print_path(root, jp->innerjoinpath, indent + 1, stream, buf_size);
+    custom_snprintf(stream, buf_size, "]");
 	}
 
 	if (subpath)
 	{ 
 	// Plans or SubPlan
-    fprintf(stream, ", \"Plans\": [");
-		debug_print_path(root, subpath, indent + 1, stream);
-		fprintf(stream, "]");
+    custom_snprintf(stream, buf_size, ", \"Plans\": [");
+		debug_print_path(root, subpath, indent + 1, stream, buf_size);
+		custom_snprintf(stream, buf_size, "]");
 	}
 	
-  fprintf(stream, "}");
+  custom_snprintf(stream, buf_size, "}");
+}
+
+static char* plan_to_json(LeonState * state, PlannerInfo *root, Path* plan, char* leon_query_name) {
+
+	MemoryContext oldContext = MemoryContextSwitchTo(state->leonContext);
+    size_t buf_size = 1024;
+    char *buf = (char *) palloc0(buf_size);
+
+    custom_snprintf(&buf, &buf_size, "{\"QueryId\": \"%s\", \"Plan\": ", leon_query_name);
+    debug_print_path(root, plan, 0, &buf, &buf_size); 
+    custom_snprintf(&buf, &buf_size, "}\n");
+
+	MemoryContextSwitchTo(oldContext);
+    return buf; // buf will be freed by the caller
 }
 
 
+static bool should_leon_optimize(LeonState * state, int level, PlannerInfo * root, RelOptInfo * rel, char* leon_query_name) {
 
-static char* plan_to_json(PlannerInfo * root, Path* plan, char* leon_query_name) {
-  char* buf;
-  size_t json_size;
-  FILE* stream;
-  
-  stream = open_memstream(&buf, &json_size);
-  fprintf(stream, "{\"QueryId\": \"%s\",", leon_query_name);
-  fprintf(stream, "\"Plan\": ");
-  debug_print_path(root, plan, 0, stream);
-  fprintf(stream,"}\n");
-  fclose(stream);
-  
-  return buf;
-}
-
-static bool should_leon_optimize(int level, PlannerInfo * root, RelOptInfo * rel, char* leon_query_name) {
+	bool should_optimize = false;
+	MemoryContext oldContext = MemoryContextSwitchTo(state->leonContext);
 
 	int conn_fd = connect_to_leon(leon_host, leon_port);
 	if (conn_fd < 0) {
@@ -715,53 +747,53 @@ static bool should_leon_optimize(int level, PlannerInfo * root, RelOptInfo * rel
 	}
 	write_all_to_socket(conn_fd, START_SHOULD_OPT_MESSAGE);
 
-	char* buf;
-	size_t json_size;
-	FILE* stream;
+	size_t buf_size = 1024;
+	char *buf = (char *) palloc0(buf_size);
 
-  	stream = open_memstream(&buf, &json_size);
-	fprintf(stream, "{\"QueryId\": \"%s\",", leon_query_name);
-	fprintf(stream, "\"Relation IDs\": \"");
-	debug_print_relids(root, rel->relids, stream);
-	fprintf(stream, "\"}\n");
-  	fclose(stream);
+	custom_snprintf(&buf, &buf_size, "{\"QueryId\": \"%s\", \"Relation IDs\": \"", leon_query_name);
+	debug_print_relids(root, rel->relids, &buf, &buf_size);
+	custom_snprintf(&buf, &buf_size, "\"}\n");
 
 	write_all_to_socket(conn_fd, buf);
-	free(buf);
+	pfree(buf);
 	
 	write_all_to_socket(conn_fd, TERMINAL_MESSAGE);
 	shutdown(conn_fd, SHUT_WR);
 
-	char *response = (char *)calloc(5, sizeof(char));
+	char *response = (char *)palloc0(5 * sizeof(char));
 
 	if (read(conn_fd, response, 5) > 0) 
 	{
 		if (strcmp(response, "1") == 0)
-		{
-			free(response);
-			shutdown(conn_fd, SHUT_RDWR);
-			return true;
+		{	
+			should_optimize = true;
+			goto cleanup;
 		}
 		else if (strcmp(response, "0") == 0)
-		{
-			free(response);
-			shutdown(conn_fd, SHUT_RDWR);
-			return false;
+		{	
+			should_optimize = false;
+			goto cleanup;
 		}
 		else
 		{	// Show response
 			elog(WARNING, "LEON could not read the response: %s from the server.", response);
-			free(response);
-			shutdown(conn_fd, SHUT_RDWR);
-			return false;
+			should_optimize = false;
+			goto cleanup;
 		}
 	}
 	else
 	{
 		elog(WARNING, "LEON could not read the response from the server.");
-		shutdown(conn_fd, SHUT_RDWR);
-		return false;
+		should_optimize = false;
+		goto cleanup;
 	}
+
+cleanup:
+
+	pfree(response);
+	shutdown(conn_fd, SHUT_RDWR);
+	MemoryContextSwitchTo(oldContext);
+	return should_optimize;
 }
 
 #endif

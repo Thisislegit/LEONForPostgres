@@ -51,6 +51,7 @@
 #include "utils/lsyscache.h"
 
 #include "optimizer/ml_util.h"
+#include "utils/memutils.h"
 
 
 /* results of subquery_is_pushdown_safe */
@@ -2994,6 +2995,7 @@ standard_join_search(PlannerInfo *root, int levels_needed, List *initial_rels)
 	int			lev;
 	RelOptInfo *rel;
 	int conn_fd;
+	LeonState *leon_state;
 	/*
 	 * This function cannot be invoked recursively within any one planning
 	 * problem, so join_rel_level[] can't be in use already.
@@ -3015,15 +3017,15 @@ standard_join_search(PlannerInfo *root, int levels_needed, List *initial_rels)
 
 	root->join_rel_level[1] = initial_rels;
 
+	if (enable_leon)
+	{	
+	// When initializing
+	leon_state = palloc(sizeof(LeonState));
+	leon_state->leonContext = AllocSetContextCreate(CurrentMemoryContext,
+											"LeonContext",
+											ALLOCSET_DEFAULT_SIZES);
+	}
 
-	// if (enable_leon)
-	// {
-	// 	conn_fd = connect_to_leon(leon_host, leon_port);
-	// 	if (conn_fd < 0) {
-	// 		elog(WARNING, "Unable to connect to LEON server, reward for query will be dropped.");
-	// 		return;
-	// 	}
-	// }
 
 	for (lev = 2; lev <= levels_needed; lev++)
 	{
@@ -3063,7 +3065,7 @@ standard_join_search(PlannerInfo *root, int levels_needed, List *initial_rels)
 
 			bool Opt_rel = false;
 			if (enable_leon)
-				Opt_rel = should_leon_optimize(lev, root, rel, leon_query_name);
+				Opt_rel = should_leon_optimize(leon_state, lev, root, rel, leon_query_name);
 			if (enable_leon && Opt_rel)
 			{
 				ListCell *p;
@@ -3079,16 +3081,17 @@ standard_join_search(PlannerInfo *root, int levels_needed, List *initial_rels)
 				foreach(p, rel->savedpaths)
 				{
 					Path *path = (Path *)lfirst(p);
-					char* json_plan = plan_to_json(root, path, leon_query_name);
+					char* json_plan = plan_to_json(leon_state, root, path, leon_query_name);
 					write_all_to_socket(conn_fd, json_plan);
-					free(json_plan);
+					pfree(json_plan);
 				}
 				write_all_to_socket(conn_fd, TERMINAL_MESSAGE);
 
 				//Necessary Information?
 				shutdown(conn_fd, SHUT_WR);
 
-				double *calibrations = (double *)calloc(length, sizeof(double));
+				MemoryContext oldcontext = MemoryContextSwitchTo(leon_state->leonContext);
+				double *calibrations = (double *)palloc0(length * sizeof(double));
 				
 				// Read Response From LEON
 				get_calibrations(calibrations, lev, length, conn_fd);
@@ -3106,7 +3109,8 @@ standard_join_search(PlannerInfo *root, int levels_needed, List *initial_rels)
 				}
 				
 				Assert(curPosition == length);
-				free(calibrations);
+				pfree(calibrations);
+				MemoryContextSwitchTo(oldcontext);
 
 
 			}
@@ -3150,6 +3154,8 @@ standard_join_search(PlannerInfo *root, int levels_needed, List *initial_rels)
 	if (enable_leon && conn_fd > 0)
 	{
 		shutdown(conn_fd, SHUT_RDWR);
+		MemoryContextDelete(leon_state->leonContext);
+		pfree(leon_state);
 	}
 
 	/*

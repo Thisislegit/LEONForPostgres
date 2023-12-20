@@ -17,6 +17,7 @@ class LeonModel:
         if not isinstance(X, list):
             X = [X]
         X = [json.loads(x) if isinstance(x, str) else x for x in X]
+        print(X[0])
         # seqs = [get_plan_seq_adj(x['Plan']) for x in X]
         # print(seqs[0])
         # print(op_names)
@@ -60,6 +61,7 @@ class LeonJSONHandler(JSONTCPHandler):
                 self.request.sendall(response)
                 self.request.close()
             elif message_type == "should_opt":
+                print(self.__messages)
                 response = str("1").encode()
                 self.request.sendall(response)
                 self.request.close()
