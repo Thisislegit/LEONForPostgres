@@ -81,7 +81,7 @@ def getPG_latency(query, hint=None, ENABLE_LEON=False, timeout_limit=None, curr_
     if pg_latency == timeout_limit:
         pg_latency = 90000
     if ENABLE_LEON and json_dict == []:
-        json_dict = postgres.getPlans(query, hint,check_hint_used=False,ENABLE_LEON=ENABLE_LEON)[0][0][0]
+        json_dict = postgres.getPlans(query, hint,check_hint_used=False,ENABLE_LEON=ENABLE_LEON, curr_file=curr_file)[0][0][0]
         
     return pg_latency, json_dict
 
@@ -505,11 +505,24 @@ if __name__ == '__main__':
 
         # to ensure that all sent sqls are processed as messages before loading .pkl file
         same_actor = ray.get_actor('leon_server')
-        PKL_READY = ray.get(same_actor.complete_all_tasks.remote())
+        task_counter = ray.get_actor('counter')
+        # PKL_READY = ray.get(same_actor.complete_all_tasks.remote())
+        completed_tasks = ray.get(same_actor.GetCompletedTasks.remote())
+        recieved_task = ray.get(task_counter.GetRecievedTask.remote())
+        if completed_tasks == recieved_task:
+            PKL_READY = True
+        else:
+            PKL_READY = False
         while(not PKL_READY):
             time.sleep(0.1)
             print("waiting for PKL_READY ...")
-            PKL_READY = ray.get(same_actor.complete_all_tasks.remote())
+            completed_tasks = ray.get(same_actor.GetCompletedTasks.remote())
+            recieved_task = ray.get(task_counter.GetRecievedTask.remote())
+            if completed_tasks == recieved_task:
+                PKL_READY = True
+            else:
+                PKL_READY = False
+            # PKL_READY = ray.get(same_actor.complete_all_tasks.remote())
         
         start_time = time.time()
         # ++++ PHASE 2. ++++ get messages of a chunk, nodes, and experience
@@ -524,7 +537,6 @@ if __name__ == '__main__':
                         break
 
                     curr_dict = ray.get(dict_actor.get_dict.remote())
-                    print(curr_dict)
                     curr_sql_id = curr_dict[message[0]['QueryId']]
                     q_recieved_cnt = curr_file.index(curr_sql_id) # start to recieve equal sets from a new sql
                     if curr_QueryId != message[0]['QueryId']: # the QueryId of the first plan in the message
@@ -673,6 +685,8 @@ if __name__ == '__main__':
         end_time = time.time()
         logger.log_metrics({"Time/train_time": end_time - start_time}, step=my_step)
         my_step += 1
+        with open("./log/exp.pkl", 'wb') as f:
+            pickle.dump(Exp.OnlyGetExp(), f) 
         
 
 

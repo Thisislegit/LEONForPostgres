@@ -153,7 +153,8 @@ def Execute(sql, verbose=False, geqo_off=False, timeout_ms=None, cursor=None):
         else:
             raise e
     try:
-        _SetGeneticOptimizer('default', cursor)
+        pass
+        # _SetGeneticOptimizer('default', cursor)
     except psycopg2.InterfaceError as e:
         # This could happen if the server is in recovery, due to some expensive
         # queries just crashing the server (see the above exceptions).

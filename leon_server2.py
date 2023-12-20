@@ -23,6 +23,17 @@ import ray
 
 
 @ray.remote
+class TaskCounter:
+    def __init__(self):
+        self.recieved_task = 0
+
+    def Add_task(self):
+        self.recieved_task += 1
+    
+    def GetRecievedTask(self):
+        return self.recieved_task
+
+@ray.remote
 class FileWriter:
     def __init__(self, file_path):
         self.file_path = file_path
@@ -54,9 +65,12 @@ class FileWriter:
 
     def Add_task(self):
         self.recieved_task += 1
+
+    def GetCompletedTasks(self):
+        return self.completed_tasks
     
     def complete_all_tasks(self):
-        print(self.completed_tasks)
+        # print(self.completed_tasks)
         if self.completed_tasks == self.recieved_task:
             return True
         else:
@@ -104,6 +118,7 @@ class LeonModel:
         ray.init(namespace='server_namespace', _temp_dir="/data1/wyz/online/LEONForPostgres/log/ray") # ray should be init in sub process
         node_path = "./log/messages.pkl"
         self.writer_hander = FileWriter.options(name="leon_server").remote(node_path)
+        self.task_counter = TaskCounter.options(name="counter").remote()
         self.query_dict = QueryDict.options(name="querydict").remote()
         self.query_dict_flag = True
         self.eqset = None
@@ -224,7 +239,7 @@ class LeonModel:
         X = [json.loads(x) if isinstance(x, str) else x for x in X]
         # print(X)
         try:
-            ray.get(self.writer_hander.Add_task.remote()) 
+            self.task_counter.Add_task.remote()
             # self.writer_hander.recieved_task += 1 需要试一下能不能直接成员变量 +1?
             self.writer_hander.write_file.remote(X)
         except:
