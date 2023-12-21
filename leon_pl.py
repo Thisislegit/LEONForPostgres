@@ -34,8 +34,8 @@ Transformer_model = SeqFormer(
                         output_dim=1,
                         mlp_activation="ReLU",
                         transformer_activation="gelu",
-                        mlp_dropout=0.3,
-                        transformer_dropout=0.2,
+                        mlp_dropout=0.1,
+                        transformer_dropout=0.1,
                     )
 
 def load_sql(file_list: list):
@@ -81,7 +81,7 @@ def getPG_latency(query, hint=None, ENABLE_LEON=False, timeout_limit=None, curr_
     if pg_latency == timeout_limit:
         pg_latency = 90000
     if ENABLE_LEON and json_dict == []:
-        json_dict = postgres.getPlans(query, hint,check_hint_used=False,ENABLE_LEON=ENABLE_LEON, curr_file=curr_file)[0][0][0]
+        json_dict = postgres.getPlans(query, hint, check_hint_used=False, ENABLE_LEON=ENABLE_LEON, curr_file=curr_file)[0][0][0]
         
     return pg_latency, json_dict
 
@@ -685,7 +685,7 @@ if __name__ == '__main__':
         end_time = time.time()
         logger.log_metrics({"Time/train_time": end_time - start_time}, step=my_step)
         my_step += 1
-        with open("./log/exp.pkl", 'wb') as f:
+        with open("./log/exp_v1.pkl", 'wb') as f:
             pickle.dump(Exp.OnlyGetExp(), f) 
         
 
