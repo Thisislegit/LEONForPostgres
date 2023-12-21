@@ -1,3 +1,5 @@
+import sys
+sys.path.append('./')
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 import torch
@@ -6,25 +8,17 @@ import lightning.pytorch.callbacks as plc
 import torch.nn.functional as F
 import torch.nn as nn
 import os
-from util import postgres
-from util import pg_executor
-from util import postgres
-from util import envs
-from util import plans_lib
+
 import pytorch_lightning.loggers as pl_loggers
 import pickle
 import math
 import json
 from test_case import SeqFormer
-from test_case import get_plan_encoding, configs, load_json, get_op_name_to_one_hot, plan_parameters, add_numerical_scalers
-from leon_experience import Experience
+from test_case import configs
 import numpy as np
-import ray
-import time
 from argparse import ArgumentParser
 import copy
 import wandb
-import time
 import random
 
 DEVICE = 'cuda:2' if torch.cuda.is_available() else 'cpu'
@@ -206,25 +200,22 @@ def Getpair(exp):
 if __name__ == '__main__':
     with open('./log/exp.pkl', 'rb') as f:
         exp = pickle.load(f)
-    logger =  pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs', name="base", project='leon1')
+    logger =  pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs', name="base", project='leon3')
     prev_optimizer_state_dict = None
     model = load_model().to(DEVICE)
     callbacks = load_callbacks(logger=None)
     train_pairs = Getpair(exp)
-    logger.log_metrics({"train_pairs": len(train_pairs)}, step=my_step)
     print("len(train_pairs)" ,len(train_pairs))
     leon_dataset = prepare_dataset(train_pairs)
-    # ===== ITERATION OF CHUNKS ====
-    for my_step in range(100):
-        dataloader_train = DataLoader(leon_dataset, batch_size=256, shuffle=True, num_workers=0)
-        dataloader_val = DataLoader(leon_dataset, batch_size=256, shuffle=False, num_workers=0)
-        trainer = pl.Trainer(accelerator="gpu",
-                            devices=[3],
-                            max_epochs=100,
-                            callbacks=callbacks,
-                            logger=logger)
-        trainer.fit(model, dataloader_train, dataloader_val)
-        prev_optimizer_state_dict = trainer.optimizers[0].state_dict()
+    dataloader_train = DataLoader(leon_dataset, batch_size=256, shuffle=True, num_workers=0)
+    dataloader_val = DataLoader(leon_dataset, batch_size=256, shuffle=False, num_workers=0)
+    trainer = pl.Trainer(accelerator="gpu",
+                        devices=[2],
+                        max_epochs=100,
+                        callbacks=callbacks,
+                        logger=logger)
+    trainer.fit(model, dataloader_train, dataloader_val)
+    prev_optimizer_state_dict = trainer.optimizers[0].state_dict()
 
 
 

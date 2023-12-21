@@ -193,8 +193,8 @@ class LeonModel:
                 output_dim=1,
                 mlp_activation="ReLU",
                 transformer_activation="gelu",
-                mlp_dropout=0.3,
-                transformer_dropout=0.2,
+                mlp_dropout=0.1,
+                transformer_dropout=0.1,
                 ).to(DEVICE) # server.py 和 train.py 中的模型初始化也需要相同, 这里还没加上！！！
             torch.save(model, path)
         else:

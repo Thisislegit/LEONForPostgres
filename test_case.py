@@ -365,6 +365,7 @@ def get_op_name_to_one_hot(feature_statistics):
         op_name_to_one_hot[name][0][i] = 1
     return op_name_to_one_hot
 
+
 if __name__ == "__main__":
 
     statistics_file_path = "data/zero_shot_filted/statistics.json"

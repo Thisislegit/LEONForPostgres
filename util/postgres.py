@@ -350,6 +350,7 @@ def ParsePostgresPlanJson_1(json_dict, AliasToNames):
         curr_node.cost = cost
         # Only available if 'analyze' is set (actual execution).
         curr_node.actual_time_ms = json_dict.get('Actual Total Time')
+        curr_node._card = json_dict.get('Plan Rows')
         if 'Path Target' in json_dict:
             curr_node.info['select_exprs'] = json_dict['Path Target'].split(', ')
         # Special case.
