@@ -368,7 +368,7 @@ def get_op_name_to_one_hot(feature_statistics):
 
 if __name__ == "__main__":
 
-    statistics_file_path = "data/zero_shot_filted/statistics1.json"
+    statistics_file_path = "data/zero_shot_filted/statistics.json"
 
     feature_statistics = load_json(statistics_file_path)
     # add numerical scalers (cite from zero-shot)

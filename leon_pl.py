@@ -427,7 +427,7 @@ if __name__ == '__main__':
     print("Init workload and equal set keys")
     workload = envs.JoinOrderBenchmark(envs.JoinOrderBenchmark.Params())
     workload.workload_info.alias_to_names = postgres.GetAllAliasToNames(workload.workload_info.rel_ids)
-    statistics_file_path = "./statistics1.json"
+    statistics_file_path = "./statistics.json"
     feature_statistics = load_json(statistics_file_path)
     add_numerical_scalers(feature_statistics)
     op_name_to_one_hot = get_op_name_to_one_hot(feature_statistics)

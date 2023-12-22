@@ -130,7 +130,7 @@ class LeonModel:
         self.workload = envs.JoinOrderBenchmark(envs.JoinOrderBenchmark.Params())
         self.workload.workload_info.alias_to_names = postgres.GetAllAliasToNames(self.workload.workload_info.rel_ids)
         
-        statistics_file_path = "./statistics1.json"
+        statistics_file_path = "./statistics.json"
         self.feature_statistics = load_json(statistics_file_path)
         add_numerical_scalers(self.feature_statistics)
         self.op_name_to_one_hot = get_op_name_to_one_hot(self.feature_statistics)
