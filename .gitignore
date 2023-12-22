@@ -45,3 +45,4 @@ lib*.pc
 __pycache__/
 .vscode/**
 log/
+logs/
