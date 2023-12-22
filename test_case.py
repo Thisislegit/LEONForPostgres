@@ -193,15 +193,15 @@ def get_plan_encoding(
 
     # get loss mask
     # only for training
-    loss_mask = get_loss_mask(
-        seq_length,
-        configs["pad_length"],
-        configs["node_length"],
-        heights,
-        configs["loss_weight"],
-    )
+    # loss_mask = get_loss_mask(
+    #     seq_length,
+    #     configs["pad_length"],
+    #     configs["node_length"],
+    #     heights,
+    #     configs["loss_weight"],
+    # )
 
-    return seq_encoding, run_times, attention_mask, loss_mask, database_id # database_id无用
+    return seq_encoding, run_times, attention_mask, None, database_id # database_id无用
 
 
 # create SeqFormer
@@ -368,7 +368,7 @@ def get_op_name_to_one_hot(feature_statistics):
 
 if __name__ == "__main__":
 
-    statistics_file_path = "data/zero_shot_filted/statistics.json"
+    statistics_file_path = "data/zero_shot_filted/statistics1.json"
 
     feature_statistics = load_json(statistics_file_path)
     # add numerical scalers (cite from zero-shot)
