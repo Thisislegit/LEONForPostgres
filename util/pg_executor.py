@@ -16,10 +16,10 @@ from select import select
 
 
 database = "imdbload"
-user = "wyz"
-password = "wangyuze"
+user = "chenxu"
+password = ""
 host = "localhost"
-port = "1120"
+port = "5437"
 LOCAL_DSN = ""
 REMOTE_DSN = ""
 

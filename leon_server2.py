@@ -115,7 +115,7 @@ class LeonModel:
     def __init__(self):
         # 初始化
         self.__model = None
-        ray.init(namespace='server_namespace', _temp_dir="/data1/wyz/online/LEONForPostgres/log/ray") # ray should be init in sub process
+        ray.init(namespace='server_namespace', _temp_dir= "/data1/chenxu/projects" + "/log/ray") # ray should be init in sub process
         node_path = "./log/messages.pkl"
         self.writer_hander = FileWriter.options(name="leon_server").remote(node_path)
         self.task_counter = TaskCounter.options(name="counter").remote()
@@ -125,7 +125,7 @@ class LeonModel:
         self.workload = envs.JoinOrderBenchmark(envs.JoinOrderBenchmark.Params())
         self.workload.workload_info.alias_to_names = postgres.GetAllAliasToNames(self.workload.workload_info.rel_ids)
         
-        statistics_file_path = "/data1/wyz/online/LEONForPostgres/statistics.json"
+        statistics_file_path = "./statistics1.json"
         self.feature_statistics = load_json(statistics_file_path)
         add_numerical_scalers(self.feature_statistics)
         self.op_name_to_one_hot = get_op_name_to_one_hot(self.feature_statistics)

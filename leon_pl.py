@@ -45,7 +45,7 @@ def load_sql(file_list: list):
     """
     sqls = []
     for file_str in file_list:
-        sqlFile = '/data1/wyz/online/LEONForPostgres/job/' + file_str + '.sql'
+        sqlFile = './job/' + file_str + '.sql'
         if not os.path.exists(sqlFile):
             raise IOError("File Not Exists!")
         with open(sqlFile, 'r') as f:
@@ -388,8 +388,19 @@ class PL_Leon(pl.LightningModule):
         return optimizer
 
 if __name__ == '__main__':
+    pretrain = True
+    if pretrain:
+        # trainer = pl.Trainer(ckpt_path="./log/epoch=28-step=123685.ckpt")
+        checkpoint = torch.load("./log/epoch=28-step=123685.ckpt")
+        # Modify the keys in the state_dict
+        checkpoint['state_dict'] = \
+        {key.replace('model.', ''): value for key, value in checkpoint['state_dict'].items()}
+        # Load the transformed state_dict into your model
+        Transformer_model.load_state_dict(checkpoint['state_dict'])
+        torch.save(Transformer_model, "./log/model.pth")
+    
     # train_files = ['1a', '2a', '3a', '4a']
-    ray.init(address='auto', namespace='server_namespace', _temp_dir="/data1/wyz/online/LEONForPostgres/log/ray") # init only once
+    ray.init(address='auto', namespace='server_namespace', _temp_dir="/data1/chenxu/projects" + "/log/ray") # init only once
     dict_actor = ray.get_actor('querydict')
     train_files = ['1a', '1b', '1c', '1d', '2a', '2b', '2c', '2d', '3a', '3b', '3c', '4a',
                     '4b', '4c', '5a', '5b', '5c', '6a', '6b', '6c', '6d', '6e', '6f', '7a', 
@@ -414,7 +425,7 @@ if __name__ == '__main__':
     print("Init workload and equal set keys")
     workload = envs.JoinOrderBenchmark(envs.JoinOrderBenchmark.Params())
     workload.workload_info.alias_to_names = postgres.GetAllAliasToNames(workload.workload_info.rel_ids)
-    statistics_file_path = "/data1/wyz/online/LEONForPostgres/statistics.json"
+    statistics_file_path = "./statistics1.json"
     feature_statistics = load_json(statistics_file_path)
     add_numerical_scalers(feature_statistics)
     op_name_to_one_hot = get_op_name_to_one_hot(feature_statistics)
@@ -423,7 +434,7 @@ if __name__ == '__main__':
     retrain_count = 3
     min_leon_time = dict()
     max_query_latency1 = 0
-    logger =  pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs', name="10a", project='leon')
+    logger =  pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs', name="10a", project='leon2')
     my_step = 0
     
     prev_optimizer_state_dict = None

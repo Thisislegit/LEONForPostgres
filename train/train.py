@@ -13,6 +13,9 @@ import pytorch_lightning.loggers as pl_loggers
 import pickle
 import math
 import json
+import sys
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append("../")
 from test_case import SeqFormer
 from test_case import configs
 import numpy as np
@@ -24,12 +27,12 @@ import random
 DEVICE = 'cuda:2' if torch.cuda.is_available() else 'cpu'
 Transformer_model = SeqFormer(
                         input_dim=configs['node_length'],
-                        hidden_dim=128,
+                        hidden_dim=256,
                         output_dim=1,
                         mlp_activation="ReLU",
                         transformer_activation="gelu",
-                        mlp_dropout=0.3,
-                        transformer_dropout=0.2,
+                        mlp_dropout=0.1,
+                        transformer_dropout=0.1,
                     )
 
 def load_model(prev_optimizer_state_dict=None):
@@ -198,11 +201,11 @@ def Getpair(exp):
     return pairs
 
 if __name__ == '__main__':
-    with open('./log/exp.pkl', 'rb') as f:
+    with open('../log/exp.pkl', 'rb') as f:
         exp = pickle.load(f)
-    logger =  pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs', name="base", project='leon3')
+    logger =  pl_loggers.WandbLogger(save_dir=os.getcwd() + '/../logs', name="base", project='leon3')
     prev_optimizer_state_dict = None
-    model = load_model().to(DEVICE)
+    model = load_model()
     callbacks = load_callbacks(logger=None)
     train_pairs = Getpair(exp)
     print("len(train_pairs)" ,len(train_pairs))
