@@ -168,7 +168,7 @@ def getPlans(sql, hint, verbose=False, check_hint_used=False, ENABLE_LEON=False,
                               hint,
                               verbose,
                               geqo_off=geqo_off,
-                              cursor=cursor).result
+                              cursor=cursor,timeout_ms=0).result
 
         _SetGeneticOptimizer('default', cursor)  # Restores.
     # if check_hint_used:
