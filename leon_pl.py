@@ -400,7 +400,9 @@ if __name__ == '__main__':
         torch.save(Transformer_model, "./log/model.pth")
     
     # train_files = ['1a', '2a', '3a', '4a']
-    ray.init(address='auto', namespace='server_namespace', _temp_dir="/data1/chenxu/projects" + "/log/ray") # init only once
+    with open ("./conf/namespace.txt", "r") as file:
+        namespace = file.read().replace('\n', '')
+    ray.init(address='auto', namespace=namespace, _temp_dir="/data1/chenxu/projects" + "/log/ray") # init only once
     dict_actor = ray.get_actor('querydict')
     train_files = ['1a', '1b', '1c', '1d', '2a', '2b', '2c', '2d', '3a', '3b', '3c', '4a',
                     '4b', '4c', '5a', '5b', '5c', '6a', '6b', '6c', '6d', '6e', '6f', '7a', 

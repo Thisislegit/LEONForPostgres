@@ -20,7 +20,12 @@ from leon_experience import *
 import json
 import pickle
 import ray
+import uuid
 
+GenerateUniqueNameSpace = lambda: str(uuid.uuid4())
+namespace = GenerateUniqueNameSpace()
+with open('./conf/namespace.txt', 'w') as f:
+    f.write(namespace)
 
 @ray.remote
 class TaskCounter:
@@ -115,7 +120,7 @@ class LeonModel:
     def __init__(self):
         # 初始化
         self.__model = None
-        ray.init(namespace='server_namespace', _temp_dir= "/data1/chenxu/projects" + "/log/ray") # ray should be init in sub process
+        ray.init(namespace='server_namespace_1', _temp_dir= "/data1/chenxu/projects" + "/log/ray") # ray should be init in sub process
         node_path = "./log/messages.pkl"
         self.writer_hander = FileWriter.options(name="leon_server").remote(node_path)
         self.task_counter = TaskCounter.options(name="counter").remote()
