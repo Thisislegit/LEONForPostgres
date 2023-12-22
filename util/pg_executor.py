@@ -14,12 +14,16 @@ from select import select
 # JOB/IMDB.
 # LOCAL_DSN = "postgres://psycopg:psycopg@localhost/imdb"
 
+from config import read_config
+conf = read_config(section='PostgreSQL')
 
-database = "imdbload"
-user = "chenxu"
-password = ""
-host = "localhost"
-port = "5437"
+print("PostgreSQL config:")
+
+database = conf['database']
+user = conf['user']
+password = conf['password']
+host = conf['host']
+port = conf['port']
 LOCAL_DSN = ""
 REMOTE_DSN = ""
 
