@@ -568,7 +568,10 @@ if __name__ == '__main__':
                                     if node2.actual_time_ms is not None:
                                         c_plan[0].info['latency'] = node2.actual_time_ms
                                     else:
-                                        c_plan[0].info['latency'] = 90000
+                                        if c_plan[0].info.get('latency') is None:
+                                            hint_node = plans_lib.FilterScansOrJoins(c_node.Copy())
+                                            c_plan[0].info['latency'], _ = getPG_latency(hint_node.info['sql_str'], hint_node.hint_str(), ENABLE_LEON=False, timeout_limit=(pg_time1[q_recieved_cnt] * 3)) # timeout 10s
+
                                     # print('actual_time_ms', node2.actual_time_ms)
                                     # hint_node = plans_lib.FilterScansOrJoins(c_node.Copy())
                                     # hint_node.info['latency'], _ = getPG_latency(hint_node.info['sql_str'], hint_node.hint_str(), ENABLE_LEON=False, timeout_limit=pg_time) # timeout 10s
