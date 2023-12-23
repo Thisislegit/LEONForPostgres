@@ -237,7 +237,10 @@ class Node(object):
                with_filters=True,
                with_select_exprs=False):
         # Join and filter predicates.
-        joins = self.KeepRelevantJoins(all_join_conds)
+        if all_join_conds == ['']:
+            joins = []
+        else:
+            joins = self.KeepRelevantJoins(all_join_conds)
         if with_filters:
             filters = self.GetFilters()
         else:
