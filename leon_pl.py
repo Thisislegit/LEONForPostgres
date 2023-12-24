@@ -118,6 +118,7 @@ def get_calibrations(model, seqs, attns, IF_TRAIN):
         with torch.no_grad():
             for i in range(cost_iter):
                 cali = model.model(seqs, attns) # cali.shape [# of plan, pad_length] cali 是归一化后的基数估计
+
                 if i == 0:
                     cali_all = cali[:, 0].unsqueeze(1) # [# of plan] -> [# of plan, 1] cali_all plan （cost_iter次）基数估计（归一化后）结果
                 else:
@@ -278,8 +279,7 @@ if __name__ == '__main__':
     model_path = "./log/model.pth"
     message_path = "./log/messages.pkl"
     prev_optimizer_state_dict = None
-    model = load_model(model_path).to(DEVICE)
-
+    model = load_model(model_path)
     
     Exp = Experience(eq_set=initEqSet())
     print("Init workload and equal set keys")
@@ -451,7 +451,7 @@ if __name__ == '__main__':
                                     else:
                                         if c_plan[0].info.get('latency') is None:
                                             hint_node = plans_lib.FilterScansOrJoins(c_node.Copy())
-                                            c_plan[0].info['latency'], _ = getPG_latency(hint_node.info['sql_str'], hint_node.hint_str(), ENABLE_LEON=False, timeout_limit=(pg_time1[q_recieved_cnt] * 5)) # timeout 10s
+                                            c_plan[0].info['latency'], _ = getPG_latency(hint_node.info['sql_str'], hint_node.hint_str(), ENABLE_LEON=False, timeout_limit=(pg_time1[q_recieved_cnt] * 3)) # timeout 10s
 
                                     # print('actual_time_ms', node2.actual_time_ms)
                                     # hint_node = plans_lib.FilterScansOrJoins(c_node.Copy())
@@ -467,6 +467,7 @@ if __name__ == '__main__':
                     ##################################################################
                     pct = 0.05 # 执行 percent 比例的 plan
                     costs = torch.tensor(getNodesCost(nodes)).to(DEVICE)
+                    model.model.to(DEVICE)
                     cali_all = get_calibrations(model, encoded_plans, attns, IF_TRAIN)
                     ucb_idx = get_ucb_idx(cali_all, costs)
                     costs_index = torch.argsort(costs, descending=False)
@@ -502,11 +503,11 @@ if __name__ == '__main__':
                         if not Exp.isCache(eqKey, a_plan): # 该行放 get latency 前面 ！！！
                             hint_node = plans_lib.FilterScansOrJoins(a_node.Copy())
                             # print(hint_node.hint_str(), hint_node.info['sql_str'])
-                            a_plan[0].info['latency'], _ = getPG_latency(hint_node.info['sql_str'], hint_node.hint_str(), ENABLE_LEON=False, timeout_limit=(pg_time1[q_recieved_cnt] * 5)) # timeout 10s(pg_time1[q_recieved_cnt] * 3)
+                            a_plan[0].info['latency'], _ = getPG_latency(hint_node.info['sql_str'], hint_node.hint_str(), ENABLE_LEON=False, timeout_limit=(pg_time1[q_recieved_cnt] * 3)) # timeout 10s(pg_time1[q_recieved_cnt] * 3)
                             Exp.AppendExp(eqKey, a_plan)
                         if not Exp.isCache(eqKey, b_plan): # 该行放 get latency 前面 ！！！
                             hint_node = plans_lib.FilterScansOrJoins(b_node.Copy())
-                            b_plan[0].info['latency'], _ = getPG_latency(hint_node.info['sql_str'], hint_node.hint_str(), ENABLE_LEON=False, timeout_limit=(pg_time1[q_recieved_cnt] * 5)) # timeout 10s
+                            b_plan[0].info['latency'], _ = getPG_latency(hint_node.info['sql_str'], hint_node.hint_str(), ENABLE_LEON=False, timeout_limit=(pg_time1[q_recieved_cnt] * 3)) # timeout 10s
                             Exp.AppendExp(eqKey, b_plan)
                         
 

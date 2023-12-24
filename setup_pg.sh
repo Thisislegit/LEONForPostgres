@@ -21,5 +21,5 @@ cd "$PREFIX_DIR"
 # 重启 PostgreSQL
 ./bin/pg_ctl -D ./data restart
 
-cd "./conf"
+cd "/data1/wyz/online/LEONForPostgres/conf"
 python pre_warm.py
