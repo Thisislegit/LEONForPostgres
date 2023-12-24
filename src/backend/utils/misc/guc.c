@@ -3575,6 +3575,17 @@ static struct config_int ConfigureNamesInt[] =
 		check_client_connection_check_interval, NULL, NULL
 	},
 
+	{
+		{"leon_port", PGC_USERSET, QUERY_TUNING_COST,
+			gettext_noop("Leon Port in python"),
+			NULL,
+			GUC_EXPLAIN
+		},
+		&leon_port,
+		9999, 1111, INT16_MAX,
+		NULL, NULL, NULL
+	},
+
 	/* End-of-list marker */
 	{
 		{NULL, 0, 0, NULL, NULL}, NULL, 0, 0, 0, NULL, NULL, NULL

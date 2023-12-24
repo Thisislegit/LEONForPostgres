@@ -5,8 +5,6 @@
 #include <string.h>
 #include "utils/ruleutils.h"
 
-static char* leon_host = "localhost";
-static int leon_port = 9999;
 
 // JSON tags for sending to the leon server.
 static const char* START_QUERY_MESSAGE = "{\"type\": \"query\"}\n";
@@ -19,6 +17,8 @@ typedef struct LeonState
 {
     MemoryContext leonContext;
     // other state-related fields
+	char *leon_host;
+	int leon_port;
 } LeonState;
 
 static int 
@@ -427,7 +427,7 @@ debug_print_restrictclauses(PlannerInfo *root, List *clauses, List *context, cha
 		RestrictInfo *c = lfirst(l);
 		// char * str = deparse_expression(c->clause, context, true, false);
 		char * str = deparse_expression_pretty(c->clause, context, true,
-									 false, true, 0);
+									 false, 0, 0);
 		custom_snprintf(stream, buf_size, "%s", str);
 		if (str)
 			pfree(str);
@@ -740,7 +740,7 @@ static bool should_leon_optimize(LeonState * state, int level, PlannerInfo * roo
 	bool should_optimize = false;
 	MemoryContext oldContext = MemoryContextSwitchTo(state->leonContext);
 
-	int conn_fd = connect_to_leon(leon_host, leon_port);
+	int conn_fd = connect_to_leon(state->leon_host, state->leon_port);
 	if (conn_fd < 0) {
 		elog(WARNING, "Unable to connect to LEON server, reward for query will be dropped.");
 		exit(0);

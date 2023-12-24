@@ -46,3 +46,4 @@ __pycache__/
 .vscode/**
 log/
 logs/
+conf/namespace.txt

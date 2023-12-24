@@ -2,6 +2,7 @@ import json
 import struct
 import socketserver
 from utils import *
+import re
 
 class LeonModel:
 
@@ -39,11 +40,21 @@ class JSONTCPHandler(socketserver.BaseRequestHandler):
                 json_msg = str_buf[:null_loc].strip()
                 str_buf = str_buf[null_loc + 1:]
                 if json_msg:
-                    try:
+                    try:    
+                        def fix_json_msg(json):
+                            pattern = r'ANY \((.*?):text\[\]\)'
+                            matches = re.findall(pattern, json)
+                            for match in matches:
+                                extracted_string = match
+                                cleaned_string = extracted_string.replace('"', '')
+                                json = json.replace(extracted_string, cleaned_string)
+                            return json
+                        json_msg = fix_json_msg(json_msg)
                         if self.handle_json(json.loads(json_msg)):
                             break
                     except json.decoder.JSONDecodeError:
-                        print("Error decoding JSON:", json_msg)
+                        print("Error decoding JSON:", repr(json_msg))
+                        self.handle_json([])
                         break
 
 class LeonJSONHandler(JSONTCPHandler):
