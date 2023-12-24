@@ -45,6 +45,7 @@ class FileWriter:
         self.completed_tasks = 0
         self.recieved_task = 0
         self.RELOAD = True
+        self.eq_summary = dict()
         # self.eqset = ['cast_info,company_name,movie_companies,title', 'company_name,movie_companies,title']
         # self.eqset = ['company_name,movie_companies', 'company_type,movie_companies', 'company_type,movie_companies,title']
         # self.eqset = ['an,chn,ci,cn,mc,n,rt,t', 'ci,k,mk,n,t', 'a1,ci,cn,mc,n1,rt,t', 'cn,ct,it,it2,kt,mc,mi,miidx,t', 'an,chn,ci,cn,it,mc,mi,n,rt,t', 'cn,ct,k,lt,mc,mk,ml,t', 'an,ci,it,lt,ml,n,pi,t', 'it,k,mi_idx,mk,t']
@@ -84,11 +85,12 @@ class FileWriter:
     def load_model(self):
         temp = self.RELOAD
         self.RELOAD = False
-        return temp , self.eqset
+        return temp , self.eqset, self.eq_summary
     
-    def reload_model(self, eqset):
+    def reload_model(self, eqset, eq_summary):
         self.RELOAD = True
         self.eqset = eqset
+        self.eq_summary = eq_summary
 
     
 @ray.remote
@@ -120,7 +122,8 @@ class LeonModel:
     def __init__(self):
         # 初始化
         self.__model = None
-        ray.init(namespace=namespace, _temp_dir= "/data1/chenxu/projects" + "/log/ray") # ray should be init in sub process
+        context = ray.init(namespace=namespace, _temp_dir= "/data1/chenxu/projects" + "/log/ray") # ray should be init in sub process
+        print(context.address_info)
         node_path = "./log/messages.pkl"
         self.writer_hander = FileWriter.options(name="leon_server").remote(node_path)
         self.task_counter = TaskCounter.options(name="counter").remote()
@@ -134,6 +137,8 @@ class LeonModel:
         self.feature_statistics = load_json(statistics_file_path)
         add_numerical_scalers(self.feature_statistics)
         self.op_name_to_one_hot = get_op_name_to_one_hot(self.feature_statistics)
+
+        self.eq_summary = dict()
         print("finish init")
             
 
@@ -213,7 +218,7 @@ class LeonModel:
         return model
     
     def infer_equ(self, messages):
-        temp, self.eqset = ray.get(self.writer_hander.load_model.remote())
+        temp, self.eqset, self.eq_summary = ray.get(self.writer_hander.load_model.remote())
         if temp:
             print(self.eqset)
             self.__model = self.load_model("./log/model.pth")
@@ -225,6 +230,7 @@ class LeonModel:
             self.query_dict_flag = ray.get(self.query_dict.write_query_id.remote(X[0]['QueryId']))
         out = ','.join(sorted(Relation_IDs.split()))
         if out in self.eqset:
+            self.current_eq_summary = self.eq_summary.get(out)
             print(X[0]['QueryId'], out)
             return '1'
         else:
@@ -249,6 +255,13 @@ class LeonModel:
             self.writer_hander.write_file.remote(X)
         except:
             print("The ray writer_hander cannot write file.")
+
+        # Validation Accuracy
+        # TODO: 可能不在Eq Summary里面？确实有可能，有些等价类没有被训练到，因为没有收集message
+        if self.current_eq_summary is not None and \
+            self.current_eq_summary[0] < 0.9:
+            return ';'.join(['1.00,1,0' for _ in X])
+            
 
         # 编码
         seqs, attns = self.encoding(X)
