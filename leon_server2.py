@@ -122,8 +122,7 @@ class LeonModel:
     def __init__(self):
         # 初始化
         self.__model = None
-        context = ray.init(namespace=namespace, _temp_dir= "/data1/chenxu/projects" + "/log/ray") # ray should be init in sub process
-        print(context.address_info)
+        ray.init(namespace=namespace, _temp_dir= os.getcwd() + "/log/ray") # ray should be init in sub process
         node_path = "./log/messages.pkl"
         self.writer_hander = FileWriter.options(name="leon_server").remote(node_path)
         self.task_counter = TaskCounter.options(name="counter").remote()
@@ -199,7 +198,7 @@ class LeonModel:
         if not os.path.exists(path):
             model = SeqFormer(
                 input_dim=configs['node_length'],
-                hidden_dim=128,
+                hidden_dim=256,
                 output_dim=1,
                 mlp_activation="ReLU",
                 transformer_activation="gelu",

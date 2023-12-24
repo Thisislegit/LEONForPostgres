@@ -31,7 +31,7 @@ import random
 DEVICE = 'cuda:3' if torch.cuda.is_available() else 'cpu'
 Transformer_model = SeqFormer(
                         input_dim=configs['node_length'],
-                        hidden_dim=128,
+                        hidden_dim=256,
                         output_dim=1,
                         mlp_activation="ReLU",
                         transformer_activation="gelu",
@@ -156,6 +156,8 @@ def PlanToNode(workload, plans):
         # print("plans[{}]\n".format(i))
         node = postgres.ParsePostgresPlanJson_1(plans[i], workload.workload_info.alias_to_names)
         if i == 0:
+            if node.info['join_cond'] == ['']:
+                return None
             temp = node.to_sql(node.info['join_cond'], with_select_exprs=True)
             node.info['sql_str'] = temp
         node.info['sql_str'] = temp
@@ -220,15 +222,17 @@ def collects(finnode: plans_lib.Node, workload, exp: Experience, timeout, currTo
             cur_join_ids = ','.join(
                 sorted([i.split(" AS ")[-1] for i in currentNode.leaf_ids()]))
             join_ids_to_append.append(cur_join_ids)
-
     for join_id in join_ids_to_append:
         exp_key = Exp.GetExpKeys()
         temp = join_id.split(',') # sort
+        if len(temp) <= 3:
+            return
         join_id = ','.join(sorted(temp))
         if join_id not in exp_key:
             print('degradation collect:', join_id)
             exp.AddEqSet(join_id, query_id)
-            break
+            return True
+    return False
 
 
 def load_callbacks(logger):
@@ -427,7 +431,7 @@ class PL_Leon(pl.LightningModule):
         return optimizer
 
 if __name__ == '__main__':
-    pretrain = True
+    pretrain = False
     if pretrain:
         # trainer = pl.Trainer(ckpt_path="./log/epoch=28-step=123685.ckpt")
         checkpoint = torch.load("./log/epoch=28-step=123685.ckpt")
@@ -441,8 +445,7 @@ if __name__ == '__main__':
     # train_files = ['1a', '2a', '3a', '4a']
     with open ("./conf/namespace.txt", "r") as file:
         namespace = file.read().replace('\n', '')
-    context = ray.init(address='auto', namespace=namespace, _temp_dir="/data1/chenxu/projects" + "/log/ray") # init only once
-    print(context.address_info)
+    ray.init(address='auto', namespace=namespace, _temp_dir=os.getcwd() + "/log/ray") # init only once
     dict_actor = ray.get_actor('querydict')
     train_files = ['1a', '1b', '1c', '1d', '2a', '2b', '2c', '2d', '3a', '3b', '3c', '4a',
                     '4b', '4c', '5a', '5b', '5c', '6a', '6b', '6c', '6d', '6e', '6f', '7a', 
@@ -476,9 +479,10 @@ if __name__ == '__main__':
     retrain_count = 3
     min_leon_time = dict()
     max_query_latency1 = 0
-    logger =  pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs', name="10a", project='leon2')
+    logger =  pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs', name="添加新的等价类获取message", project='leon')
     my_step = 0
-    
+    same_actor = ray.get_actor('leon_server')
+    task_counter = ray.get_actor('counter')
     prev_optimizer_state_dict = None
     # ===== ITERATION OF CHUNKS ====
     ch_start_idx = 0 # the start idx of the current chunk in train_files
@@ -526,7 +530,11 @@ if __name__ == '__main__':
             # if retrain_count >= 5:
                 curNode = Nodes[q_send_cnt]
                 if curNode:
-                    collects(curNode, workload, Exp, None, tf_time[q_send_cnt], sqls_chunk[q_send_cnt], curr_file[q_send_cnt])
+                    collect_flag = collects(curNode, workload, Exp, None, tf_time[q_send_cnt], sqls_chunk[q_send_cnt], curr_file[q_send_cnt])
+                    if collect_flag:
+                        ray.get(same_actor.reload_model.remote(eqset.keys()))
+                        json_dict = postgres.getPlans(sqls_chunk[q_send_cnt], None, check_hint_used=False, ENABLE_LEON=True, curr_file=curr_file)[0][0][0]
+
         ##########################################################
         leon_node = []
         for node in Nodes:
@@ -557,8 +565,7 @@ if __name__ == '__main__':
 
 
         # to ensure that all sent sqls are processed as messages before loading .pkl file
-        same_actor = ray.get_actor('leon_server')
-        task_counter = ray.get_actor('counter')
+        
         # PKL_READY = ray.get(same_actor.complete_all_tasks.remote())
         completed_tasks = ray.get(same_actor.GetCompletedTasks.remote())
         recieved_task = ray.get(task_counter.GetRecievedTask.remote())
@@ -600,6 +607,8 @@ if __name__ == '__main__':
                     
                     # STEP 1) get node
                     nodes = PlanToNode(workload, message)
+                    if nodes is None:
+                        continue
                     encoded_plans, _, attns, _ = plans_encoding(message) # encoding. plan -> plan_encoding / seqs torch.Size([26, 1, 760])
 
                     # STEP 2) pick node to execute
@@ -623,7 +632,7 @@ if __name__ == '__main__':
                                     else:
                                         if c_plan[0].info.get('latency') is None:
                                             hint_node = plans_lib.FilterScansOrJoins(c_node.Copy())
-                                            c_plan[0].info['latency'], _ = getPG_latency(hint_node.info['sql_str'], hint_node.hint_str(), ENABLE_LEON=False, timeout_limit=(pg_time1[q_recieved_cnt] * 3)) # timeout 10s
+                                            c_plan[0].info['latency'], _ = getPG_latency(hint_node.info['sql_str'], hint_node.hint_str(), ENABLE_LEON=False, timeout_limit=(pg_time1[q_recieved_cnt] * 5)) # timeout 10s
 
                                     # print('actual_time_ms', node2.actual_time_ms)
                                     # hint_node = plans_lib.FilterScansOrJoins(c_node.Copy())
@@ -677,11 +686,11 @@ if __name__ == '__main__':
                         if not Exp.isCache(eqKey, a_plan): # 该行放 get latency 前面 ！！！
                             hint_node = plans_lib.FilterScansOrJoins(a_node.Copy())
                             # print(hint_node.hint_str(), hint_node.info['sql_str'])
-                            a_plan[0].info['latency'], _ = getPG_latency(hint_node.info['sql_str'], hint_node.hint_str(), ENABLE_LEON=False, timeout_limit=(pg_time1[q_recieved_cnt] * 3)) # timeout 10s
+                            a_plan[0].info['latency'], _ = getPG_latency(hint_node.info['sql_str'], hint_node.hint_str(), ENABLE_LEON=False, timeout_limit=(pg_time1[q_recieved_cnt] * 5)) # timeout 10s(pg_time1[q_recieved_cnt] * 3)
                             Exp.AppendExp(eqKey, a_plan)
                         if not Exp.isCache(eqKey, b_plan): # 该行放 get latency 前面 ！！！
                             hint_node = plans_lib.FilterScansOrJoins(b_node.Copy())
-                            b_plan[0].info['latency'], _ = getPG_latency(hint_node.info['sql_str'], hint_node.hint_str(), ENABLE_LEON=False, timeout_limit=(pg_time1[q_recieved_cnt] * 3)) # timeout 10s
+                            b_plan[0].info['latency'], _ = getPG_latency(hint_node.info['sql_str'], hint_node.hint_str(), ENABLE_LEON=False, timeout_limit=(pg_time1[q_recieved_cnt] * 5)) # timeout 10s
                             Exp.AppendExp(eqKey, b_plan)
                         
 
@@ -747,7 +756,7 @@ if __name__ == '__main__':
         end_time = time.time()
         logger.log_metrics({"Time/train_time": end_time - start_time}, step=my_step)
         my_step += 1
-        with open("./log/exp_v1.pkl", 'wb') as f:
+        with open("./log/exp_v2.pkl", 'wb') as f:
             pickle.dump(Exp.OnlyGetExp(), f) 
         
 

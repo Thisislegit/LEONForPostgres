@@ -237,7 +237,7 @@ class SeqFormer(nn.Module):
         elif mlp_activation == "LeakyReLU":
             self.mlp_activation = nn.LeakyReLU()
         # self.mlp_hidden_dims = [128, 64, 32]
-        self.mlp_hidden_dims = [128, 64, 1]
+        self.mlp_hidden_dims = [256, 128, 1]
         self.mlp = nn.Sequential(
             *[
                 nn.Linear(self.node_length, self.mlp_hidden_dims[0]),
@@ -263,8 +263,6 @@ class SeqFormer(nn.Module):
     def forward(self, x, attn_mask=None):
         # change x shape to (batch, seq_len, input_size) from (batch, len)
         # one node is 18 bits
-        # x = x.view(x.shape[0], self.node_length, -1)
-        # x = x.transpose(1,2)
         x = x.view(x.shape[0], -1, self.node_length)
         # attn_mask = attn_mask.repeat(4,1,1)
         out = self.tranformer_encoder(x, mask=attn_mask)
