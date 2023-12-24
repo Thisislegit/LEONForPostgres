@@ -236,7 +236,7 @@ class LeonModel:
 
 
     def predict_plan(self, messages):
-      
+        
         # json解析
         print("Predicting plan for ", len(messages))
         X = messages
@@ -259,6 +259,7 @@ class LeonModel:
         # TODO: 可能不在Eq Summary里面？确实有可能，有些等价类没有被训练到，因为没有收集message
         if self.current_eq_summary is None or \
             self.current_eq_summary[0] < 0.9:
+            print("out")
             return ';'.join(['1.00,1,0' for _ in X])
             
 
@@ -267,6 +268,7 @@ class LeonModel:
 
         # 推理
         cali_strs = self.inference(seqs, attns)
+        print("out")
         return cali_strs
 
 class JSONTCPHandler(socketserver.BaseRequestHandler):
