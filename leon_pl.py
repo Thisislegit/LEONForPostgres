@@ -28,7 +28,7 @@ import copy
 import wandb
 import time
 import random
-import tqdm
+from tqdm import tqdm
 
 DEVICE = 'cuda:3' if torch.cuda.is_available() else 'cpu'
 Transformer_model = SeqFormer(
