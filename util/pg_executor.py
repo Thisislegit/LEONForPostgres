@@ -26,6 +26,8 @@ host = conf['host']
 port = conf['port']
 LOCAL_DSN = ""
 REMOTE_DSN = ""
+conf = read_config(section='leon')
+leon_port = conf['Port']
 
 # TPC-H.
 # LOCAL_DSN = "postgres://psycopg:psycopg@localhost/tpch-sf10"
@@ -81,7 +83,9 @@ def Cursor():
     conn.set_session(autocommit=True)
     try:
         with conn.cursor() as cursor:
+            cursor.execute(f"set leon_port={leon_port};")
             cursor.execute("load 'pg_hint_plan';")
+
             yield cursor
     finally:
         conn.close()

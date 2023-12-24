@@ -193,7 +193,6 @@ def GetLatencyFromPg(sql, hint, ENABLE_LEON, verbose=False, check_hint_used=Fals
             if curr_file:
                 cursor.execute(f"SET leon_query_name='{curr_file}';")
         else:
-            cursor.execute("load 'pg_hint_plan';")
             cursor.execute('SET enable_leon=off;')
         geqo_off = True
         result = _run_explain('explain(verbose, format json, analyze)',
