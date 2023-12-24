@@ -1,0 +1,176 @@
+import torch
+import lightning.pytorch as pl
+import lightning.pytorch.callbacks as plc
+import torch.nn.functional as F
+import torch.nn as nn
+
+class PL_Leon(pl.LightningModule):
+    def __init__(self, model, optimizer_state_dict=None, learning_rate=0.001):
+        super(PL_Leon, self).__init__()
+        self.model = model
+        self.optimizer_state_dict = optimizer_state_dict
+        self.learning_rate = 0.001
+        self.eq_summary = dict()
+        self.outputs = []
+
+    def forward(self, plans, attns):
+        return self.model(plans, attns)[:, 0]
+
+    def getBatchPairsLoss(self, labels, costs1, costs2, encoded_plans1, encoded_plans2, attns1, attns2):
+        """
+        batch_pairs: a batch of train pairs
+        return. a batch of loss
+        """
+        loss_fn = nn.BCELoss()
+        # step 1. retrieve encoded_plans and attns from pairs
+
+
+        # step 2. calculate batch_cali and calied_cost
+        # 0是前比后大 1是后比前大
+        batsize = costs1.shape[0]
+        encoded_plans = torch.cat((encoded_plans1, encoded_plans2), dim=0)
+        attns = torch.cat((attns1, attns2), dim=0)
+        cali = self(encoded_plans, attns) # cali.shape [# of plan, pad_length] cali 是归一化后的基数估计
+        costs = torch.cat((costs1, costs2), dim=0)
+        # print(costs1)
+        # print(costs2)
+        # print(labels)
+        # print(cali)
+        calied_cost = torch.log(costs) * cali
+        try:
+            sigmoid = F.sigmoid(-(calied_cost[:batsize] - calied_cost[batsize:]))
+            loss = loss_fn(sigmoid, labels.float())
+        except:
+            print(calied_cost, sigmoid)
+        # print(loss)
+        with torch.no_grad():
+            prediction = torch.round(sigmoid)
+            # print(prediction)
+            accuracy = torch.sum(prediction == labels).item() / len(labels)
+        # print(softm[:, 1].shape, labels.shape)
+        
+        
+        return loss, accuracy
+
+
+    def training_step(self, batch):
+        labels, costs1, costs2, encoded_plans1, encoded_plans2, attns1, attns2 = batch
+        loss, acc  = self.getBatchPairsLoss(labels, costs1, costs2, encoded_plans1, encoded_plans2, attns1, attns2)
+        self.log_dict({'t_loss': loss, 't_acc': acc}, on_epoch=True)
+        return loss
+
+    def validation_step(self, batch):
+        if isinstance(batch, dict):
+            return self.__validation_step_impl(batch)
+        labels, costs1, costs2, encoded_plans1, encoded_plans2, attns1, attns2 = batch
+        loss, acc  = self.getBatchPairsLoss(labels, costs1, costs2, encoded_plans1, encoded_plans2, attns1, attns2)
+        self.log_dict({'v_loss': loss, 'v_acc': acc}, on_epoch=True)
+        return loss
+
+    def __validation_step_impl(self, batch):
+        def __make_pairs(join_tables, calibrations: torch.tensor, costs, latency):
+            assert len(set(join_tables)) == 1
+
+            labels = []
+            costs1 = []
+            costs2 = []
+            calibrations1 = []
+            calibrations2 = []
+
+            for i in range(len(join_tables)):
+                for j in range(i + 1, len(join_tables)):
+                    if max(latency[i], latency[j]) / min(latency[i], latency[j]) < 1.2:
+                        continue
+                    if latency[i] > latency[j]:
+                        label = 0
+                    else:
+                        label = 1
+
+                    labels.append(label)
+                    costs1.append(costs[i])
+                    costs2.append(costs[j])
+                    calibrations1.append(calibrations[i])
+                    calibrations2.append(calibrations[j])
+
+            # make tensor
+            labels = torch.tensor(labels, device=self.device)
+            costs1 = torch.tensor(costs1, device=self.device)
+            costs2 = torch.tensor(costs2, device=self.device)
+            
+            try:
+                calibrations1 = torch.stack(calibrations1)
+                calibrations2 = torch.stack(calibrations2)
+            except:
+                calibrations1 = None
+                calibrations2 = None
+            return labels, costs1, costs2, calibrations1, calibrations2
+
+        plans = batch['plan_encode']
+        attns = batch['att_encode']
+        costs = batch['cost']
+        labels = batch['latency']
+        join_tables = batch['join_tables']
+        eq = ','.join(sorted(join_tables[0].split(' ')))
+
+        # plans = torch.cat(plans, dim=0)
+        calibrations = self(plans, attns)
+        labels, costs1, costs2, calibrations1, calibrations2 = __make_pairs(join_tables, calibrations, costs, labels)
+
+        if calibrations1 is None or calibrations2 is None:
+            self.eq_summary[eq] = (0, 0) # 准确率 pair数
+            return None, None, None
+        
+        loss_fn = nn.BCELoss()
+
+        calied_cost_1 = torch.log(costs1) * calibrations1
+        calied_cost_2 = torch.log(costs2) * calibrations2
+
+        sigmoid = F.sigmoid(-(calied_cost_1 - calied_cost_2))
+        loss = loss_fn(sigmoid, labels.double())
+
+        prediction = torch.round(sigmoid)
+        accuracy = torch.sum(prediction == labels).item() / len(labels)
+
+        self.eq_summary[eq] = (accuracy, len(labels))
+        self.outputs.append((accuracy, loss, len(labels)))
+        return accuracy, loss, len(labels)
+
+    def on_validation_epoch_end(self):
+        accuracy = 0
+        total = 0
+        loss = 0
+        for output in self.outputs:
+            if output is not None:
+                accuracy += output[0] * output[2]
+                loss += output[1] * output[2]
+                total += output[2]
+        if total == 0:
+            return
+        
+        accuracy /= total
+        loss /= total
+        self.log_dict({'v_acc': accuracy, 'v_loss': loss}, on_epoch=True)
+
+        # clear outputs
+        self.outputs.clear()
+        return accuracy
+        
+
+    def configure_optimizers(self):
+        optimizer = torch.optim.AdamW(self.model.parameters(), lr=0.001)
+        if self.optimizer_state_dict is not None:
+            # Checks the params are the same.
+            # 'params': [139581476513104, ...]
+            curr = optimizer.state_dict()['param_groups'][0]['params']
+            prev = self.optimizer_state_dict['param_groups'][0]['params']
+            assert curr == prev, (curr, prev)
+            # print('Loading last iter\'s optimizer state.')
+            # Prev optimizer state's LR may be stale.
+            optimizer.load_state_dict(self.optimizer_state_dict)
+            for param_group in optimizer.param_groups:
+                param_group['lr'] = self.learning_rate
+            assert optimizer.state_dict(
+            )['param_groups'][0]['lr'] == self.learning_rate
+            # print('LR', self.learning_rate)
+        return optimizer
+

@@ -93,8 +93,8 @@ class Experience:
         return self.__eqSet
 
     def _getEqNum(self):
-        return len(self.GetEqSet())
-        # return sum(value[0] < 90000 for value in self.GetEqSet().values())
+        # return len(self.GetEqSet())
+        return sum(value.opt_time != 0 for value in self.GetEqSet().values())
 
     def GetPlanNum(self):
         num = 0
@@ -165,7 +165,7 @@ class Experience:
             """
             Remove sets from all_set if their query_ids contain common elements with sql_id.
             """
-            updated_set = [item for item in all_set if not any(x in sql_id for x in item[1].query_ids)]
+            updated_set = [item for item in all_set if not (any(x in sql_id for x in item[1].query_ids) or item[1].opt_time == 0)]
             return updated_set
         allSet = remove_matching_sets(allSet, sql_id)
         deletenum = min(int(EqNum * 0.3), len(allSet))

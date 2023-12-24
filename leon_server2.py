@@ -31,12 +31,34 @@ with open('./conf/namespace.txt', 'w') as f:
 class TaskCounter:
     def __init__(self):
         self.recieved_task = 0
+        self.RELOAD = True
+        self.eq_summary = dict()
+        self.eqset = []
+        self.online_flag = False # True表示要message False表示不要
 
     def Add_task(self):
         self.recieved_task += 1
     
     def GetRecievedTask(self):
         return self.recieved_task
+    
+    def load_model(self):
+        temp = self.RELOAD
+        self.RELOAD = False
+        return temp , self.eqset, self.eq_summary
+    
+    def reload_model(self, eqset, eq_summary):
+        self.RELOAD = True
+        self.eqset = eqset
+        self.eq_summary = eq_summary
+
+    def GetOnline(self):
+        return self.online_flag
+    
+    def WriteOnline(self, flag: bool):
+        self.online_flag = flag
+    
+
 
 @ray.remote
 class FileWriter:
@@ -44,21 +66,6 @@ class FileWriter:
         self.file_path = file_path
         self.completed_tasks = 0
         self.recieved_task = 0
-        self.RELOAD = True
-        self.eq_summary = dict()
-        # self.eqset = ['cast_info,company_name,movie_companies,title', 'company_name,movie_companies,title']
-        # self.eqset = ['company_name,movie_companies', 'company_type,movie_companies', 'company_type,movie_companies,title']
-        # self.eqset = ['an,chn,ci,cn,mc,n,rt,t', 'ci,k,mk,n,t', 'a1,ci,cn,mc,n1,rt,t', 'cn,ct,it,it2,kt,mc,mi,miidx,t', 'an,chn,ci,cn,it,mc,mi,n,rt,t', 'cn,ct,k,lt,mc,mk,ml,t', 'an,ci,it,lt,ml,n,pi,t', 'it,k,mi_idx,mk,t']
-        self.eqset = []
-        # self.eqset = {'an,mc': [90000, 90000, 2.0], 'cn,mc': [2356.123, 2449.776, 1.0397487737270081], 'n,t': [90000, 90000, 2.0], 'chn,mc': [90000, 90000, 2.0], 'ci,n': [2356.123, 2449.776, 1.0397487737270081], 'an,ci': [2356.123, 2449.776, 1.0397487737270081], 'an,chn': [90000, 90000, 2.0], 'ci,mc': [2356.123, 2449.776, 1.0397487737270081], 'chn,ci': [2356.123, 2449.776, 1.0397487737270081], 'an,n': [2356.123, 2449.776, 1.0397487737270081], 'cn,rt': [90000, 90000, 2.0], 'ci,t': [2356.123, 2449.776, 1.0397487737270081], 'chn,t': [90000, 90000, 2.0], 'mc,t': [2356.123, 2449.776, 1.0397487737270081], 'n,rt': [90000, 90000, 2.0], 'chn,n': [90000, 90000, 2.0], 'mc,n': [90000, 90000, 2.0], 'cn,n': [90000, 90000, 2.0], 'an,cn': [90000, 90000, 2.0], 'an,rt': [90000, 90000, 2.0], 'chn,cn': [90000, 90000, 2.0], 'chn,rt': [90000, 90000, 2.0], 'an,t': [90000, 90000, 2.0], 'ci,cn': [90000, 90000, 2.0], 'mc,rt': [90000, 90000, 2.0], 'rt,t': [90000, 90000, 2.0], 'cn,t': [90000, 90000, 2.0], 'chn,ci,mc,n,rt': [2356.123, 2449.776, 1.0397487737270081], 'chn,ci,cn,mc,n,rt': [2356.123, 2449.776, 1.0397487737270081], 'chn,ci,cn,mc,n,rt,t': [2356.123, 2449.776, 1.0397487737270081]}
-        # self.eqset = {'ci,n': [2356.123, 2449.776, 1.0397487737270081], 'chn,ci,mc,n,rt': [2356.123, 2449.776, 1.0397487737270081], 'chn,ci,cn,mc,n,rt': [2356.123, 2449.776, 1.0397487737270081], 'chn,ci,cn,mc,n,rt,t': [2356.123, 2449.776, 1.0397487737270081]}
-        # self.eqset = ['chn,ci,cn,mc,n,rt,t', 'an,ci,cn,mc,n,rt,t', 'an,chn,cn,mc,n,rt,t', 'an,chn,ci,mc,n,rt,t', 'an,chn,ci,cn,mc,n,rt', 'an,chn,ci,cn,mc,n,t']
-        # self.eqset = ["chn,ci,cn,mc,n,rt,t", "an,ci,cn,mc,n,rt,t", "an,chn,cn,mc,n,rt,t", "an,chn,ci,mc,n,rt,t", "an,chn,ci,cn,n,rt,t", "an,chn,ci,cn,mc,rt,t",
-        #        "an,chn,ci,cn,mc,n,t", "an,chn,ci,cn,mc,n,rt", "cn,mc"]
-        # self.eqset = ["an,chn,ci,cn,mc,n,rt,t", "ci,k,mk,n,t", "a1,ci,cn,mc,n1,rt,t"]
-        # self.eqset = ['title,movie_keyword,keyword', 'kind_type,title,comp_cast_type,complete_cast,movie_companies', 'kind_type,title,comp_cast_type,complete_cast,movie_companies,company_name', 'movie_companies,company_name', 'movie_companies,company_name,title',
-                # 'movie_companies,company_name,title,aka_title', 'company_name,movie_companies,title,cast_info', 'name,aka_name', 'name,aka_name,cast_info', 'info_type,movie_info_idx', 'company_type,movie_companies',
-                # 'company_type,movie_companies,title', 'company_type,movie_companies,title,movie_info', 'movie_companies,company_name', 'keyword,movie_keyword', 'keyword,movie_keyword,movie_info_idx']
 
     def write_file(self, nodes):
         try:
@@ -82,15 +89,7 @@ class FileWriter:
         else:
             return False
     
-    def load_model(self):
-        temp = self.RELOAD
-        self.RELOAD = False
-        return temp , self.eqset, self.eq_summary
     
-    def reload_model(self, eqset, eq_summary):
-        self.RELOAD = True
-        self.eqset = eqset
-        self.eq_summary = eq_summary
 
     
 @ray.remote
@@ -217,7 +216,7 @@ class LeonModel:
         return model
     
     def infer_equ(self, messages):
-        temp, self.eqset, self.eq_summary = ray.get(self.writer_hander.load_model.remote())
+        temp, self.eqset, self.eq_summary = ray.get(self.task_counter.load_model.remote())
         if temp:
             print(self.eqset)
             self.__model = self.load_model("./log/model.pth")
@@ -249,15 +248,16 @@ class LeonModel:
         X = [json.loads(x) if isinstance(x, str) else x for x in X]
         # print(X)
         try:
-            self.task_counter.Add_task.remote()
-            # self.writer_hander.recieved_task += 1 需要试一下能不能直接成员变量 +1?
-            self.writer_hander.write_file.remote(X)
+            if ray.get(self.task_counter.GetOnline.remote()):
+                self.task_counter.Add_task.remote()
+                # self.writer_hander.recieved_task += 1 需要试一下能不能直接成员变量 +1?
+                self.writer_hander.write_file.remote(X)
         except:
             print("The ray writer_hander cannot write file.")
 
         # Validation Accuracy
         # TODO: 可能不在Eq Summary里面？确实有可能，有些等价类没有被训练到，因为没有收集message
-        if self.current_eq_summary is not None and \
+        if self.current_eq_summary is None or \
             self.current_eq_summary[0] < 0.9:
             return ';'.join(['1.00,1,0' for _ in X])
             
