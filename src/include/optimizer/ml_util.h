@@ -5,6 +5,11 @@
 #include <string.h>
 #include "utils/ruleutils.h"
 
+<<<<<<< HEAD
+=======
+static char* leon_host = "localhost";
+static int leon_port = 9999;
+>>>>>>> 10994ca69b (add message when collect a eqset)
 
 // JSON tags for sending to the leon server.
 static const char* START_QUERY_MESSAGE = "{\"type\": \"query\"}\n";
