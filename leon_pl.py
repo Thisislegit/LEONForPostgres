@@ -17,6 +17,7 @@ import math
 import json
 from test_case import SeqFormer
 from test_case import get_plan_encoding, configs, load_json, get_op_name_to_one_hot, plan_parameters, add_numerical_scalers
+from util.dataset import LeonDataset, prepare_dataset, BucketBatchSampler, BucketDataset
 from leon_experience import Experience
 import numpy as np
 import ray
@@ -230,68 +231,14 @@ def collects(finnode: plans_lib.Node, workload, exp: Experience, timeout, currTo
             break
 
 
-# create dataset
-class LeonDataset(Dataset):
-    def __init__(self, labels, costs1, costs2, encoded_plans1, encoded_plans2, attns1, attns2):
-        self.labels = labels
-        self.costs1 = costs1
-        self.costs2 = costs2
-        self.encoded_plans1 = encoded_plans1
-        self.encoded_plans2 = encoded_plans2
-        self.attns1 = attns1
-        self.attns2 = attns2
-
-    def __len__(self):
-        return len(self.labels)
-
-    def __getitem__(self, idx):
-        return (self.labels[idx],
-                self.costs1[idx],
-                self.costs2[idx],
-                self.encoded_plans1[idx],
-                self.encoded_plans2[idx],
-                self.attns1[idx],
-                self.attns2[idx])
-    
-def prepare_dataset(pairs):
-    labels = []
-    costs1 = []
-    costs2 = []
-    encoded_plans1 = []
-    encoded_plans2 = []
-    attns1 = []
-    attns2 = []
-    for pair in pairs:
-        if pair[0][0].info['latency'] > pair[1][0].info['latency']:
-            label = 0
-        else:
-            label = 1
-        labels.append(label)
-        costs1.append(pair[0][0].cost)
-        costs2.append(pair[1][0].cost)
-        encoded_plans1.append(pair[0][1])
-        encoded_plans2.append(pair[1][1])
-        attns1.append(pair[0][2])
-        attns2.append(pair[1][2])
-    labels = torch.tensor(labels)
-    costs1 = torch.tensor(costs1)
-    costs2 = torch.tensor(costs2)
-    encoded_plans1 = torch.stack(encoded_plans1)
-    encoded_plans2 = torch.stack(encoded_plans2)
-    attns1 = torch.stack(attns1)
-    attns2 = torch.stack(attns2)
-    dataset = LeonDataset(labels, costs1, costs2, encoded_plans1, encoded_plans2, attns1, attns2)
-    return dataset
-
-
-
 def load_callbacks(logger):
     callbacks = []
     callbacks.append(plc.EarlyStopping(
         monitor='v_acc',
         mode='max',
         patience=3,
-        min_delta=0.001
+        min_delta=0.001,
+        check_on_train_epoch_end=False
     ))
     if logger:
         callbacks.append(plc.ModelCheckpoint(
@@ -314,10 +261,11 @@ class PL_Leon(pl.LightningModule):
         self.model = model
         self.optimizer_state_dict = optimizer_state_dict
         self.learning_rate = 0.001
+        self.eq_summary = dict()
+        self.outputs = []
 
-
-    def forward(self, batch_pairs):
-        pass
+    def forward(self, plans, attns):
+        return self.model(plans, attns)[:, 0]
 
     def getBatchPairsLoss(self, labels, costs1, costs2, encoded_plans1, encoded_plans2, attns1, attns2):
         """
@@ -333,8 +281,7 @@ class PL_Leon(pl.LightningModule):
         batsize = costs1.shape[0]
         encoded_plans = torch.cat((encoded_plans1, encoded_plans2), dim=0)
         attns = torch.cat((attns1, attns2), dim=0)
-        cali = self.model(encoded_plans, attns) # cali.shape [# of plan, pad_length] cali 是归一化后的基数估计
-        cali = cali[:, 0]
+        cali = self(encoded_plans, attns) # cali.shape [# of plan, pad_length] cali 是归一化后的基数估计
         costs = torch.cat((costs1, costs2), dim=0)
         # print(costs1)
         # print(costs2)
@@ -364,10 +311,102 @@ class PL_Leon(pl.LightningModule):
         return loss
 
     def validation_step(self, batch):
+        if isinstance(batch, dict):
+            return self.__validation_step_impl(batch)
+
         labels, costs1, costs2, encoded_plans1, encoded_plans2, attns1, attns2 = batch
         loss, acc  = self.getBatchPairsLoss(labels, costs1, costs2, encoded_plans1, encoded_plans2, attns1, attns2)
         self.log_dict({'v_loss': loss, 'v_acc': acc}, on_epoch=True)
         return loss
+
+    def __validation_step_impl(self, batch):
+        def __make_pairs(join_tables, calibrations: torch.tensor, costs, latency):
+            assert len(set(join_tables)) == 1
+
+            labels = []
+            costs1 = []
+            costs2 = []
+            calibrations1 = []
+            calibrations2 = []
+
+            for i in range(len(join_tables)):
+                for j in range(i + 1, len(join_tables)):
+                    if max(latency[i], latency[j]) / min(latency[i], latency[j]) < 1.2:
+                        continue
+                    if latency[i] > latency[j]:
+                        label = 0
+                    else:
+                        label = 1
+
+                    labels.append(label)
+                    costs1.append(costs[i])
+                    costs2.append(costs[j])
+                    calibrations1.append(calibrations[i])
+                    calibrations2.append(calibrations[j])
+
+            # make tensor
+            labels = torch.tensor(labels, device=self.device)
+            costs1 = torch.tensor(costs1, device=self.device)
+            costs2 = torch.tensor(costs2, device=self.device)
+            
+            try:
+                calibrations1 = torch.stack(calibrations1)
+                calibrations2 = torch.stack(calibrations2)
+            except:
+                calibrations1 = None
+                calibrations2 = None
+            return labels, costs1, costs2, calibrations1, calibrations2
+
+        plans = batch['plan_encode']
+        attns = batch['att_encode']
+        costs = batch['cost']
+        labels = batch['latency']
+        join_tables = batch['join_tables']
+        eq = ','.join(sorted(join_tables[0].split(' ')))
+
+        # plans = torch.cat(plans, dim=0)
+        calibrations = self(plans, attns)
+        labels, costs1, costs2, calibrations1, calibrations2 = __make_pairs(join_tables, calibrations, costs, labels)
+
+        if calibrations1 is None or calibrations2 is None:
+            self.eq_summary[eq] = (0, 0)
+            return None, None, None
+        
+        loss_fn = nn.BCELoss()
+
+        calied_cost_1 = torch.log(costs1) * calibrations1
+        calied_cost_2 = torch.log(costs2) * calibrations2
+
+        sigmoid = F.sigmoid(-(calied_cost_1 - calied_cost_2))
+        loss = loss_fn(sigmoid, labels.double())
+
+        prediction = torch.round(sigmoid)
+        accuracy = torch.sum(prediction == labels).item() / len(labels)
+
+        self.eq_summary[eq] = (accuracy, len(labels))
+        self.outputs.append((accuracy, loss, len(labels)))
+        return accuracy, loss, len(labels)
+
+    def on_validation_epoch_end(self):
+        accuracy = 0
+        total = 0
+        loss = 0
+        for output in self.outputs:
+            if output is not None:
+                accuracy += output[0] * output[2]
+                loss += output[1] * output[2]
+                total += output[2]
+        if total == 0:
+            return
+        
+        accuracy /= total
+        loss /= total
+        self.log_dict({'v_acc': accuracy, 'v_loss': loss}, on_epoch=True)
+
+        # clear outputs
+        self.outputs.clear()
+        return accuracy
+        
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.model.parameters(), lr=0.001)
@@ -402,7 +441,8 @@ if __name__ == '__main__':
     # train_files = ['1a', '2a', '3a', '4a']
     with open ("./conf/namespace.txt", "r") as file:
         namespace = file.read().replace('\n', '')
-    ray.init(address='auto', namespace=namespace, _temp_dir="/data1/chenxu/projects" + "/log/ray") # init only once
+    context = ray.init(address='auto', namespace=namespace, _temp_dir="/data1/chenxu/projects" + "/log/ray") # init only once
+    print(context.address_info)
     dict_actor = ray.get_actor('querydict')
     train_files = ['1a', '1b', '1c', '1d', '2a', '2b', '2c', '2d', '3a', '3b', '3c', '4a',
                     '4b', '4c', '5a', '5b', '5c', '6a', '6b', '6c', '6d', '6e', '6f', '7a', 
@@ -676,7 +716,10 @@ if __name__ == '__main__':
         if len(train_pairs) > 256:
             leon_dataset = prepare_dataset(train_pairs)
             dataloader_train = DataLoader(leon_dataset, batch_size=256, shuffle=True, num_workers=0)
-            dataloader_val = DataLoader(leon_dataset, batch_size=256, shuffle=False, num_workers=0)
+            # dataloader_val = DataLoader(leon_dataset, batch_size=256, shuffle=False, num_workers=0)
+            dataset_val = BucketDataset(Exp.OnlyGetExp(), keys=Exp.GetEqSetKeys())
+            batch_sampler = BucketBatchSampler(dataset_val.buckets, batch_size=1)
+            dataloader_val = DataLoader(dataset_val, batch_sampler=batch_sampler)
             model = load_model(model_path, prev_optimizer_state_dict).to(DEVICE)
             callbacks = load_callbacks(logger=None)
             trainer = pl.Trainer(accelerator="gpu",
@@ -687,10 +730,13 @@ if __name__ == '__main__':
             trainer.fit(model, dataloader_train, dataloader_val)
             prev_optimizer_state_dict = trainer.optimizers[0].state_dict()
 
+        print("*"*20)
+        print("Current Accuracy For Each EqSet: ", model.eq_summary)
+        print("*"*20)
         ch_start_idx = ch_start_idx + chunk_size
         # save model
         torch.save(model.model, model_path)
-        ray.get(same_actor.reload_model.remote(eqset.keys()))
+        ray.get(same_actor.reload_model.remote(eqset.keys(), model.eq_summary))
         # 模型更新需要通知到server.py
         # clear pkl
         if os.path.exists(message_path):
