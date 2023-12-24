@@ -121,7 +121,8 @@ class LeonModel:
     def __init__(self):
         # 初始化
         self.__model = None
-        ray.init(namespace=namespace, _temp_dir= '/data1/chenxu/project' + "/log/ray") # ray should be init in sub process
+        context = ray.init(namespace=namespace, _temp_dir= '/data1/chenxu/projects' + "/log/ray") # ray should be init in sub process  
+        print(context.address_info)
         node_path = "./log/messages.pkl"
         self.writer_hander = FileWriter.options(name="leon_server").remote(node_path)
         self.task_counter = TaskCounter.options(name="counter").remote()
