@@ -28,6 +28,7 @@ import copy
 import wandb
 import time
 import random
+import tqdm
 
 DEVICE = 'cuda:3' if torch.cuda.is_available() else 'cpu'
 Transformer_model = SeqFormer(
@@ -475,7 +476,7 @@ if __name__ == '__main__':
                     # print("num_to_exe", num_to_exe)
                     # STEP 3) execute with ENABLE_LEON=False and add exp
                     # 经验 [[logcost, sql, hint, latency, [query_vector, node], join, joinids], ...]
-                    for i in range(num_to_exe):
+                    for i in tqdm(range(num_to_exe)):
                         # if i < 3: # 后续删掉！！这里只是为了节省代码运行时间！！！！
                         node_idx = ucb_idx[i] # 第 i 大ucb 的 node idx
                         cost_index = costs_index[i]
