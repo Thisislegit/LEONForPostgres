@@ -19,6 +19,7 @@ from test_case import SeqFormer
 from test_case import get_plan_encoding, configs, load_json, get_op_name_to_one_hot, plan_parameters, add_numerical_scalers
 from util.dataset import LeonDataset, prepare_dataset, BucketBatchSampler, BucketDataset
 from leon_experience import Experience
+from util.model import PL_Leon
 import numpy as np
 import ray
 import time
@@ -193,26 +194,7 @@ def initEqSet():
 
     return equ_set
 
-# def collects(finnode: plans_lib.Node, workload, exp: Experience, timeout, currTotalLatency, sql):
-#     join_ids_to_append = []
-#     allPlans = [finnode]
-#     while (allPlans):
-#         currentNode = allPlans.pop(0)
-#         allPlans.extend(currentNode.children)
-#         if currentNode.IsJoin() and (currentNode.actual_time_ms > 0.6 * currTotalLatency):
-#             cur_join_ids = ','.join(
-#                 sorted([i.split(" AS ")[-1] for i in currentNode.leaf_ids()]))
-#             join_ids_to_append.append(cur_join_ids)
-
-#     first_join_ids = join_ids_to_append.pop(0)
-#     print('degradation collect:', first_join_ids)
-#     exp.AddEqSet(first_join_ids)
-#     if join_ids_to_append:
-#         last_join_ids = join_ids_to_append.pop(-1)
-#         print('degradation collect:', last_join_ids)
-#         exp.AddEqSet(last_join_ids)
-
-def collects(finnode: plans_lib.Node, workload, exp: Experience, timeout, currTotalLatency, sql, query_id):
+def collects(finnode: plans_lib.Node, actor, exp: Experience, timeout, currTotalLatency, sql, query_id, model):
     join_ids_to_append = []
     allPlans = [finnode]
     while (allPlans):
@@ -231,8 +213,8 @@ def collects(finnode: plans_lib.Node, workload, exp: Experience, timeout, currTo
         if join_id not in exp_key:
             print('degradation collect:', join_id)
             exp.AddEqSet(join_id, query_id)
-            return True
-    return False
+            ray.get(actor.reload_model.remote(exp.GetEqSetKeys(), model.eq_summary))
+            return
 
 
 def load_callbacks(logger):
@@ -259,176 +241,6 @@ def load_callbacks(logger):
     #         logging_interval='epoch'))
     return callbacks
 
-class PL_Leon(pl.LightningModule):
-    def __init__(self, model, optimizer_state_dict=None, learning_rate=0.001):
-        super(PL_Leon, self).__init__()
-        self.model = model
-        self.optimizer_state_dict = optimizer_state_dict
-        self.learning_rate = 0.001
-        self.eq_summary = dict()
-        self.outputs = []
-
-    def forward(self, plans, attns):
-        return self.model(plans, attns)[:, 0]
-
-    def getBatchPairsLoss(self, labels, costs1, costs2, encoded_plans1, encoded_plans2, attns1, attns2):
-        """
-        batch_pairs: a batch of train pairs
-        return. a batch of loss
-        """
-        loss_fn = nn.BCELoss()
-        # step 1. retrieve encoded_plans and attns from pairs
-
-
-        # step 2. calculate batch_cali and calied_cost
-        # 0是前比后大 1是后比前大
-        batsize = costs1.shape[0]
-        encoded_plans = torch.cat((encoded_plans1, encoded_plans2), dim=0)
-        attns = torch.cat((attns1, attns2), dim=0)
-        cali = self(encoded_plans, attns) # cali.shape [# of plan, pad_length] cali 是归一化后的基数估计
-        costs = torch.cat((costs1, costs2), dim=0)
-        # print(costs1)
-        # print(costs2)
-        # print(labels)
-        # print(cali)
-        calied_cost = torch.log(costs) * cali
-        try:
-            sigmoid = F.sigmoid(-(calied_cost[:batsize] - calied_cost[batsize:]))
-            loss = loss_fn(sigmoid, labels.float())
-        except:
-            print(calied_cost, sigmoid)
-        # print(loss)
-        with torch.no_grad():
-            prediction = torch.round(sigmoid)
-            # print(prediction)
-            accuracy = torch.sum(prediction == labels).item() / len(labels)
-        # print(softm[:, 1].shape, labels.shape)
-        
-        
-        return loss, accuracy
-
-
-    def training_step(self, batch):
-        labels, costs1, costs2, encoded_plans1, encoded_plans2, attns1, attns2 = batch
-        loss, acc  = self.getBatchPairsLoss(labels, costs1, costs2, encoded_plans1, encoded_plans2, attns1, attns2)
-        self.log_dict({'t_loss': loss, 't_acc': acc}, on_epoch=True)
-        return loss
-
-    def validation_step(self, batch):
-        if isinstance(batch, dict):
-            return self.__validation_step_impl(batch)
-
-        labels, costs1, costs2, encoded_plans1, encoded_plans2, attns1, attns2 = batch
-        loss, acc  = self.getBatchPairsLoss(labels, costs1, costs2, encoded_plans1, encoded_plans2, attns1, attns2)
-        self.log_dict({'v_loss': loss, 'v_acc': acc}, on_epoch=True)
-        return loss
-
-    def __validation_step_impl(self, batch):
-        def __make_pairs(join_tables, calibrations: torch.tensor, costs, latency):
-            assert len(set(join_tables)) == 1
-
-            labels = []
-            costs1 = []
-            costs2 = []
-            calibrations1 = []
-            calibrations2 = []
-
-            for i in range(len(join_tables)):
-                for j in range(i + 1, len(join_tables)):
-                    if max(latency[i], latency[j]) / min(latency[i], latency[j]) < 1.2:
-                        continue
-                    if latency[i] > latency[j]:
-                        label = 0
-                    else:
-                        label = 1
-
-                    labels.append(label)
-                    costs1.append(costs[i])
-                    costs2.append(costs[j])
-                    calibrations1.append(calibrations[i])
-                    calibrations2.append(calibrations[j])
-
-            # make tensor
-            labels = torch.tensor(labels, device=self.device)
-            costs1 = torch.tensor(costs1, device=self.device)
-            costs2 = torch.tensor(costs2, device=self.device)
-            
-            try:
-                calibrations1 = torch.stack(calibrations1)
-                calibrations2 = torch.stack(calibrations2)
-            except:
-                calibrations1 = None
-                calibrations2 = None
-            return labels, costs1, costs2, calibrations1, calibrations2
-
-        plans = batch['plan_encode']
-        attns = batch['att_encode']
-        costs = batch['cost']
-        labels = batch['latency']
-        join_tables = batch['join_tables']
-        eq = ','.join(sorted(join_tables[0].split(' ')))
-
-        # plans = torch.cat(plans, dim=0)
-        calibrations = self(plans, attns)
-        labels, costs1, costs2, calibrations1, calibrations2 = __make_pairs(join_tables, calibrations, costs, labels)
-
-        if calibrations1 is None or calibrations2 is None:
-            self.eq_summary[eq] = (0, 0)
-            return None, None, None
-        
-        loss_fn = nn.BCELoss()
-
-        calied_cost_1 = torch.log(costs1) * calibrations1
-        calied_cost_2 = torch.log(costs2) * calibrations2
-
-        sigmoid = F.sigmoid(-(calied_cost_1 - calied_cost_2))
-        loss = loss_fn(sigmoid, labels.double())
-
-        prediction = torch.round(sigmoid)
-        accuracy = torch.sum(prediction == labels).item() / len(labels)
-
-        self.eq_summary[eq] = (accuracy, len(labels))
-        self.outputs.append((accuracy, loss, len(labels)))
-        return accuracy, loss, len(labels)
-
-    def on_validation_epoch_end(self):
-        accuracy = 0
-        total = 0
-        loss = 0
-        for output in self.outputs:
-            if output is not None:
-                accuracy += output[0] * output[2]
-                loss += output[1] * output[2]
-                total += output[2]
-        if total == 0:
-            return
-        
-        accuracy /= total
-        loss /= total
-        self.log_dict({'v_acc': accuracy, 'v_loss': loss}, on_epoch=True)
-
-        # clear outputs
-        self.outputs.clear()
-        return accuracy
-        
-
-    def configure_optimizers(self):
-        optimizer = torch.optim.AdamW(self.model.parameters(), lr=0.001)
-        if self.optimizer_state_dict is not None:
-            # Checks the params are the same.
-            # 'params': [139581476513104, ...]
-            curr = optimizer.state_dict()['param_groups'][0]['params']
-            prev = self.optimizer_state_dict['param_groups'][0]['params']
-            assert curr == prev, (curr, prev)
-            # print('Loading last iter\'s optimizer state.')
-            # Prev optimizer state's LR may be stale.
-            optimizer.load_state_dict(self.optimizer_state_dict)
-            for param_group in optimizer.param_groups:
-                param_group['lr'] = self.learning_rate
-            assert optimizer.state_dict(
-            )['param_groups'][0]['lr'] == self.learning_rate
-            # print('LR', self.learning_rate)
-        return optimizer
 
 if __name__ == '__main__':
     pretrain = False
@@ -464,6 +276,8 @@ if __name__ == '__main__':
     IF_TRAIN = True
     model_path = "./log/model.pth"
     message_path = "./log/messages.pkl"
+    prev_optimizer_state_dict = None
+    model = load_model(model_path).to(DEVICE)
 
     
     Exp = Experience(eq_set=initEqSet())
@@ -483,7 +297,9 @@ if __name__ == '__main__':
     my_step = 0
     same_actor = ray.get_actor('leon_server')
     task_counter = ray.get_actor('counter')
-    prev_optimizer_state_dict = None
+    runtime_pg = 0
+    runtime_leon = 0
+    
     # ===== ITERATION OF CHUNKS ====
     ch_start_idx = 0 # the start idx of the current chunk in train_files
     while ch_start_idx + chunk_size <= len(train_files):
@@ -498,6 +314,7 @@ if __name__ == '__main__':
         sql_id = [] # 达到局部最优解的query集合
         # ++++ PHASE 1. ++++ send a chunk of queries with ENABLE_LEON=True
         # ENABLE_LEON = bool
+        ray.get(task_counter.WriteOnline.remote(False))
         for q_send_cnt in range(chunk_size):
             print(f"------------- sending query {q_send_cnt} starting from idx {ch_start_idx} ------------")
             query_latency1, _ = getPG_latency(sqls_chunk[q_send_cnt], ENABLE_LEON=False, timeout_limit=0)
@@ -523,17 +340,21 @@ if __name__ == '__main__':
                 sql_id.append(curr_file[q_send_cnt])
         logger.log_metrics({f"Runtime/pg_latency": sum(pg_time1)}, step=my_step)
         logger.log_metrics({f"Runtime/leon_latency": sum(tf_time)}, step=my_step)
+        runtime_pg += sum(pg_time1)
+        runtime_leon += sum(tf_time)
+        logger.log_metrics({f"Runtime/all_pg": runtime_pg}, step=my_step)
+        logger.log_metrics({f"Runtime/all_leon": runtime_leon}, step=my_step)
         
         ###############收集新的等价类##############################
+        ray.get(task_counter.WriteOnline.remote(True))
         for q_send_cnt in range(chunk_size):
             if retrain_count >= 3 and curr_file[q_send_cnt] not in sql_id: # 最好情况好于0.75
             # if retrain_count >= 5:
                 curNode = Nodes[q_send_cnt]
                 if curNode:
-                    collect_flag = collects(curNode, workload, Exp, None, tf_time[q_send_cnt], sqls_chunk[q_send_cnt], curr_file[q_send_cnt])
-                    if collect_flag:
-                        ray.get(same_actor.reload_model.remote(eqset.keys()))
-                        json_dict = postgres.getPlans(sqls_chunk[q_send_cnt], None, check_hint_used=False, ENABLE_LEON=True, curr_file=curr_file)[0][0][0]
+                    collects(curNode, task_counter, Exp, None, tf_time[q_send_cnt], sqls_chunk[q_send_cnt], curr_file[q_send_cnt], model)
+        for q_send_cnt in range(chunk_size):
+            postgres.getPlans(sqls_chunk[q_send_cnt], None, check_hint_used=False, ENABLE_LEON=True, curr_file=curr_file[q_send_cnt])
 
         ##########################################################
         leon_node = []
@@ -560,9 +381,6 @@ if __name__ == '__main__':
         # ==== ITERATION OF RECIEVED QUERIES IN A CHUNK ====
         q_recieved_cnt = 0 # the # of recieved queries; value in [1, chunk_size]
         curr_QueryId = "" # to imply the difference of QueryId between two messages
-        model = load_model(model_path)
-        
-
 
         # to ensure that all sent sqls are processed as messages before loading .pkl file
         
@@ -671,10 +489,7 @@ if __name__ == '__main__':
                             # if Exp.GetEqSet()[eqKey].first_latency == 90000.0: # 不pick node后,直接删
                             #     Exp.DeleteOneEqset(eqKey)
                             #     break
-                            
-                        
-
-                                                        
+                          
                         # (2) add experience of certain EqSet key
                         a_plan = [a_node, # with sql, hint, latency, cost
                                   encoded_plans[node_idx],
@@ -715,13 +530,13 @@ if __name__ == '__main__':
         logger.log_metrics({"train_pairs": len(train_pairs)}, step=my_step)
         print("len(train_pairs)" ,len(train_pairs))
 
-        if len(train_pairs) > 0 and last_train_pair > 0:
-            if max(len(train_pairs), last_train_pair) / min(len(train_pairs), last_train_pair) < 1.1:
-                retrain_count += 1
-            else:
-                retrain_count = 0
-        last_train_pair = len(train_pairs)
-        print(retrain_count)
+        # if len(train_pairs) > 0 and last_train_pair > 0:
+        #     if max(len(train_pairs), last_train_pair) / min(len(train_pairs), last_train_pair) < 1.1:
+        #         retrain_count += 1
+        #     else:
+        #         retrain_count = 0
+        # last_train_pair = len(train_pairs)
+        # print(retrain_count)
         if len(train_pairs) > 256:
             leon_dataset = prepare_dataset(train_pairs)
             dataloader_train = DataLoader(leon_dataset, batch_size=256, shuffle=True, num_workers=0)
@@ -729,7 +544,8 @@ if __name__ == '__main__':
             dataset_val = BucketDataset(Exp.OnlyGetExp(), keys=Exp.GetEqSetKeys())
             batch_sampler = BucketBatchSampler(dataset_val.buckets, batch_size=1)
             dataloader_val = DataLoader(dataset_val, batch_sampler=batch_sampler)
-            model = load_model(model_path, prev_optimizer_state_dict).to(DEVICE)
+            # model = load_model(model_path, prev_optimizer_state_dict).to(DEVICE)
+            model.optimizer_state_dict = prev_optimizer_state_dict
             callbacks = load_callbacks(logger=None)
             trainer = pl.Trainer(accelerator="gpu",
                                 devices=[3],
@@ -745,7 +561,7 @@ if __name__ == '__main__':
         ch_start_idx = ch_start_idx + chunk_size
         # save model
         torch.save(model.model, model_path)
-        ray.get(same_actor.reload_model.remote(eqset.keys(), model.eq_summary))
+        ray.get(task_counter.reload_model.remote(eqset.keys(), model.eq_summary))
         # 模型更新需要通知到server.py
         # clear pkl
         if os.path.exists(message_path):
