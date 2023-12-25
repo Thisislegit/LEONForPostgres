@@ -287,7 +287,7 @@ class JSONTCPHandler(socketserver.BaseRequestHandler):
                 if json_msg:
                     try:    
                         def fix_json_msg(json):
-                            pattern = r'ANY \((.*?):text\[\]\)'
+                            pattern = r'(ANY|ALL) \((.*?):text\[\]\)'
                             matches = re.findall(pattern, json)
                             for match in matches:
                                 extracted_string = match
