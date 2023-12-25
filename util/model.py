@@ -68,7 +68,7 @@ class PL_Leon(pl.LightningModule):
         return loss
 
     def __validation_step_impl(self, batch):
-        def __make_pairs(join_tables, calibrations: torch.tensor, costs, latency):
+        def __make_pairs(join_tables, calibrations: torch.tensor, costs, latency, sql):
             assert len(set(join_tables)) == 1
 
             labels = []
@@ -79,6 +79,8 @@ class PL_Leon(pl.LightningModule):
 
             for i in range(len(join_tables)):
                 for j in range(i + 1, len(join_tables)):
+                    if sql[i] != sql[j] and (latency[i] == 90000 or latency[j] == 90000):
+                        continue
                     if max(latency[i], latency[j]) / min(latency[i], latency[j]) < 1.2:
                         continue
                     if latency[i] > latency[j]:
@@ -110,11 +112,12 @@ class PL_Leon(pl.LightningModule):
         costs = batch['cost']
         labels = batch['latency']
         join_tables = batch['join_tables']
+        sql = batch['sql']
         eq = ','.join(sorted(join_tables[0].split(' ')))
 
         # plans = torch.cat(plans, dim=0)
         calibrations = self(plans, attns)
-        labels, costs1, costs2, calibrations1, calibrations2 = __make_pairs(join_tables, calibrations, costs, labels)
+        labels, costs1, costs2, calibrations1, calibrations2 = __make_pairs(join_tables, calibrations, costs, labels, sql)
 
         if calibrations1 is None or calibrations2 is None:
             self.eq_summary[eq] = (0, 0) # 准确率 pair数

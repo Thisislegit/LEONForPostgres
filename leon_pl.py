@@ -294,12 +294,14 @@ if __name__ == '__main__':
     retrain_count = 3
     min_leon_time = dict()
     max_query_latency1 = 0
-    logger =  pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs', name="添加新的等价类获取message", project='leon')
+    logger =  pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs', name="等价类pair方式，考虑planning时间，优化时间：是当前时间-pg时间", project='leon')
     my_step = 0
     same_actor = ray.get_actor('leon_server')
     task_counter = ray.get_actor('counter')
     runtime_pg = 0
     runtime_leon = 0
+    pct = 0.05 # 执行 percent 比例的 plan
+    planning_time = 3000 # pg timout会考虑planning时间
     
     # ===== ITERATION OF CHUNKS ====
     ch_start_idx = 0 # the start idx of the current chunk in train_files
@@ -332,7 +334,8 @@ if __name__ == '__main__':
             logger.log_metrics({f"Query/{curr_file[q_send_cnt]}pg_latency": query_latency1}, step=my_step)
             logger.log_metrics({f"Query/{curr_file[q_send_cnt]}leon_latency": query_latency2}, step=my_step)
             if curr_file[q_send_cnt] not in first_time:
-                first_time[curr_file[q_send_cnt]] = query_latency2
+                # first_time[curr_file[q_send_cnt]] = query_latency2 # 第一次leontime
+                first_time[curr_file[q_send_cnt]] = query_latency1 # 第一次pgtime
             if curr_file[q_send_cnt] not in min_leon_time:
                 min_leon_time[curr_file[q_send_cnt]] = query_latency2
             else:
@@ -451,7 +454,7 @@ if __name__ == '__main__':
                                     else:
                                         if c_plan[0].info.get('latency') is None:
                                             hint_node = plans_lib.FilterScansOrJoins(c_node.Copy())
-                                            c_plan[0].info['latency'], _ = getPG_latency(hint_node.info['sql_str'], hint_node.hint_str(), ENABLE_LEON=False, timeout_limit=(pg_time1[q_recieved_cnt] * 3)) # timeout 10s
+                                            c_plan[0].info['latency'], _ = getPG_latency(hint_node.info['sql_str'], hint_node.hint_str(), ENABLE_LEON=False, timeout_limit=(pg_time1[q_recieved_cnt] * 3 + planning_time)) # timeout 10s
 
                                     # print('actual_time_ms', node2.actual_time_ms)
                                     # hint_node = plans_lib.FilterScansOrJoins(c_node.Copy())
@@ -465,7 +468,7 @@ if __name__ == '__main__':
                             else:
                                 break
                     ##################################################################
-                    pct = 0.05 # 执行 percent 比例的 plan
+                    
                     costs = torch.tensor(getNodesCost(nodes)).to(DEVICE)
                     model.model.to(DEVICE)
                     cali_all = get_calibrations(model, encoded_plans, attns, IF_TRAIN)
@@ -503,11 +506,11 @@ if __name__ == '__main__':
                         if not Exp.isCache(eqKey, a_plan): # 该行放 get latency 前面 ！！！
                             hint_node = plans_lib.FilterScansOrJoins(a_node.Copy())
                             # print(hint_node.hint_str(), hint_node.info['sql_str'])
-                            a_plan[0].info['latency'], _ = getPG_latency(hint_node.info['sql_str'], hint_node.hint_str(), ENABLE_LEON=False, timeout_limit=(pg_time1[q_recieved_cnt] * 3)) # timeout 10s(pg_time1[q_recieved_cnt] * 3)
+                            a_plan[0].info['latency'], _ = getPG_latency(hint_node.info['sql_str'], hint_node.hint_str(), ENABLE_LEON=False, timeout_limit=(pg_time1[q_recieved_cnt] * 3 + planning_time)) # timeout 10s(pg_time1[q_recieved_cnt] * 3)
                             Exp.AppendExp(eqKey, a_plan)
                         if not Exp.isCache(eqKey, b_plan): # 该行放 get latency 前面 ！！！
                             hint_node = plans_lib.FilterScansOrJoins(b_node.Copy())
-                            b_plan[0].info['latency'], _ = getPG_latency(hint_node.info['sql_str'], hint_node.hint_str(), ENABLE_LEON=False, timeout_limit=(pg_time1[q_recieved_cnt] * 3)) # timeout 10s
+                            b_plan[0].info['latency'], _ = getPG_latency(hint_node.info['sql_str'], hint_node.hint_str(), ENABLE_LEON=False, timeout_limit=(pg_time1[q_recieved_cnt] * 3 + planning_time)) # timeout 10s
                             Exp.AppendExp(eqKey, b_plan)
                         
 

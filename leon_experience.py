@@ -205,7 +205,9 @@ class Experience:
             #     continue
             for j in self.GetExp(eq):
                 for k in self.GetExp(eq):
-                    if (j[0].info['sql_str'] == k[0].info['sql_str']) and (j[0].hint_str() == k[0].hint_str()): # sql 和 hint 都相同
+                    if (j[0].info['sql_str'] == k[0].info['sql_str']) and (j[0].hint_str() == k[0].hint_str()): # sql 和 hint 都相同   
+                        continue
+                    if j[0].info['sql_str'] != k[0].info['sql_str'] and (j[0].info['latency'] == 90000 or k[0].info['latency'] == 90000):
                         continue
                     # if (j[0].info['latency'] == k[0].info['latency']): # latency 相同 1s之内不把他train_pair
                     if max(j[0].info['latency'],k[0].info['latency']) / min(j[0].info['latency'],k[0].info['latency']) < 1.2:

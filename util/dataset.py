@@ -82,7 +82,8 @@ class BucketDataset(Dataset):
                 'plan_encode': b, \
                 'att_encode': c, \
                 'latency': node.info['latency'], \
-                'cost': node.cost}
+                'cost': node.cost,\
+                'sql': node.info['sql_str']}
         return item
 
 class BucketBatchSampler(Sampler):
