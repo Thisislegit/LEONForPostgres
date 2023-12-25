@@ -295,7 +295,7 @@ if __name__ == '__main__':
     retrain_count = 3
     min_leon_time = dict()
     max_query_latency1 = 0
-    logger =  pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs', name="等价类pair方式，考虑planning时间，优化时间：是当前时间-pg时间", project='leon')
+    logger =  pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs', name="等价类pair方式，考虑planning时间，优化时间：是当前时间-pg时间", project='leon2')
     my_step = 0
     same_actor = ray.get_actor('leon_server')
     task_counter = ray.get_actor('counter')
