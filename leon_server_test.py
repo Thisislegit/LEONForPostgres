@@ -31,7 +31,7 @@ class JSONTCPHandler(socketserver.BaseRequestHandler):
         str_buf = ""
         while True:
             # 这里只有断连才会退出
-            str_buf += self.request.recv(1024).decode("UTF-8")
+            str_buf += self.request.recv(81960).decode("UTF-8")
             if not str_buf:
                 # no more data, connection is finished.
                 return
@@ -44,7 +44,7 @@ class JSONTCPHandler(socketserver.BaseRequestHandler):
                         def fix_json_msg(json):
                             pattern = r'(ANY|ALL) \((.*?):text\[\]\)'
                             matches = re.findall(pattern, json)
-                            for match in matches:
+                            for _, match in matches:
                                 extracted_string = match
                                 cleaned_string = extracted_string.replace('"', '')
                                 json = json.replace(extracted_string, cleaned_string)
