@@ -47,3 +47,4 @@ __pycache__/
 log/
 logs/
 conf/namespace.txt
+wandb/
