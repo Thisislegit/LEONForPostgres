@@ -18,7 +18,7 @@ import json
 from test_case import SeqFormer
 from test_case import get_plan_encoding, configs, load_json, get_op_name_to_one_hot, plan_parameters, add_numerical_scalers
 from util.dataset import LeonDataset, prepare_dataset, BucketBatchSampler, BucketDataset
-from leon_experience import Experience
+from leon_experience import Experience, TIME_OUT
 from util.model import PL_Leon
 import numpy as np
 import ray
@@ -41,21 +41,33 @@ Transformer_model = SeqFormer(
                         transformer_dropout=0.1,
                     )
 
-def load_sql(file_list: list):
+def load_training_query(query_path):
+    train_queries = []
+    with open(query_path, 'r') as f:
+        for line in f.readlines():
+            arr = line.strip().split("#####")
+            train_queries.append((arr[0], arr[1]))
+    print("Read", len(train_queries), "test queries.")
+    return train_queries
+
+def load_sql(file_list: list, training_query=None):
     """
     :param file_list: list of query file in str
     :return: list of sql query string
     """
     sqls = []
     for file_str in file_list:
-        sqlFile = './job/' + file_str + '.sql'
-        if not os.path.exists(sqlFile):
-            raise IOError("File Not Exists!")
-        with open(sqlFile, 'r') as f:
-            data = f.read().splitlines()
-            sql = ' '.join(data)
-        sqls.append(sql)
-        f.close()
+        if training_query:
+            sqls.append(training_query[file_str][1])
+        else:
+            sqlFile = './job/' + file_str + '.sql'
+            if not os.path.exists(sqlFile):
+                raise IOError("File Not Exists!")
+            with open(sqlFile, 'r') as f:
+                data = f.read().splitlines()
+                sql = ' '.join(data)
+            sqls.append(sql)
+            f.close()
     return sqls
 
 def load_model(model_path: str, prev_optimizer_state_dict=None):
@@ -75,14 +87,14 @@ def getPG_latency(query, hint=None, ENABLE_LEON=False, timeout_limit=None, curr_
     """
     latency_sum = 0
     if timeout_limit is None:
-        timeout_limit = 90000 # 90000
+        timeout_limit = TIME_OUT # TIME_OUT
     cnt = 1 # 3 1 
     for c in range(cnt):
         latency, json_dict = postgres.GetLatencyFromPg(query, hint, ENABLE_LEON, verbose=False, check_hint_used=False, timeout=timeout_limit, dropbuffer=False, curr_file=curr_file)
         latency_sum = latency_sum + latency
     pg_latency = latency_sum / cnt
     if pg_latency == timeout_limit:
-        pg_latency = 90000
+        pg_latency = TIME_OUT
     if ENABLE_LEON and json_dict == []:
         json_dict = postgres.getPlans(query, hint, check_hint_used=False, ENABLE_LEON=ENABLE_LEON, curr_file=curr_file)[0][0][0]
         
@@ -262,19 +274,21 @@ if __name__ == '__main__':
     context = ray.init(address='auto', namespace=namespace, _temp_dir='/data1/chenxu/projects' + "/log/ray") # init only once
     print(context.address_info)
     dict_actor = ray.get_actor('querydict')
-    train_files = ['1a', '1b', '1c', '1d', '2a', '2b', '2c', '2d', '3a', '3b', '3c', '4a',
-                    '4b', '4c', '5a', '5b', '5c', '6a', '6b', '6c', '6d', '6e', '6f', '7a', 
-                    '7b', '7c', '8a', '8b', '8c', '8d', '9a', '9b', '9c', '9d', '10a', '10b', 
-                    '10c', '11a', '11b', '11c', '11d', '12a', '12b', '12c', '13a', '13b', '13c', 
-                    '13d', '14a', '14b', '14c', '15a', '15b', '15c', '15d', '16a', '16b', '16c',
-                    '16d', '17a', '17b', '17c', '17d', '17e', '17f', '18a', '18b', '18c', '19a',
-                    '19b', '19c', '19d', '20a', '20b', '20c', '21a', '21b', '21c', '22a', '22b',
-                    '22c', '22d', '23a', '23b', '23c', '24a', '24b', '25a', '25b', '25c', '26a', 
-                    '26b', '26c', '27a', '27b', '27c', '28a', '28b', '28c', '29a', '29b', '29c',
-                    '30a', '30b', '30c', '31a', '31b', '31c', '32a', '32b', '33a', '33b', '33c']
-    random.shuffle(train_files)
+    training_query = load_training_query("./train/training_query/job.txt")
+    train_files = [i[0] for i in training_query]
+    # train_files = ['1a', '1b', '1c', '1d', '2a', '2b', '2c', '2d', '3a', '3b', '3c', '4a',
+    #                 '4b', '4c', '5a', '5b', '5c', '6a', '6b', '6c', '6d', '6e', '6f', '7a', 
+    #                 '7b', '7c', '8a', '8b', '8c', '8d', '9a', '9b', '9c', '9d', '10a', '10b', 
+    #                 '10c', '11a', '11b', '11c', '11d', '12a', '12b', '12c', '13a', '13b', '13c', 
+    #                 '13d', '14a', '14b', '14c', '15a', '15b', '15c', '15d', '16a', '16b', '16c',
+    #                 '16d', '17a', '17b', '17c', '17d', '17e', '17f', '18a', '18b', '18c', '19a',
+    #                 '19b', '19c', '19d', '20a', '20b', '20c', '21a', '21b', '21c', '22a', '22b',
+    #                 '22c', '22d', '23a', '23b', '23c', '24a', '24b', '25a', '25b', '25c', '26a', 
+    #                 '26b', '26c', '27a', '27b', '27c', '28a', '28b', '28c', '29a', '29b', '29c',
+    #                 '30a', '30b', '30c', '31a', '31b', '31c', '32a', '32b', '33a', '33b', '33c']
+    # random.shuffle(train_files)
     ray.get(dict_actor.write_sql_id.remote(train_files))
-    train_files = train_files * 75
+    # train_files = train_files * 75
     chunk_size = 5 # the # of sqls in a chunk
     IF_TRAIN = True
     model_path = "./log/model.pth"
@@ -308,7 +322,8 @@ if __name__ == '__main__':
     ch_start_idx = 0 # the start idx of the current chunk in train_files
     while ch_start_idx + chunk_size <= len(train_files):
         print(f"\n+++++++++ a chunk of sql from {ch_start_idx}  ++++++++")
-        sqls_chunk = load_sql(train_files[ch_start_idx : ch_start_idx + chunk_size])
+        # sqls_chunk = load_sql(train_files[ch_start_idx : ch_start_idx + chunk_size])
+        sqls_chunk = load_sql(list(range(ch_start_idx, ch_start_idx + chunk_size)), training_query=training_query)
         curr_file = train_files[ch_start_idx : ch_start_idx + chunk_size]
         print(train_files[ch_start_idx : ch_start_idx + chunk_size])
         time_ratio = []
@@ -323,7 +338,7 @@ if __name__ == '__main__':
             print(f"------------- sending query {q_send_cnt} starting from idx {ch_start_idx} ------------")
             query_latency1, _ = getPG_latency(sqls_chunk[q_send_cnt], ENABLE_LEON=False, timeout_limit=0)
             print("latency pg ", query_latency1)
-            query_latency2, json_dict = getPG_latency(sqls_chunk[q_send_cnt], ENABLE_LEON=True, timeout_limit=90000, curr_file=curr_file[q_send_cnt])
+            query_latency2, json_dict = getPG_latency(sqls_chunk[q_send_cnt], ENABLE_LEON=True, timeout_limit=100000, curr_file=curr_file[q_send_cnt])
             # todo : 如果timeout执行explain拿json
             print("latency leon ", query_latency2)
             node = postgres.ParsePostgresPlanJson(json_dict)
@@ -492,7 +507,7 @@ if __name__ == '__main__':
                         if i == 0: 
                             eqKey = a_node.info['join_tables']
                             Exp.AddEqSet(eqKey, curr_file[q_recieved_cnt])
-                            # if Exp.GetEqSet()[eqKey].first_latency == 90000.0: # 不pick node后,直接删
+                            # if Exp.GetEqSet()[eqKey].first_latency == TIME_OUT: # 不pick node后,直接删
                             #     Exp.DeleteOneEqset(eqKey)
                             #     break
                           
