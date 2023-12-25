@@ -2,6 +2,8 @@ from dataclasses import dataclass, field
 from typing import List, Dict
 from statistics import mean
 
+TIME_OUT = 1000000
+
 @dataclass
 class EqSetInfo:
     """
@@ -10,9 +12,9 @@ class EqSetInfo:
     how leon opt this query?
     what query?
     """
-    first_latency: float = 90000.0
-    current_latency: float = 90000.0
-    opt_time: float = -90000.0
+    first_latency: float = TIME_OUT
+    current_latency: float = TIME_OUT
+    opt_time: float = -TIME_OUT
     query_ids: List[str] = field(default_factory=list)
     query_dict: Dict[str, float] = field(default_factory=dict)
 
@@ -23,7 +25,7 @@ class Experience:
         # 经验 [[logcost, sql, hint, latency, [query_vector, node], join, joinids]] 
         self.MinEqNum = 35
         self.MaxEqSets = 50
-        self.LargeTimout = 90000
+        self.LargeTimout = TIME_OUT
         self.__exp = dict() # k is the join_ids of an eq (str), v is experience of an eq (list)
         self.__eqSet = dict() # save limited # of eq. Some eqs are in __exp, but not in __eqSet
         # self.__eqsetTime = dict() # 每个等价类
@@ -108,11 +110,11 @@ class Experience:
     #         cnt = 0
     #         if len(self.GetExp(eq)) > 0:
     #             for plan in self.GetExp(eq):
-    #                 if plan[0].info['latency'] != 90000:
+    #                 if plan[0].info['latency'] != TIME_OUT:
     #                     cnt += 1
     #                     average += plan[0].info['latency']
     #             if cnt == 0:
-    #                 self.GetEqSet()[eq] = 90000
+    #                 self.GetEqSet()[eq] = TIME_OUT
     #             else:
     #                 self.GetEqSet()[eq] = average / cnt
 
@@ -207,7 +209,7 @@ class Experience:
                 for k in self.GetExp(eq):
                     if (j[0].info['sql_str'] == k[0].info['sql_str']) and (j[0].hint_str() == k[0].hint_str()): # sql 和 hint 都相同   
                         continue
-                    if j[0].info['sql_str'] != k[0].info['sql_str'] and (j[0].info['latency'] == 90000 or k[0].info['latency'] == 90000):
+                    if j[0].info['sql_str'] != k[0].info['sql_str'] and (j[0].info['latency'] == TIME_OUT or k[0].info['latency'] == TIME_OUT):
                         continue
                     # if (j[0].info['latency'] == k[0].info['latency']): # latency 相同 1s之内不把他train_pair
                     if max(j[0].info['latency'],k[0].info['latency']) / min(j[0].info['latency'],k[0].info['latency']) < 1.2:

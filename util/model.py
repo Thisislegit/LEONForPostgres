@@ -3,6 +3,7 @@ import lightning.pytorch as pl
 import lightning.pytorch.callbacks as plc
 import torch.nn.functional as F
 import torch.nn as nn
+from leon_experience import TIME_OUT
 
 class PL_Leon(pl.LightningModule):
     def __init__(self, model, optimizer_state_dict=None, learning_rate=0.001):
@@ -79,7 +80,7 @@ class PL_Leon(pl.LightningModule):
 
             for i in range(len(join_tables)):
                 for j in range(i + 1, len(join_tables)):
-                    if sql[i] != sql[j] and (latency[i] == 90000 or latency[j] == 90000):
+                    if sql[i] != sql[j] and (latency[i] == TIME_OUT or latency[j] == TIME_OUT):
                         continue
                     if max(latency[i], latency[j]) / min(latency[i], latency[j]) < 1.2:
                         continue
