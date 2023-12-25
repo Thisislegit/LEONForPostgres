@@ -79,10 +79,12 @@ def Cursor():
     # TODO: create the cursor once per worker node.
     conn = psycopg2.connect(database=database, user=user,
                             password=password, host=host, port=port)
+    conn.set_client_encoding('UTF8')
 
     conn.set_session(autocommit=True)
     try:
         with conn.cursor() as cursor:
+            cursor.execute("SET client_encoding TO 'UTF8';")
             cursor.execute(f"set leon_port={leon_port};")
             cursor.execute("load 'pg_hint_plan';")
 
