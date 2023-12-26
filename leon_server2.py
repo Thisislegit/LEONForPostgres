@@ -290,7 +290,7 @@ class JSONTCPHandler(socketserver.BaseRequestHandler):
                         def fix_json_msg(json):
                             pattern = r'(ANY|ALL) \((.*?):text\[\]\)'
                             matches = re.findall(pattern, json)
-                            for _, match in matches:
+                            for _ , match in matches:
                                 extracted_string = match
                                 cleaned_string = extracted_string.replace('"', '')
                                 json = json.replace(extracted_string, cleaned_string)
