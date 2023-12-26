@@ -92,7 +92,7 @@ class PL_Leon(pl.LightningModule):
 
             labels = []
             costs1 = []
-            costs2 = []
+            costs2 = [] 
             calibrations1 = []
             calibrations2 = []
 

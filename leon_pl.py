@@ -268,8 +268,10 @@ if __name__ == '__main__':
     task_counter = ray.get_actor('counter')
     runtime_pg = 0
     runtime_leon = 0
-    pct = 0.01 # 执行 percent 比例的 plan
+    sql_id = [] # 达到局部最优解的query集合
+    pct = 0.05 # 执行 percent 比例的 plan
     planning_time = 3000 # pg timout会考虑planning时间
+    max_plan_sum = 50
     
     # ===== ITERATION OF CHUNKS ====
     ch_start_idx = 0 # the start idx of the current chunk in train_files
@@ -283,7 +285,7 @@ if __name__ == '__main__':
         tf_time = []
         pg_time1 = []
         Nodes = []
-        sql_id = [] # 达到局部最优解的query集合
+        
         # ++++ PHASE 1. ++++ send a chunk of queries with ENABLE_LEON=True
         # ENABLE_LEON = bool
         ray.get(task_counter.WriteOnline.remote(False))
@@ -309,7 +311,7 @@ if __name__ == '__main__':
                 min_leon_time[curr_file[q_send_cnt]] = query_latency2
             else:
                 min_leon_time[curr_file[q_send_cnt]] = min(min_leon_time[curr_file[q_send_cnt]], query_latency2)
-            if min_leon_time[curr_file[q_send_cnt]] / first_time[curr_file[q_send_cnt]] < 0.75:
+            if min_leon_time[curr_file[q_send_cnt]] / first_time[curr_file[q_send_cnt]] < 0.75 and curr_file[q_send_cnt] not in sql_id:
                 sql_id.append(curr_file[q_send_cnt])
         logger.log_metrics({f"Runtime/pg_latency": sum(pg_time1)}, step=my_step)
         logger.log_metrics({f"Runtime/leon_latency": sum(tf_time)}, step=my_step)
@@ -443,7 +445,8 @@ if __name__ == '__main__':
                     cali_all = get_calibrations(model, encoded_plans, attns, IF_TRAIN)
                     ucb_idx = get_ucb_idx(cali_all, costs)
                     costs_index = torch.argsort(costs, descending=False)
-                    num_to_exe = math.ceil(pct * len(ucb_idx))
+                    num_to_exe = min(math.ceil(pct * len(ucb_idx)), max_plan_sum)
+                    
 
                     # print("ucb_idx to exe", ucb_idx[:num_to_exe])
                     # print("num_to_exe", num_to_exe)
@@ -546,7 +549,7 @@ if __name__ == '__main__':
         end_time = time.time()
         logger.log_metrics({"Time/train_time": end_time - start_time}, step=my_step)
         my_step += 1
-        with open("./log/exp_v2.pkl", 'wb') as f:
+        with open("./log/exp_v3.pkl", 'wb') as f:
             pickle.dump(Exp.OnlyGetExp(), f) 
         
 
