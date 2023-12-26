@@ -9,6 +9,55 @@ from . import hyperparams, plans_lib, postgres
 _EPSILON = 1e-6
 
 
+def load_training_query(query_path):
+    train_queries = []
+    with open(query_path, 'r') as f:
+        for line in f.readlines():
+            arr = line.strip().split("#####")
+            train_queries.append((arr[0], arr[1]))
+    print("Read", len(train_queries), "test queries.")
+    return train_queries
+
+def load_sql(file_list: list, training_query=None):
+    """
+    :param file_list: list of query file in str
+    :return: list of sql query string
+    """
+    sqls = []
+    for file_str in file_list:
+        if training_query:
+            sqls.append(training_query[file_str][1])
+        else:
+            sqlFile = './job/' + file_str + '.sql'
+            if not os.path.exists(sqlFile):
+                raise IOError("File Not Exists!")
+            with open(sqlFile, 'r') as f:
+                data = f.read().splitlines()
+                sql = ' '.join(data)
+            sqls.append(sql)
+            f.close()
+    return sqls
+
+def PlanToNode(workload, plans):
+    """
+    input. plans 一个 message 等价类包括多条 plans
+    output. nodes
+        sql 信息在 node.info['sql_str'], cost 信息在 node.cost, hint 信息在 node.hint_str(), join_tables 信息在 node.info['join_tables']
+    """
+    nodes = []
+    for i in range(len(plans)):
+        # print("plans[{}]\n".format(i))
+        node = postgres.ParsePostgresPlanJson_1(plans[i], workload.workload_info.alias_to_names)
+        if i == 0:
+            if node.info['join_cond'] == ['']:
+                return None
+            temp = node.to_sql(node.info['join_cond'], with_select_exprs=True)
+            node.info['sql_str'] = temp
+        node.info['sql_str'] = temp
+        nodes.append(node)
+    
+    return nodes
+
 def ParseSqlToNode(path):
     base = os.path.basename(path)
     query_name = os.path.splitext(base)[0]
@@ -176,6 +225,47 @@ class JoinOrderBenchmark(Workload):
             if p.test_query_glob is None or n.info['path'] not in test_sql_set
         ]
         test_nodes = [n for n in all_nodes if n.info['path'] in test_sql_set]
+        assert len(train_nodes) > 0
+
+        return all_nodes, train_nodes, test_nodes
+
+class JoinOrderBenchmark_Train(JoinOrderBenchmark):
+    @classmethod
+    def Params(cls):
+        p = super().Params()
+        # Needs to be an absolute path for rllib.
+        # module_dir = os.path.abspath(os.path.dirname(balsa.__file__) + '/../')
+        #  p.query_dir = os.path.join('/home/ht/PycharmProjects/pythonProject3', 'join-order-benchmark')
+        module_dir = os.path.abspath(os.path.dirname(__file__)) + '/../'    
+        print(module_dir)
+        p.query_dir = os.path.join(module_dir + './train/training_query/job.txt')
+        if not os.path.exists(p.query_dir):
+            raise IOError('File Not Exists!')
+        return p
+    
+    def __init__(self, params):
+        super().__init__(params)
+
+    def ParseSqlToNode(self, sqlfile, sql_string):
+        query_name = sqlfile
+        node, json_dict = postgres.SqlToPlanNode(sql_string)
+        node.info['sql_str'] = sql_string
+        node.info['query_name'] = query_name
+        node.info['explain_json'] = json_dict
+        node.GetOrParseSql()
+        return node
+
+    def _LoadQueries(self):
+        """Loads all queries into balsa.Node objects."""
+        p = self.params
+        all_sql_set : list = load_training_query(p.query_dir)
+        test_sql_set : list = self._get_sql_set(p.query_dir, p.test_query_glob)
+        # sorted by query id for easy debugging
+        all_sql_list = sorted(all_sql_set, key=lambda x: x[0])
+        all_nodes = [self.ParseSqlToNode(sqlfile, sql) for sqlfile, sql in all_sql_list]
+
+        train_nodes = all_nodes
+        test_nodes = []
         assert len(train_nodes) > 0
 
         return all_nodes, train_nodes, test_nodes

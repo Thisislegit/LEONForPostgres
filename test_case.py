@@ -215,12 +215,24 @@ class SeqFormer(nn.Module):
         transformer_activation="gelu",
         mlp_dropout=0.1,
         transformer_dropout=0.1,
+        query_dim=None,
+        node_embedding_dim=None,
+        padding_size=40
     ):
         super(SeqFormer, self).__init__()
         # input_dim: node bits
+        self.node_length_before = input_dim
+
+        embedding_size = 0
+        if node_embedding_dim is not None:
+            embedding_size += node_embedding_dim + 2
+        if query_dim is not None:
+            embedding_size += 32
+        if embedding_size == 0:
+            embedding_size = input_dim
         self.tranformer_encoder = nn.TransformerEncoder(
             nn.TransformerEncoderLayer(
-                d_model=input_dim,
+                d_model=embedding_size,
                 dim_feedforward=hidden_dim,
                 nhead=1,
                 batch_first=True,
@@ -229,7 +241,6 @@ class SeqFormer(nn.Module):
             ),
             num_layers=1,
         )
-        self.node_length = input_dim
         if mlp_activation == "ReLU":
             self.mlp_activation = nn.ReLU()
         elif mlp_activation == "GELU":
@@ -240,7 +251,7 @@ class SeqFormer(nn.Module):
         self.mlp_hidden_dims = [256, 128, 1]
         self.mlp = nn.Sequential(
             *[
-                nn.Linear(self.node_length, self.mlp_hidden_dims[0]),
+                nn.Linear(embedding_size, self.mlp_hidden_dims[0]),
                 nn.Dropout(mlp_dropout),
                 self.mlp_activation,
                 nn.Linear(self.mlp_hidden_dims[0], self.mlp_hidden_dims[1]),
@@ -249,6 +260,21 @@ class SeqFormer(nn.Module):
                 nn.Linear(self.mlp_hidden_dims[1], output_dim),
             ]
         )
+
+        if query_dim is not None:
+            self.query_mlp = nn.Sequential(
+                nn.Linear(query_dim, 128),
+                nn.LayerNorm(128),
+                nn.LeakyReLU(),
+                nn.Linear(128, 64),
+                nn.LayerNorm(64),
+                nn.LeakyReLU(),
+                nn.Linear(64, 32),
+            )
+        self.node_embedding_dim = node_embedding_dim
+        if node_embedding_dim:
+            self.node_embedding = nn.Embedding(16, node_embedding_dim)
+            self.Norm = nn.BatchNorm1d(padding_size)
         self.apply(self._init_weights)
         # self.sigmoid = nn.Sigmoid()
 
@@ -260,11 +286,30 @@ class SeqFormer(nn.Module):
         elif isinstance(module, nn.Embedding):
             torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
 
-    def forward(self, x, attn_mask=None):
+    def forward(self, x, attn_mask=None, queryfeature=None):
+        # query_feats: Query encoding vectors.  Shaped as [batch size, query dims].
         # change x shape to (batch, seq_len, input_size) from (batch, len)
         # one node is 18 bits
-        x = x.view(x.shape[0], -1, self.node_length)
+        x = x.view(x.shape[0], -1, self.node_length_before)
+
+        if self.node_embedding_dim:
+            node_part = x[:, :, :16]
+            node_part = torch.argmax(node_part, dim=2)
+            stats_part = x[:, :, 16:]
+            x_node = self.node_embedding(node_part.long())
+            x = torch.cat((x_node, stats_part), axis=2)
+
+        if queryfeature is not None:
+            query_embs = self.query_mlp(queryfeature.unsqueeze(1))
+            max_subtrees = x.shape[1]
+            query_embs = query_embs.expand(query_embs.shape[0], max_subtrees, 
+                                           query_embs.shape[2])
+            x = torch.cat((query_embs, x), axis=2)
+
+
         # attn_mask = attn_mask.repeat(4,1,1)
+        if self.node_embedding_dim and queryfeature is not None:
+            x = self.Norm(x)
         out = self.tranformer_encoder(x, mask=attn_mask)
         # out = self.transformer_decoder(out, out, tgt_mask=attn_mask)
         out = self.mlp(out)
