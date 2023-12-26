@@ -7,4 +7,4 @@ rm messages.pkl
 cd ..
 
 # 启动 leon_server2.py
-python leon_server2.py
+python leon_server_v3.py
