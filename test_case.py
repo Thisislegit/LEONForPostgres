@@ -9,7 +9,7 @@ import torch.nn.functional as F
 
 configs = {
     'node_length' : 18, # +1 for ???Path  # of node_types +2 
-    'pad_length' : 40,
+    'pad_length' : 50,
     # training
     "loss_weight" : 0.5,
     'max_runtime' : 1
