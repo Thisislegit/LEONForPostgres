@@ -14,14 +14,26 @@ class PL_Leon(pl.LightningModule):
         self.eq_summary = dict()
         self.outputs = []
 
-    def forward(self, plans, attns):
-        return self.model(plans, attns)[:, 0]
+    def forward(self, plans, attns, queryfeature=None):
+        if queryfeature is None:
+            return self.model(plans, attns)[:, 0]
+        return self.model(plans, attns, queryfeature)[:, 0]
 
-    def getBatchPairsLoss(self, labels, costs1, costs2, encoded_plans1, encoded_plans2, attns1, attns2):
+    def getBatchPairsLoss(self, batch):
         """
         batch_pairs: a batch of train pairs
         return. a batch of loss
         """
+        labels = batch['labels']
+        costs1 = batch['costs1']
+        costs2 = batch['costs2']
+        encoded_plans1 = batch['encoded_plans1']
+        encoded_plans2 = batch['encoded_plans2']
+        attns1 = batch['attns1']
+        attns2 = batch['attns2']
+        queryfeature1 = batch.get('queryfeature1')
+        queryfeature2 = batch.get('queryfeature2')
+
         loss_fn = nn.BCELoss()
         # step 1. retrieve encoded_plans and attns from pairs
 
@@ -31,7 +43,14 @@ class PL_Leon(pl.LightningModule):
         batsize = costs1.shape[0]
         encoded_plans = torch.cat((encoded_plans1, encoded_plans2), dim=0)
         attns = torch.cat((attns1, attns2), dim=0)
-        cali = self(encoded_plans, attns) # cali.shape [# of plan, pad_length] cali 是归一化后的基数估计
+        if queryfeature1 is not None and queryfeature2 is not None:
+            queryfeature = torch.cat((queryfeature1, queryfeature2), dim=0)
+        else:
+            queryfeature = None
+        if queryfeature is None:
+            cali = self(encoded_plans, attns)
+        else:
+            cali = self(encoded_plans, attns, queryfeature) # cali.shape [# of plan, pad_length] cali 是归一化后的基数估计
         costs = torch.cat((costs1, costs2), dim=0)
         # print(costs1)
         # print(costs2)
@@ -55,8 +74,7 @@ class PL_Leon(pl.LightningModule):
 
 
     def training_step(self, batch):
-        labels, costs1, costs2, encoded_plans1, encoded_plans2, attns1, attns2 = batch
-        loss, acc  = self.getBatchPairsLoss(labels, costs1, costs2, encoded_plans1, encoded_plans2, attns1, attns2)
+        loss, acc  = self.getBatchPairsLoss(batch)
         self.log_dict({'t_loss': loss, 't_acc': acc}, on_epoch=True)
         return loss
 
@@ -80,7 +98,7 @@ class PL_Leon(pl.LightningModule):
 
             for i in range(len(join_tables)):
                 for j in range(i + 1, len(join_tables)):
-                    if sql[i] != sql[j] and (latency[i] == TIME_OUT or latency[j] == TIME_OUT):
+                    if sql[i] != sql[j]:
                         continue
                     if max(latency[i], latency[j]) / min(latency[i], latency[j]) < 1.2:
                         continue
@@ -114,10 +132,11 @@ class PL_Leon(pl.LightningModule):
         labels = batch['latency']
         join_tables = batch['join_tables']
         sql = batch['sql']
+        queryfeature = batch.get('queryfeature')
         eq = ','.join(sorted(join_tables[0].split(' ')))
 
         # plans = torch.cat(plans, dim=0)
-        calibrations = self(plans, attns)
+        calibrations = self(plans, attns, queryfeature)
         labels, costs1, costs2, calibrations1, calibrations2 = __make_pairs(join_tables, calibrations, costs, labels, sql)
 
         if calibrations1 is None or calibrations2 is None:

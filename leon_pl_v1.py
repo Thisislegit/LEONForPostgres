@@ -10,7 +10,7 @@ from util import postgres
 from util import pg_executor
 from util import postgres
 from util import envs
-from util.envs import load_sql, load_training_query, PlanToNode
+from util.envs import load_sql, load_training_query
 from util import plans_lib
 import pytorch_lightning.loggers as pl_loggers
 import pickle
@@ -132,6 +132,25 @@ def get_ucb_idx(cali_all, pgcosts):
 
     return ucb_sort_idx
 
+def PlanToNode(workload, plans):
+    """
+    input. plans 一个 message 等价类包括多条 plans
+    output. nodes
+        sql 信息在 node.info['sql_str'], cost 信息在 node.cost, hint 信息在 node.hint_str(), join_tables 信息在 node.info['join_tables']
+    """
+    nodes = []
+    for i in range(len(plans)):
+        # print("plans[{}]\n".format(i))
+        node = postgres.ParsePostgresPlanJson_1(plans[i], workload.workload_info.alias_to_names)
+        if i == 0:
+            if node.info['join_cond'] == ['']:
+                return None
+            temp = node.to_sql(node.info['join_cond'], with_select_exprs=True)
+            node.info['sql_str'] = temp
+        node.info['sql_str'] = temp
+        nodes.append(node)
+    
+    return nodes
 
 def getNodesCost(nodes):
     pgcosts = [] # 存所有 plan 的 pg cost
@@ -251,8 +270,20 @@ if __name__ == '__main__':
     
     Exp = Experience(eq_set=initEqSet())
     print("Init workload and equal set keys")
-    workload = envs.JoinOrderBenchmark(envs.JoinOrderBenchmark.Params())
-    workload.workload_info.alias_to_names = postgres.GetAllAliasToNames(workload.workload_info.rel_ids)
+    
+    if not os.path.exists('./log/workload_job_training.pkl'):
+        workload = envs.JoinOrderBenchmark_Train(envs.JoinOrderBenchmark_Train.Params())
+        workload.workload_info.table_num_rows = postgres.GetAllTableNumRows(workload.workload_info.rel_names)
+        workload.workload_info.alias_to_names = postgres.GetAllAliasToNames(workload.workload_info.rel_ids)
+        print(workload.workload_info)
+        # dump queryFeaturizer and workload
+        with open('./log/workload_job_training.pkl', 'wb') as f:
+            pickle.dump(workload, f)
+    else:
+        
+        with open('./log/workload_job_training.pkl', 'rb') as f:
+            workload = pickle.load(f)
+    queryFeaturizer = plans_lib.QueryFeaturizer(workload.workload_info)
     statistics_file_path = "./statistics.json"
     feature_statistics = load_json(statistics_file_path)
     add_numerical_scalers(feature_statistics)
@@ -292,7 +323,6 @@ if __name__ == '__main__':
             query_latency1, _ = getPG_latency(sqls_chunk[q_send_cnt], ENABLE_LEON=False, timeout_limit=0)
             print("latency pg ", query_latency1)
             query_latency2, json_dict = getPG_latency(sqls_chunk[q_send_cnt], ENABLE_LEON=True, timeout_limit=100000, curr_file=curr_file[q_send_cnt])
-            # todo : 如果timeout执行explain拿json
             print("latency leon ", query_latency2)
             node = postgres.ParsePostgresPlanJson(json_dict)
             max_query_latency1 = max(max_query_latency1, query_latency1)
@@ -401,7 +431,11 @@ if __name__ == '__main__':
                     if nodes is None:
                         continue
                     encoded_plans, _, attns, _ = plans_encoding(message) # encoding. plan -> plan_encoding / seqs torch.Size([26, 1, 760])
-
+                    plans_lib.GatherUnaryFiltersInfo(nodes)
+                    postgres.EstimateFilterRows(nodes) 
+                    for node in nodes:
+                        node.info['query_feature'] = torch.from_numpy(queryFeaturizer(node))
+                    
                     # STEP 2) pick node to execute
                     
                     
@@ -442,6 +476,7 @@ if __name__ == '__main__':
                     model.model.to(DEVICE)
                     cali_all = get_calibrations(model, encoded_plans, attns, IF_TRAIN)
                     ucb_idx = get_ucb_idx(cali_all, costs)
+                    # TODO: 选择cost 差异大于1.2的plan
                     costs_index = torch.argsort(costs, descending=False)
                     num_to_exe = math.ceil(pct * len(ucb_idx))
 
