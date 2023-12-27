@@ -243,24 +243,24 @@ if __name__ == '__main__':
     # train_files = ['1a', '2a', '3a', '4a']
     with open ("./conf/namespace.txt", "r") as file:
         namespace = file.read().replace('\n', '')
-    context = ray.init(address='auto', namespace=namespace, _temp_dir='/data1/chenxu/projects' + "/log/ray") # init only once
+    context = ray.init(address='auto', namespace=namespace, _temp_dir=os.getcwd() + "/log/ray") # init only once
     print(context.address_info)
     dict_actor = ray.get_actor('querydict')
-    training_query = load_training_query("./train/training_query/job.txt")
-    train_files = [i[0] for i in training_query]
-    # train_files = ['1a', '1b', '1c', '1d', '2a', '2b', '2c', '2d', '3a', '3b', '3c', '4a',
-    #                 '4b', '4c', '5a', '5b', '5c', '6a', '6b', '6c', '6d', '6e', '6f', '7a', 
-    #                 '7b', '7c', '8a', '8b', '8c', '8d', '9a', '9b', '9c', '9d', '10a', '10b', 
-    #                 '10c', '11a', '11b', '11c', '11d', '12a', '12b', '12c', '13a', '13b', '13c', 
-    #                 '13d', '14a', '14b', '14c', '15a', '15b', '15c', '15d', '16a', '16b', '16c',
-    #                 '16d', '17a', '17b', '17c', '17d', '17e', '17f', '18a', '18b', '18c', '19a',
-    #                 '19b', '19c', '19d', '20a', '20b', '20c', '21a', '21b', '21c', '22a', '22b',
-    #                 '22c', '22d', '23a', '23b', '23c', '24a', '24b', '25a', '25b', '25c', '26a', 
-    #                 '26b', '26c', '27a', '27b', '27c', '28a', '28b', '28c', '29a', '29b', '29c',
-    #                 '30a', '30b', '30c', '31a', '31b', '31c', '32a', '32b', '33a', '33b', '33c']
-    # random.shuffle(train_files)
+    # training_query = load_training_query("./train/training_query/job.txt")
+    # train_files = [i[0] for i in training_query]
+    train_files = ['1a', '1b', '1c', '1d', '2a', '2b', '2c', '2d', '3a', '3b', '3c', '4a',
+                    '4b', '4c', '5a', '5b', '5c', '6a', '6b', '6c', '6d', '6e', '6f', '7a', 
+                    '7b', '7c', '8a', '8b', '8c', '8d', '9a', '9b', '9c', '9d', '10a', '10b', 
+                    '10c', '11a', '11b', '11c', '11d', '12a', '12b', '12c', '13a', '13b', '13c', 
+                    '13d', '14a', '14b', '14c', '15a', '15b', '15c', '15d', '16a', '16b', '16c',
+                    '16d', '17a', '17b', '17c', '17d', '17e', '17f', '18a', '18b', '18c', '19a',
+                    '19b', '19c', '19d', '20a', '20b', '20c', '21a', '21b', '21c', '22a', '22b',
+                    '22c', '22d', '23a', '23b', '23c', '24a', '24b', '25a', '25b', '25c', '26a', 
+                    '26b', '26c', '27a', '27b', '27c', '28a', '28b', '28c', '29a', '29b', '29c',
+                    '30a', '30b', '30c', '31a', '31b', '31c', '32a', '32b', '33a', '33b', '33c']
+    random.shuffle(train_files)
     ray.get(dict_actor.write_sql_id.remote(train_files))
-    # train_files = train_files * 75
+    train_files = train_files * 75
     chunk_size = 5 # the # of sqls in a chunk
     IF_TRAIN = True
     model_path = "./log/model.pth"
@@ -299,22 +299,22 @@ if __name__ == '__main__':
     task_counter = ray.get_actor('counter')
     runtime_pg = 0
     runtime_leon = 0
-    pct = 0.01 # 执行 percent 比例的 plan
+    max_exec_num = 50
+    pct = 0.05 # 执行 percent 比例的 plan
     planning_time = 3000 # pg timout会考虑planning时间
-    
+    sql_id = [] # 达到局部最优解的query集合
     # ===== ITERATION OF CHUNKS ====
     ch_start_idx = 0 # the start idx of the current chunk in train_files
     while ch_start_idx + chunk_size <= len(train_files):
         print(f"\n+++++++++ a chunk of sql from {ch_start_idx}  ++++++++")
-        # sqls_chunk = load_sql(train_files[ch_start_idx : ch_start_idx + chunk_size])
-        sqls_chunk = load_sql(list(range(ch_start_idx, ch_start_idx + chunk_size)), training_query=training_query)
+        sqls_chunk = load_sql(train_files[ch_start_idx : ch_start_idx + chunk_size])
+        # sqls_chunk = load_sql(list(range(ch_start_idx, ch_start_idx + chunk_size)), training_query=training_query)
         curr_file = train_files[ch_start_idx : ch_start_idx + chunk_size]
         print(train_files[ch_start_idx : ch_start_idx + chunk_size])
         time_ratio = []
         tf_time = []
         pg_time1 = []
         Nodes = []
-        sql_id = [] # 达到局部最优解的query集合
         # ++++ PHASE 1. ++++ send a chunk of queries with ENABLE_LEON=True
         # ENABLE_LEON = bool
         ray.get(task_counter.WriteOnline.remote(False))
@@ -339,7 +339,7 @@ if __name__ == '__main__':
                 min_leon_time[curr_file[q_send_cnt]] = query_latency2
             else:
                 min_leon_time[curr_file[q_send_cnt]] = min(min_leon_time[curr_file[q_send_cnt]], query_latency2)
-            if min_leon_time[curr_file[q_send_cnt]] / first_time[curr_file[q_send_cnt]] < 0.75:
+            if min_leon_time[curr_file[q_send_cnt]] / first_time[curr_file[q_send_cnt]] < 0.75 and curr_file[q_send_cnt] not in sql_id:
                 sql_id.append(curr_file[q_send_cnt])
         logger.log_metrics({f"Runtime/pg_latency": sum(pg_time1)}, step=my_step)
         logger.log_metrics({f"Runtime/leon_latency": sum(tf_time)}, step=my_step)
@@ -377,7 +377,7 @@ if __name__ == '__main__':
                 if eq_temp in Exp.GetEqSet():
                     print(','.join(sorted(tbls)))
                     child_node.info['join_tables'] = ','.join(sorted(tbls))
-                    print(child_node)
+                    # print(child_node)
                     leon_node.append(child_node)
         
 
@@ -500,7 +500,8 @@ if __name__ == '__main__':
                     # print("num_to_exe", num_to_exe)
                     # STEP 3) execute with ENABLE_LEON=False and add exp
                     # 经验 [[logcost, sql, hint, latency, [query_vector, node], join, joinids], ...]
-                    for i in tqdm(range(num_to_exe)):
+                    # for i in tqdm(range(num_to_exe)):
+                    for i in range(num_to_exe):
                         # if i < 3: # 后续删掉！！这里只是为了节省代码运行时间！！！！
                         node_idx = ucb_idx[i] # 第 i 大ucb 的 node idx
                         cost_index = costs_index[i]
@@ -597,7 +598,7 @@ if __name__ == '__main__':
         end_time = time.time()
         logger.log_metrics({"Time/train_time": end_time - start_time}, step=my_step)
         my_step += 1
-        with open("./log/exp_v2.pkl", 'wb') as f:
+        with open("./log/exp_v3.pkl", 'wb') as f:
             pickle.dump(Exp.OnlyGetExp(), f) 
         
 
