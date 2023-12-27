@@ -177,7 +177,7 @@ class LeonModel:
     
     def encoding(self, X): 
         seqs, _, attns, _, _ = self.plans_encoding(X)
-        OneNode = PlanToNode(self.workload, [X[0]])
+        OneNode = PlanToNode(self.workload, [X[0]])[0]
         plans_lib.GatherUnaryFiltersInfo(OneNode)
         postgres.EstimateFilterRows(OneNode)  
         OneQueryFeature = self.queryFeaturizer(OneNode)

@@ -18,18 +18,18 @@ leon train 提交一条 query
 -> 获得执行 feedback (pg 返回的一条query的执行时间)
 
 """
-# @ray.remote
-# class ActorThatQueries:
-#     def __init__(self, port):
-#         # Initialize and configure your database connection here
-#         self.db = psycopg2.connect(database="imdbload", user="wyz", password="wangyuze", host="localhost", port=port)
-#         self.db.set_session(autocommit=True)
-#         self.cursor = self.db.cursor()
+@ray.remote
+class ActorThatQueries:
+    def __init__(self, port):
+        # Initialize and configure your database connection here
+        self.db = psycopg2.connect(database="imdbload", user="wyz", password="wangyuze", host="localhost", port=port)
+        self.db.set_session(autocommit=True)
+        self.cursor = self.db.cursor()
 
-#     def Execute(self, data):
-#         # Implement the logic to query the database
-#         s, verbose, geqo_off, timeout_ms = data
-#         return pg_executor.Execute(s, verbose, geqo_off, timeout_ms, self.cursor)
+    def Execute(self, data):
+        # Implement the logic to query the database
+        s, verbose, geqo_off, timeout_ms = data
+        return pg_executor.Execute(s, verbose, geqo_off, timeout_ms, self.cursor)
 
 
 def _run_explain(explain_str,

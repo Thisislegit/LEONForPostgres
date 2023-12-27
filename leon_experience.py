@@ -205,7 +205,7 @@ class Experience:
         [[j cost, j latency, j query_vector, j node], [k ...]], ...
         """
         pairs = []
-        for eq in self.__eqSet.keys():
+        for eq in self.__exp.keys():
             # if len(self.GetExp(eq)) < 8: 
             #     continue
             for i, j in enumerate(self.GetExp(eq)):

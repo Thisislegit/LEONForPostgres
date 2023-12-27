@@ -227,10 +227,11 @@ class SeqFormer(nn.Module):
         embedding_size = 0
         if node_embedding_dim is not None:
             embedding_size += node_embedding_dim + 2
+        if embedding_size == 0:
+            embedding_size += input_dim
         if query_dim is not None:
             embedding_size += 32
-        if embedding_size == 0:
-            embedding_size = input_dim
+        
         self.tranformer_encoder = nn.TransformerEncoder(
             nn.TransformerEncoderLayer(
                 d_model=embedding_size,

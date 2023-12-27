@@ -6,9 +6,9 @@ import lightning.pytorch.callbacks as plc
 import torch.nn.functional as F
 import torch.nn as nn
 import os
+from ray.util import ActorPool
 from util import postgres
-from util import pg_executor
-from util import postgres
+from util.pg_executor import ActorThatQueries, actor_call
 from util import envs
 from util.envs import load_sql, load_training_query
 from util import plans_lib
@@ -22,6 +22,7 @@ from util.dataset import LeonDataset, prepare_dataset, BucketBatchSampler, Bucke
 from leon_experience import Experience, TIME_OUT
 from util.model import PL_Leon
 import numpy as np
+from ray.util.iter import from_items
 import ray
 import time
 from argparse import ArgumentParser
@@ -42,6 +43,8 @@ Transformer_model = SeqFormer(
                         transformer_activation="gelu",
                         mlp_dropout=0.1,
                         transformer_dropout=0.1,
+                        query_dim=configs['query_dim'],
+                        padding_size=configs['pad_length']
                     )
 
 def load_model(model_path: str, prev_optimizer_state_dict=None):
@@ -95,15 +98,16 @@ def plans_encoding(plans):
 
     return seqs, run_times, attns, loss_mask
 
-def get_calibrations(model, seqs, attns, IF_TRAIN):
+def get_calibrations(model, seqs, attns, queryfeature, IF_TRAIN):
     seqs = seqs.to(DEVICE)
     attns = attns.to(DEVICE)
+    queryfeature = queryfeature.to(DEVICE)
     if IF_TRAIN:
         cost_iter = 10 # training 用模型推理 10 次 获得模型不确定性
         model.model.eval()
         with torch.no_grad():
             for i in range(cost_iter):
-                cali = model.model(seqs, attns) # cali.shape [# of plan, pad_length] cali 是归一化后的基数估计
+                cali = model.model(seqs, attns, queryfeature) # cali.shape [# of plan, pad_length] cali 是归一化后的基数估计
 
                 if i == 0:
                     cali_all = cali[:, 0].unsqueeze(1) # [# of plan] -> [# of plan, 1] cali_all plan （cost_iter次）基数估计（归一化后）结果
@@ -119,15 +123,15 @@ def get_calibrations(model, seqs, attns, IF_TRAIN):
 def get_ucb_idx(cali_all, pgcosts):    
     cali_mean = cali_all.mean(dim = 1) # 每个 plan 的 cali 均值 [# of plan] | 值为 1 左右
     cali_var = cali_all.var(dim = 1) # [# of plan] | 值为 0 左右
-    costs = pgcosts # [# of plan]
-    cost_t = torch.mul(cali_mean, costs) # 计算 calibration mean * pg返回的cost [# of plan]
+    # costs = pgcosts # [# of plan]
+    # cost_t = torch.mul(cali_mean, costs) # 计算 calibration mean * pg返回的cost [# of plan]
 
     # cali_min, _ = cost_t.min(dim = 0) # plan 的 cali 最小值 [# of plan] 【cali_min只有一个值？】
     # print("cost_min.shape(): ", cali_min.shape)
     # print(cali_min)            
     # ucb = cali_var / cali_var.max() - cali_min / cali_min.max()
-
-    ucb = cali_var / cali_var.max() - cost_t / cost_t.max() # [# of plan]
+    ucb = cali_var / cali_var.max()
+    # ucb = cali_var / cali_var.max() - cost_t / cost_t.max() # [# of plan]
     # print("len(ucb)", len(ucb))
     ucb_sort_idx = torch.argsort(ucb, descending=True) # 张量排序索引 | ucb_sort[0] 是uncertainty高的plan在plan_info中的索引
     ucb_sort_idx = ucb_sort_idx.tolist()
@@ -232,6 +236,7 @@ def load_callbacks(logger):
 
 if __name__ == '__main__':
     pretrain = False
+    ports = [1120, 1125, 1130]
     if pretrain:
         # trainer = pl.Trainer(ckpt_path="./log/epoch=28-step=123685.ckpt")
         checkpoint = torch.load("./log/epoch=28-step=123685.ckpt")
@@ -248,6 +253,8 @@ if __name__ == '__main__':
     context = ray.init(address='auto', namespace=namespace, _temp_dir=conf['leon']['ray_path'] + "/log/ray") # init only once
     print(context.address_info)
     dict_actor = ray.get_actor('querydict')
+    actors = [ActorThatQueries.options(name=f"actor{port}").remote(port) for port in ports]
+    pool = ActorPool(actors)
     # training_query = load_training_query("./train/training_query/job.txt")
     # train_files = [i[0] for i in training_query]
     train_files = ['1a', '1b', '1c', '1d', '2a', '2b', '2c', '2d', '3a', '3b', '3c', '4a',
@@ -291,6 +298,8 @@ if __name__ == '__main__':
     runtime_pg = 0
     runtime_leon = 0
     max_exec_num = 50
+    
+    remote = bool(conf['leon']['remote'])
     pct = float(conf['leon']['pct']) # 执行 percent 比例的 plan
     planning_time = 3000 # pg timout会考虑planning时间
     sql_id = [] # 达到局部最优解的query集合
@@ -395,7 +404,7 @@ if __name__ == '__main__':
             else:
                 PKL_READY = False
             # PKL_READY = ray.get(same_actor.complete_all_tasks.remote())
-        
+        exec_plan = [] # 总的需要执行的计划
         start_time = time.time()
         # ++++ PHASE 2. ++++ get messages of a chunk, nodes, and experience
         PKL_exist = True
@@ -419,6 +428,7 @@ if __name__ == '__main__':
                     
                     # STEP 1) get node
                     nodes = PlanToNode(workload, message)
+
                     if nodes is None:
                         continue
                     encoded_plans, _, attns, _ = plans_encoding(message) # encoding. plan -> plan_encoding / seqs torch.Size([26, 1, 760])
@@ -447,13 +457,11 @@ if __name__ == '__main__':
                                         c_plan[0].info['latency'] = node2.actual_time_ms
                                     else:
                                         if c_plan[0].info.get('latency') is None:
-                                            hint_node = plans_lib.FilterScansOrJoins(c_node.Copy())
-                                            c_plan[0].info['latency'], _ = getPG_latency(hint_node.info['sql_str'], hint_node.hint_str(), ENABLE_LEON=False, timeout_limit=(pg_time1[q_recieved_cnt] * 3 + planning_time)) # timeout 10s
-
-                                    # print('actual_time_ms', node2.actual_time_ms)
-                                    # hint_node = plans_lib.FilterScansOrJoins(c_node.Copy())
-                                    # hint_node.info['latency'], _ = getPG_latency(hint_node.info['sql_str'], hint_node.hint_str(), ENABLE_LEON=False, timeout_limit=pg_time) # timeout 10s
-                                    # print('hint_time', hint_node.info['latency'])
+                                            if not Exp.isCache(c_node.info['join_tables'], c_plan) and not envs.CurrCache(exec_plan, c_plan):
+                                                exec_plan.append((c_plan,(pg_time1[q_recieved_cnt] * 3 + planning_time), temp))
+                                            break
+                                            # hint_node = plans_lib.FilterScansOrJoins(c_node.Copy())
+                                            # c_plan[0].info['latency'], _ = getPG_latency(hint_node.info['sql_str'], hint_node.hint_str(), ENABLE_LEON=False, timeout_limit=(pg_time1[q_recieved_cnt] * 3 + planning_time)) # timeout 10s
                                     if not Exp.isCache(c_node.info['join_tables'], c_plan):
                                         Exp.AppendExp(c_node.info['join_tables'], c_plan)
                                     else:
@@ -464,8 +472,14 @@ if __name__ == '__main__':
                     ##################################################################
                     
                     costs = torch.tensor(getNodesCost(nodes)).to(DEVICE)
+                    OneNode = nodes[0]
+                    plans_lib.GatherUnaryFiltersInfo(OneNode)
+                    postgres.EstimateFilterRows(OneNode)  
+                    OneQueryFeature = queryFeaturizer(OneNode)
+                    OneQueryFeature = torch.from_numpy(OneQueryFeature).unsqueeze(0)
+                    queryfeature = OneQueryFeature.repeat(encoded_plans.shape[0], 1) 
                     model.model.to(DEVICE)
-                    cali_all = get_calibrations(model, encoded_plans, attns, IF_TRAIN)
+                    cali_all = get_calibrations(model, encoded_plans, attns, queryfeature, IF_TRAIN)
                     ucb_idx = get_ucb_idx(cali_all, costs)
 
                     num_to_exe = min(math.ceil(pct * len(ucb_idx)), max_exec_num)
@@ -515,19 +529,28 @@ if __name__ == '__main__':
                                   encoded_plans[cost_index],
                                   attns[cost_index]]
                         # print(i)
-                        if not Exp.isCache(eqKey, a_plan): # 该行放 get latency 前面 ！！！
-                            hint_node = plans_lib.FilterScansOrJoins(a_node.Copy())
-                            # print(hint_node.hint_str(), hint_node.info['sql_str'])
-                            a_plan[0].info['latency'], _ = getPG_latency(hint_node.info['sql_str'], hint_node.hint_str(), ENABLE_LEON=False, timeout_limit=(pg_time1[q_recieved_cnt] * 3 + planning_time)) # timeout 10s(pg_time1[q_recieved_cnt] * 3)
-                            Exp.AppendExp(eqKey, a_plan)
-                        if not Exp.isCache(eqKey, b_plan): # 该行放 get latency 前面 ！！！
-                            hint_node = plans_lib.FilterScansOrJoins(b_node.Copy())
-                            b_plan[0].info['latency'], _ = getPG_latency(hint_node.info['sql_str'], hint_node.hint_str(), ENABLE_LEON=False, timeout_limit=(pg_time1[q_recieved_cnt] * 3 + planning_time)) # timeout 10s
-                            Exp.AppendExp(eqKey, b_plan)
-                        
+                        if not Exp.isCache(eqKey, a_plan) and not envs.CurrCache(exec_plan, a_plan):
+                            exec_plan.append((a_plan, (pg_time1[q_recieved_cnt] * 3 + planning_time), eqKey))
 
+                        if not Exp.isCache(eqKey, b_plan) and not envs.CurrCache(exec_plan, b_plan):
+                            exec_plan.append((b_plan, (pg_time1[q_recieved_cnt] * 3 + planning_time), eqKey))
+                            
+                            
+                        # if not Exp.isCache(eqKey, a_plan): # 该行放 get latency 前面 ！！！
+                        #     hint_node = plans_lib.FilterScansOrJoins(a_node.Copy())
+                        #     # print(hint_node.hint_str(), hint_node.info['sql_str'])
+                        # a_plan[0].info['latency'], _ = getPG_latency(hint_node.info['sql_str'], hint_node.hint_str(), ENABLE_LEON=False, timeout_limit=(pg_time1[q_recieved_cnt] * 3 + planning_time)) # timeout 10s(pg_time1[q_recieved_cnt] * 3)
+                        #     Exp.AppendExp(eqKey, a_plan)
+                        # if not Exp.isCache(eqKey, b_plan): # 该行放 get latency 前面 ！！！
+                        #     hint_node = plans_lib.FilterScansOrJoins(b_node.Copy())
+                        #     b_plan[0].info['latency'], _ = getPG_latency(hint_node.info['sql_str'], hint_node.hint_str(), ENABLE_LEON=False, timeout_limit=(pg_time1[q_recieved_cnt] * 3 + planning_time)) # timeout 10s
+                        #     Exp.AppendExp(eqKey, b_plan)
                     # print("len(Exp.GetExp(eqKey))", len(Exp.GetExp(eqKey)))
-        
+        print("Curr_Plan_Len: ", len(exec_plan))
+        results = pool.map_unordered(actor_call, exec_plan)
+        for result in results:
+            Exp.AppendExp(result[1], result[0])
+
         ##########删除等价类#############
         Exp.DeleteEqSet(sql_id)
         eqset = Exp.GetEqSet()
@@ -555,10 +578,10 @@ if __name__ == '__main__':
         # last_train_pair = len(train_pairs)
         # print(retrain_count)
         if len(train_pairs) > 256:
-            leon_dataset = prepare_dataset(train_pairs)
+            leon_dataset = prepare_dataset(train_pairs, True)
             dataloader_train = DataLoader(leon_dataset, batch_size=256, shuffle=True, num_workers=0)
             # dataloader_val = DataLoader(leon_dataset, batch_size=256, shuffle=False, num_workers=0)
-            dataset_val = BucketDataset(Exp.OnlyGetExp(), keys=Exp.GetEqSetKeys())
+            dataset_val = BucketDataset(Exp.OnlyGetExp(), keys=Exp.GetExpKeys())
             batch_sampler = BucketBatchSampler(dataset_val.buckets, batch_size=1)
             dataloader_val = DataLoader(dataset_val, batch_sampler=batch_sampler)
             # model = load_model(model_path, prev_optimizer_state_dict).to(DEVICE)
