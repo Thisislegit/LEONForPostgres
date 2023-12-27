@@ -22,6 +22,8 @@ import json
 import pickle
 import ray
 import uuid
+from config import read_config
+conf = read_config()
 
 GenerateUniqueNameSpace = lambda: str(uuid.uuid4())
 namespace = GenerateUniqueNameSpace()
@@ -122,7 +124,7 @@ class LeonModel:
     def __init__(self):
         # 初始化
         self.__model = None
-        context = ray.init(namespace=namespace, _temp_dir= os.getcwd() + "/log/ray") # ray should be init in sub process  
+        context = ray.init(namespace=namespace, _temp_dir= conf['leon']['ray_path'] + "/log/ray") # ray should be init in sub process  
         print(context.address_info)
         node_path = "./log/messages.pkl"
         self.writer_hander = FileWriter.options(name="leon_server").remote(node_path)
@@ -226,7 +228,7 @@ class LeonModel:
                 transformer_activation="gelu",
                 mlp_dropout=0.1,
                 transformer_dropout=0.1,
-                query_dim=666,
+                query_dim=configs['query_dim'],
                 padding_size=configs['pad_length']
                 ).to(DEVICE) # server.py 和 train.py 中的模型初始化也需要相同, 这里还没加上！！！
             torch.save(model, path)

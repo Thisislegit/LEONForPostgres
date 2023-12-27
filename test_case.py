@@ -12,7 +12,8 @@ configs = {
     'pad_length' : 50,
     # training
     "loss_weight" : 0.5,
-    'max_runtime' : 1
+    'max_runtime' : 1,
+    'query_dim' : 666
 }
 
 plan_parameters = [
