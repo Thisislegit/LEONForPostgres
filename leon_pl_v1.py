@@ -293,7 +293,7 @@ if __name__ == '__main__':
     retrain_count = 3
     min_leon_time = dict()
     max_query_latency1 = 0
-    logger =  pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs', name="等价类pair方式，考虑planning时间，优化时间：是当前时间-pg时间", project='leon2')
+    logger =  pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs', name="新模型和pair方法", project='leon2')
     my_step = 0
     same_actor = ray.get_actor('leon_server')
     task_counter = ray.get_actor('counter')
@@ -322,7 +322,7 @@ if __name__ == '__main__':
             print(f"------------- sending query {q_send_cnt} starting from idx {ch_start_idx} ------------")
             query_latency1, _ = getPG_latency(sqls_chunk[q_send_cnt], ENABLE_LEON=False, timeout_limit=0)
             print("latency pg ", query_latency1)
-            query_latency2, json_dict = getPG_latency(sqls_chunk[q_send_cnt], ENABLE_LEON=True, timeout_limit=100000, curr_file=curr_file[q_send_cnt])
+            query_latency2, json_dict = getPG_latency(sqls_chunk[q_send_cnt], ENABLE_LEON=True, timeout_limit=200000, curr_file=curr_file[q_send_cnt])
             print("latency leon ", query_latency2)
             node = postgres.ParsePostgresPlanJson(json_dict)
             max_query_latency1 = max(max_query_latency1, query_latency1)
@@ -476,9 +476,25 @@ if __name__ == '__main__':
                     model.model.to(DEVICE)
                     cali_all = get_calibrations(model, encoded_plans, attns, IF_TRAIN)
                     ucb_idx = get_ucb_idx(cali_all, costs)
-                    # TODO: 选择cost 差异大于1.2的plan
-                    costs_index = torch.argsort(costs, descending=False)
+
                     num_to_exe = math.ceil(pct * len(ucb_idx))
+                    # TODO: 选择cost 差异大于1.2的plan
+                    # costs_index = torch.argsort(costs, descending=False)
+                    costs = costs.cpu().numpy()
+                    sorted_indices = np.argsort(costs)
+                    # Start with the minimum cost index
+                    selected_indices = [sorted_indices[0]]
+                    # Iterate over the sorted costs
+                    for i in range(1, len(sorted_indices)):
+                        # If the difference with the last selected cost is greater than 1.2, add it to the selected indices
+                        if (costs[sorted_indices[i]] / costs[selected_indices[-1]]) > 1.2:
+                            selected_indices.append(sorted_indices[i])
+                        if len(selected_indices) == num_to_exe:
+                            break
+                    if len(selected_indices) < num_to_exe:
+                        selected_indices = sorted_indices[:num_to_exe]
+                    costs_index = selected_indices
+
 
                     # print("ucb_idx to exe", ucb_idx[:num_to_exe])
                     # print("num_to_exe", num_to_exe)

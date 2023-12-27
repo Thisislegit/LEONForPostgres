@@ -188,7 +188,7 @@ class LeonModel:
     
     def encoding(self, X): 
         seqs, _, attns, _, _ = self.plans_encoding(X)
-        OneNode = PlanToNode(self.workload, X[0])
+        OneNode = PlanToNode(self.workload, [X[0]])
         plans_lib.GatherUnaryFiltersInfo(OneNode)
         postgres.EstimateFilterRows(OneNode)  
         OneQueryFeature = self.queryFeaturizer(OneNode)
@@ -227,7 +227,7 @@ class LeonModel:
                 mlp_dropout=0.1,
                 transformer_dropout=0.1,
                 query_dim=666,
-                padding_size=configs['padding_size']
+                padding_size=configs['pad_length']
                 ).to(DEVICE) # server.py 和 train.py 中的模型初始化也需要相同, 这里还没加上！！！
             torch.save(model, path)
         else:
