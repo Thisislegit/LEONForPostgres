@@ -15,19 +15,16 @@ from select import select
 # LOCAL_DSN = "postgres://psycopg:psycopg@localhost/imdb"
 
 from config import read_config
-conf = read_config(section='PostgreSQL')
+conf = read_config()
 
-print("PostgreSQL config:")
-
-database = conf['database']
-user = conf['user']
-password = conf['password']
-host = conf['host']
-port = conf['port']
+database = conf['PostgreSQL']['database']
+user = conf['PostgreSQL']['user']
+password = conf['PostgreSQL']['password']
+host = conf['PostgreSQL']['host']
+port = conf['PostgreSQL']['port']
 LOCAL_DSN = ""
 REMOTE_DSN = ""
-conf = read_config(section='leon')
-leon_port = conf['Port']
+leon_port = conf['leon']['Port']
 
 # TPC-H.
 # LOCAL_DSN = "postgres://psycopg:psycopg@localhost/tpch-sf10"

@@ -30,7 +30,9 @@ import wandb
 import time
 import random
 from tqdm import tqdm
+from config import read_config
 
+conf = read_config()
 DEVICE = 'cuda:3' if torch.cuda.is_available() else 'cpu'
 Transformer_model = SeqFormer(
                         input_dim=configs['node_length'],
@@ -243,7 +245,7 @@ if __name__ == '__main__':
     # train_files = ['1a', '2a', '3a', '4a']
     with open ("./conf/namespace.txt", "r") as file:
         namespace = file.read().replace('\n', '')
-    context = ray.init(address='auto', namespace=namespace, _temp_dir=os.getcwd() + "/log/ray") # init only once
+    context = ray.init(address='auto', namespace=namespace, _temp_dir=conf['leon']['ray_path'] + "/log/ray") # init only once
     print(context.address_info)
     dict_actor = ray.get_actor('querydict')
     # training_query = load_training_query("./train/training_query/job.txt")
@@ -300,7 +302,7 @@ if __name__ == '__main__':
     runtime_pg = 0
     runtime_leon = 0
     max_exec_num = 50
-    pct = 0.05 # 执行 percent 比例的 plan
+    pct = float(conf['leon']['pct']) # 执行 percent 比例的 plan
     planning_time = 3000 # pg timout会考虑planning时间
     sql_id = [] # 达到局部最优解的query集合
     # ===== ITERATION OF CHUNKS ====
@@ -322,7 +324,7 @@ if __name__ == '__main__':
             print(f"------------- sending query {q_send_cnt} starting from idx {ch_start_idx} ------------")
             query_latency1, _ = getPG_latency(sqls_chunk[q_send_cnt], ENABLE_LEON=False, timeout_limit=0)
             print("latency pg ", query_latency1)
-            query_latency2, json_dict = getPG_latency(sqls_chunk[q_send_cnt], ENABLE_LEON=True, timeout_limit=200000, curr_file=curr_file[q_send_cnt])
+            query_latency2, json_dict = getPG_latency(sqls_chunk[q_send_cnt], ENABLE_LEON=True, timeout_limit=int(conf['leon']['leon_timeout']), curr_file=curr_file[q_send_cnt])
             print("latency leon ", query_latency2)
             node = postgres.ParsePostgresPlanJson(json_dict)
             max_query_latency1 = max(max_query_latency1, query_latency1)
