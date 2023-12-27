@@ -477,7 +477,7 @@ if __name__ == '__main__':
                     cali_all = get_calibrations(model, encoded_plans, attns, IF_TRAIN)
                     ucb_idx = get_ucb_idx(cali_all, costs)
 
-                    num_to_exe = math.ceil(pct * len(ucb_idx))
+                    num_to_exe = min(math.ceil(pct * len(ucb_idx)), max_exec_num)
                     # TODO: 选择cost 差异大于1.2的plan
                     # costs_index = torch.argsort(costs, descending=False)
                     costs = costs.cpu().numpy()
