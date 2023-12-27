@@ -7,6 +7,9 @@ import psycopg2.extensions
 import ray
 from psycopg2.extensions import POLL_OK, POLL_READ, POLL_WRITE
 from select import select
+from . import plans_lib
+from . import postgres
+
 
 # Change these strings so that psycopg2.connect(dsn=dsn_val) works correctly
 # for local & remote Postgres.
@@ -16,6 +19,7 @@ from select import select
 
 from config import read_config
 conf = read_config()
+
 
 database = conf['PostgreSQL']['database']
 user = conf['PostgreSQL']['user']
@@ -169,3 +173,78 @@ def Execute(sql, verbose=False, geqo_off=False, timeout_ms=None, cursor=None):
         pass
     ip = socket.gethostbyname(socket.gethostname())
     return Result(result, has_timeout, ip)
+
+
+
+@contextlib.contextmanager
+def MyCursor(database_port):
+    """Get a cursor to local Postgres database."""
+    # TODO: create the cursor once per worker node.
+    conn = psycopg2.connect(database=database, user=user,
+                            password=password, host=host, port=database_port)
+    conn.set_client_encoding('UTF8')
+    conn.set_session(autocommit=True)
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("SET client_encoding TO 'UTF8';")
+            cursor.execute(f"set leon_port={leon_port};")
+            cursor.execute("load 'pg_hint_plan';")
+
+            yield cursor
+    finally:
+        conn.close()
+
+def actor_call(actor, item):
+    return actor.ActorExecute.remote(item)
+
+@ray.remote
+class ActorThatQueries:
+    def __init__(self, port):
+        # Initialize and configure your database connection here
+        self.port = port
+        self.TIME_OUT = 1000000
+
+    def ActorExecute(self, plan):
+        # Implement the logic to query the database
+        exp = plan[0]
+        node = plan[0][0]
+        timeout = plan[1]
+        hint_node = plans_lib.FilterScansOrJoins(node.Copy())
+        explain_str = 'explain(verbose, format json, analyze)'
+        comment = hint_node.hint_str()
+        sql = hint_node.info['sql_str']
+
+        end_of_comment_idx = sql.find('*/')
+        if end_of_comment_idx == -1:
+            existing_comment = None
+        else:
+            split_idx = end_of_comment_idx + len('*/\n')
+            existing_comment = sql[:split_idx]
+            sql = sql[split_idx:]
+
+        # Fuse hint comments.
+        if comment:
+            assert comment.startswith('/*+') and comment.endswith('*/'), (
+                'Don\'t know what to do with these', sql, existing_comment, comment)
+            if existing_comment is None:
+                fused_comment = comment
+            else:
+                comment_body = comment[len('/*+ '):-len(' */')].rstrip()
+                existing_comment_body_and_tail = existing_comment[len('/*+'):]
+                fused_comment = '/*+\n' + comment_body + '\n' + existing_comment_body_and_tail
+        else:
+            fused_comment = existing_comment
+
+        if fused_comment:
+            s = fused_comment + '\n' + str(explain_str).rstrip() + '\n' + sql
+        else:
+            s = str(explain_str).rstrip() + '\n' + sql
+        with MyCursor(port) as cursor:
+            result = Execute(s, True, True, timeout, cursor).result
+        if not result:
+            exp[0].info['latency'] = self.TIME_OUT
+        else:
+            json_dict = result[0][0][0]
+            latency = float(json_dict['Execution Time'])
+            exp[0].info['latency'] = latency
+        return (exp, plan[2])

@@ -31,8 +31,8 @@ class PL_Leon(pl.LightningModule):
         encoded_plans2 = batch['encoded_plans2']
         attns1 = batch['attns1']
         attns2 = batch['attns2']
-        queryfeature1 = batch.get('queryfeature1')
-        queryfeature2 = batch.get('queryfeature2')
+        queryfeature1 = batch['queryfeature1']
+        queryfeature2 = batch['queryfeature2']
 
         loss_fn = nn.BCELoss()
         # step 1. retrieve encoded_plans and attns from pairs
@@ -132,7 +132,7 @@ class PL_Leon(pl.LightningModule):
         labels = batch['latency']
         join_tables = batch['join_tables']
         sql = batch['sql']
-        queryfeature = batch.get('queryfeature')
+        queryfeature = batch['queryfeature']
         eq = ','.join(sorted(join_tables[0].split(' ')))
 
         # plans = torch.cat(plans, dim=0)

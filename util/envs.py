@@ -412,3 +412,9 @@ def wordload_init(workload_type):
             workload = pickle.load(f)
     print("Read Workload:", workload_type)
     return workload
+
+def CurrCache(curr_exec, plan):
+    for curr_plan in curr_exec:
+        if curr_plan[0][0].info['sql_str'] == plan[0].info['sql_str'] and curr_plan[0][0].hint_str() == plan[0].hint_str():
+            return True
+    return False
