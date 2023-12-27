@@ -534,11 +534,7 @@ if __name__ == '__main__':
         print("len_eqset", Exp._getEqNum())
         logger.log_metrics({"len_eqset": Exp._getEqNum()}, step=my_step)
         for eq in eqset:
-            print(f"{Exp.GetQueryId(eq)} \
-                  Eq: {eq}, \
-                  len: {len(Exp.GetExp(eq))},\
-                  opt_time: {round(Exp.GetEqSet()[eq].opt_time, 2)},\
-                  eqset_latency: {round(Exp.GetEqSet()[eq].eqset_latency, 2)}")
+            print(f"{Exp.GetQueryId(eq)} Eq: {eq}, len: {len(Exp.GetExp(eq))}, opt_time: {round(Exp.GetEqSet()[eq].opt_time, 2)}, eqset_latency: {round(Exp.GetEqSet()[eq].eqset_latency, 2)}")
         # print(eqset)
         end_time = time.time()
         logger.log_metrics({"Time/pick_nodes_time": end_time - start_time}, step=my_step)
