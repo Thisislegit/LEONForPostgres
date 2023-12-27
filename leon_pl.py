@@ -224,7 +224,7 @@ if __name__ == '__main__':
     # train_files = ['1a', '2a', '3a', '4a']
     with open ("./conf/namespace.txt", "r") as file:
         namespace = file.read().replace('\n', '')
-    context = ray.init(address='auto', namespace=namespace, _temp_dir='/data1/chenxu/projects' + "/log/ray") # init only once
+    context = ray.init(address='auto', namespace=namespace, _temp_dir=os.getcwd() + "/log/ray") # init only once
     print(context.address_info)
     dict_actor = ray.get_actor('querydict')
     training_query = load_training_query("./train/training_query/job.txt")
