@@ -273,18 +273,7 @@ if __name__ == '__main__':
     Exp = Experience(eq_set=initEqSet())
     print("Init workload and equal set keys")
     
-    if not os.path.exists('./log/workload_job_training.pkl'):
-        workload = envs.JoinOrderBenchmark_Train(envs.JoinOrderBenchmark_Train.Params())
-        workload.workload_info.table_num_rows = postgres.GetAllTableNumRows(workload.workload_info.rel_names)
-        workload.workload_info.alias_to_names = postgres.GetAllAliasToNames(workload.workload_info.rel_ids)
-        print(workload.workload_info)
-        # dump queryFeaturizer and workload
-        with open('./log/workload_job_training.pkl', 'wb') as f:
-            pickle.dump(workload, f)
-    else:
-        
-        with open('./log/workload_job_training.pkl', 'rb') as f:
-            workload = pickle.load(f)
+    workload = envs.wordload_init(conf['leon']['workload_type'])
     queryFeaturizer = plans_lib.QueryFeaturizer(workload.workload_info)
     statistics_file_path = "./statistics.json"
     feature_statistics = load_json(statistics_file_path)
@@ -295,7 +284,7 @@ if __name__ == '__main__':
     retrain_count = 3
     min_leon_time = dict()
     max_query_latency1 = 0
-    logger =  pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs', name="新模型和pair方法", project='leon2')
+    logger =  pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs', name="新模型和pair方法", project=conf['leon']['wandb_project'])
     my_step = 0
     same_actor = ray.get_actor('leon_server')
     task_counter = ray.get_actor('counter')
@@ -545,7 +534,11 @@ if __name__ == '__main__':
         print("len_eqset", Exp._getEqNum())
         logger.log_metrics({"len_eqset": Exp._getEqNum()}, step=my_step)
         for eq in eqset:
-            print(f"{Exp.GetQueryId(eq)}: {eq}: {len(Exp.GetExp(eq))} : {Exp.GetEqSet()[eq].opt_time}")
+            print(f"{Exp.GetQueryId(eq)} \
+                  Eq: {eq}, \
+                  len: {len(Exp.GetExp(eq))},\
+                  opt_time: {round(Exp.GetEqSet()[eq].opt_time, 2)},\
+                  eqset_latency: {round(Exp.GetEqSet()[eq].eqset_latency, 2)}")
         # print(eqset)
         end_time = time.time()
         logger.log_metrics({"Time/pick_nodes_time": end_time - start_time}, step=my_step)

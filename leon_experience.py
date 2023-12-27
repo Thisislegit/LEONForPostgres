@@ -1,7 +1,8 @@
 from dataclasses import dataclass, field
 from typing import List, Dict
 from statistics import mean
-
+from config import read_config
+conf = read_config()
 TIME_OUT = 1000000
 
 @dataclass
@@ -17,14 +18,15 @@ class EqSetInfo:
     opt_time: float = -TIME_OUT
     query_ids: List[str] = field(default_factory=list)
     query_dict: Dict[str, float] = field(default_factory=dict)
+    eqset_latency: float = TIME_OUT
 
 
 
 class Experience:
     def __init__(self, eq_set) -> None:
         # 经验 [[logcost, sql, hint, latency, [query_vector, node], join, joinids]] 
-        self.MinEqNum = 35
-        self.MaxEqSets = 50
+        self.MinEqNum = int(conf['leon']['MinEqNum'])
+        self.MaxEqSets = int(conf['leon']['MaxEqSets'])
         self.LargeTimout = TIME_OUT
         self.__exp = dict() # k is the join_ids of an eq (str), v is experience of an eq (list)
         self.__eqSet = dict() # save limited # of eq. Some eqs are in __exp, but not in __eqSet
@@ -104,19 +106,19 @@ class Experience:
             num += len(self.GetExp(eq))
         return num
 
-    # def _collectTime(self):
-    #     for eq in self.GetEqSetKeys():
-    #         average = 0
-    #         cnt = 0
-    #         if len(self.GetExp(eq)) > 0:
-    #             for plan in self.GetExp(eq):
-    #                 if plan[0].info['latency'] != TIME_OUT:
-    #                     cnt += 1
-    #                     average += plan[0].info['latency']
-    #             if cnt == 0:
-    #                 self.GetEqSet()[eq] = TIME_OUT
-    #             else:
-    #                 self.GetEqSet()[eq] = average / cnt
+    def _collectTime(self):
+        for eq in self.GetEqSetKeys():
+            average = 0
+            cnt = 0
+            if len(self.GetExp(eq)) > 0:
+                for plan in self.GetExp(eq):
+                    if plan[0].info['latency'] != TIME_OUT:
+                        cnt += 1
+                        average += plan[0].info['latency']
+                if cnt == 0:
+                    self.GetEqSet()[eq].eqset_latency = TIME_OUT
+                else:
+                    self.GetEqSet()[eq].eqset_latency = average / cnt
 
     def collectRate(self, eq, first_time, tf, query_id):
         """
@@ -156,13 +158,14 @@ class Experience:
                                             query_ids=query_ids)
 
     def DeleteEqSet(self, sql_id):
-        # self._collectTime()
+        self._collectTime()
         EqNum = self._getEqNum()
         if EqNum < self.MinEqNum:
             return
         allSet = list(self.GetEqSet().items())
         # list of (key, value)
-        allSet.sort(key=lambda x: (x[1].opt_time, len(x[0])), reverse=True) # 优先删小的等价类
+        # allSet.sort(key=lambda x: (x[1].opt_time, len(x[0])), reverse=True) # 优先删小的等价类
+        allSet.sort(key=lambda x: (x[1].eqset_latency, len(x[0])), reverse=True) # 优先删小的等价类
         def remove_matching_sets(all_set, sql_id):
             """
             Remove sets from all_set if their query_ids contain common elements with sql_id.
