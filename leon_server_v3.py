@@ -133,21 +133,8 @@ class LeonModel:
         self.query_dict_flag = True
         self.eqset = None
 
-        if not os.path.exists('./log/workload_job_training.pkl'):
-            self.workload = envs.JoinOrderBenchmark_Train(envs.JoinOrderBenchmark_Train.Params())
-            self.workload.workload_info.table_num_rows = postgres.GetAllTableNumRows(self.workload.workload_info.rel_names)
-            self.workload.workload_info.alias_to_names = postgres.GetAllAliasToNames(self.workload.workload_info.rel_ids)
-            # dump queryFeaturizer and workload
-            with open('./log/workload_job_training.pkl', 'wb') as f:
-                pickle.dump(self.workload, f)
-        else:
-            with open('./log/workload_job_training.pkl', 'rb') as f:
-                self.workload = pickle.load(f)
-        print(self.workload.workload_info)
+        self.workload = envs.wordload_init(conf['leon']['workload_type'])
         self.queryFeaturizer = plans_lib.QueryFeaturizer(self.workload.workload_info)
-        
-        # self.workload = envs.JoinOrderBenchmark(envs.JoinOrderBenchmark.Params())
-        # self.workload.workload_info.alias_to_names = postgres.GetAllAliasToNames(self.workload.workload_info.rel_ids)
         
         statistics_file_path = "./statistics.json"
         self.feature_statistics = load_json(statistics_file_path)
@@ -371,8 +358,8 @@ if __name__ == "__main__":
 
 
     config = read_config()
-    port = int(config["Port"])
-    listen_on = config["ListenOn"]
+    port = int(config['leon']["Port"])
+    listen_on = config['leon']["ListenOn"]
 
     print(f"Listening on {listen_on} port {port}")
     

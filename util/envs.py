@@ -3,7 +3,7 @@ import glob
 import os
 
 import numpy as np
-
+import pickle
 from . import hyperparams, plans_lib, postgres
 
 _EPSILON = 1e-6
@@ -392,3 +392,23 @@ class RunningStats(object):
         if epsilon_guard:
             return np.maximum(eps, std)
         return std
+
+def wordload_init(workload_type):
+    path = f'./log/workload_{workload_type}.pkl'
+    
+    if not os.path.exists(path):
+        if workload_type == 'job_training':
+            workload = JoinOrderBenchmark_Train(JoinOrderBenchmark_Train.Params())
+        else:
+            workload = JoinOrderBenchmark(JoinOrderBenchmark.Params())
+        workload.workload_info.table_num_rows = postgres.GetAllTableNumRows(workload.workload_info.rel_names)
+        workload.workload_info.alias_to_names = postgres.GetAllAliasToNames(workload.workload_info.rel_ids)
+        # print(workload.workload_info)
+        # dump queryFeaturizer and workload
+        with open(path, 'wb') as f:
+            pickle.dump(workload, f)
+    else:
+        with open(path, 'rb') as f:
+            workload = pickle.load(f)
+    print("Read Workload:", workload_type)
+    return workload

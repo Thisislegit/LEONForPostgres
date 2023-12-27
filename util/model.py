@@ -154,7 +154,7 @@ class PL_Leon(pl.LightningModule):
         prediction = torch.round(sigmoid)
         accuracy = torch.sum(prediction == labels).item() / len(labels)
 
-        self.eq_summary[eq] = (accuracy, len(labels))
+        self.eq_summary[eq] = (round(accuracy, 3), len(labels))
         self.outputs.append((accuracy, loss, len(labels)))
         return accuracy, loss, len(labels)
 
