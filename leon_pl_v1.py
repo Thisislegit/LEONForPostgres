@@ -236,7 +236,7 @@ def load_callbacks(logger):
 
 if __name__ == '__main__':
     pretrain = False
-    ports = [1120, 1125, 1130]
+    ports = [5438, 5439, 5440]
     if pretrain:
         # trainer = pl.Trainer(ckpt_path="./log/epoch=28-step=123685.ckpt")
         checkpoint = torch.load("./log/epoch=28-step=123685.ckpt")

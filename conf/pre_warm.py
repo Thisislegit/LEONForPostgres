@@ -7,13 +7,13 @@ def read_config(section):
     config.read('leon.cfg')
     return config[section]
 
-def prewarm_pg():
+def prewarm_pg(port):
     conf = read_config('PostgreSQL')
     database = conf['database']
     user = conf['user']
     password = conf['password']
     host = conf['host']
-    port = int(conf['port'])
+    # port = int(conf['port'])
     print("PostgreSQL Start PreWarming:")
     start = time.time()
     with psycopg2.connect(database=database, user=user, password=password, host=host, port=port) as conn:
@@ -90,5 +90,6 @@ def prewarm_pg():
             print(f"PostgreSQL Finish PreWarming, total time: {time.time() - start} s")
 
 if __name__ == "__main__":
-    prewarm_pg()
+    for port in [5438, 5439, 5440]:
+        prewarm_pg(port)
     
