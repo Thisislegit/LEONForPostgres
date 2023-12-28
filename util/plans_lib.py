@@ -261,6 +261,12 @@ class Node(object):
         else:
             select_exprs = []
         # print(select_exprs)
+        if len(select_exprs) > 0:
+            select_exprs = sorted(select_exprs)
+        if len(filters) > 0:
+            filters = sorted(filters)
+        if len(joins) > 0:
+            joins = sorted(joins)
         select_str = '*' if len(select_exprs) == 0 else ','.join(select_exprs)
 
         if len(filters) > 0 and len(joins) > 0:
