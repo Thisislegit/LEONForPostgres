@@ -101,8 +101,8 @@ if __name__ == "__main__":
     from config import read_config
 
     config = read_config()
-    port = int(config["Port"])
-    listen_on = config["ListenOn"]
+    port = int(config['leon']["Port"])
+    listen_on = config['leon']["ListenOn"]
 
     print(f"Listening on {listen_on} port {port}")
     

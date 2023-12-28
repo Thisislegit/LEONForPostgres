@@ -173,7 +173,7 @@ def initEqSet():
     #            'mc,cn', 'mc,cn,t','mc,cn,t,at', 'cn,mc,t,ci', 'n,an', 'n,an,ci', 'it,mi', 'ct,mc',
     #            'ct,mc,t', 'ct,mc,t,mi', 'mc,cn', 'k,mk', 'k,mk,mi_idx', 'k,mk,miidx', 'a1,n1', 'a1,n1,ci']
     # equ_tem = ['an,chn,ci,cn,mc,n,rt,t', 'ci,k,mk,n,t', 'a1,ci,cn,mc,n1,rt,t', 'cn,ct,it,it2,kt,mc,mi,miidx,t', 'an,chn,ci,cn,it,mc,mi,n,rt,t', 'cn,ct,k,lt,mc,mk,ml,t', 'an,ci,it,lt,ml,n,pi,t', 'it,k,mi_idx,mk,t']
-    equ_tem = []
+    equ_tem = ['cc,cct1,cct2,chn,ci,k,kt,mk,n,t', 'cn,ct,k,lt,mc,mi,mk,ml,t', 'at,cn,ct,it1,k,mc,mi,mk,t', 'ct,it,mc,mi_idx,t', 'cc,cct1,cct2,chn,ci,it2,k,kt,mi_idx,mk,n,t', 'chn,ci,cn,ct,mc,rt,t', 'cc,cct1,cct2,chn,ci,it2,k,kt,mi_idx,mk,n,t', 'ci,cn,it1,it2,k,mc,mi,mi_idx,mk,n,t', 'cn,ct,k,lt,mc,mk,ml,t', 'it1,it2,k,kt,mi,mi_idx,mk,t', 'cn,ct,it,it2,kt,mc,mi,miidx,t', 'cc,cct1,cct2,cn,ct,k,lt,mc,mi,mk,ml,t', 'ci,k,mk,n,t', 'an,cc,cct1,cct2,chn,ci,cn,it,it3,k,mc,mi,mk,n,pi,rt,t', 'chn,ci,cn,ct,mc,rt,t', 'cc,cct1,cct2,cn,ct,k,lt,mc,mi,mk,ml,t', 'it1,it2,k,kt,mi,mi_idx,mk,t', 'an,ci,it,lt,ml,n,pi,t', 'cc,cct1,cct2,ci,it1,it2,k,mi,mi_idx,mk,n,t', 'an,ci,it,lt,ml,n,pi,t', 'an,chn,ci,cn,it,mc,mi,n,rt,t', 'an,cc,cct1,cct2,chn,ci,cn,it,it3,k,mc,mi,mk,n,pi,rt,t', 'ci,cn,k,mc,mk,n,t', 'ci,it1,it2,mi,mi_idx,n,t', 'it,k,mi_idx,mk,t', 'cn,ct,it1,it2,mc,mi,mi_idx,t', 'aka_t,cn,ct,it1,k,mc,mi,mk,t', 'an,ci,cn,k,mc,mk,n,t', 'ci,cn,it1,it2,k,mc,mi,mi_idx,mk,n,t', 'k,mi,mk,t', 'cn1,cn2,it1,it2,kt1,kt2,lt,mc1,mc2,mi_idx1,mi_idx2,ml,t1,t2', 'cn1,cn2,it1,it2,kt1,kt2,lt,mc1,mc2,mi_idx1,mi_idx2,ml,t1,t2', 'cn,ct,it1,it2,mc,mi,mi_idx,t', 'ci,cn,k,mc,mk,n,t', 'a1,ci,cn,mc,n1,rt,t', 'cn,ct,k,lt,mc,mi,mk,ml,t', 'cc,cct1,cn,ct,it1,k,kt,mc,mi,mk,t', 'an,ci,cn,mc,n,rt,t', 'ct,it,mc,mi,t', 'cn,ct,it,it2,kt,mc,mi,miidx,t', 'ci,k,mk,n,t', 'it,k,mi_idx,mk,t', 'k,lt,mk,ml,t1,t2', 'ci,cn,it1,it2,k,mc,mi,mi_idx,mk,n,t', 'an,chn,ci,cn,it,mc,mi,n,rt,t', 'ci,it1,it2,k,mi,mi_idx,mk,n,t', 'ci,k,mk,n,t', 'an,chn,ci,cn,it,mc,mi,n,rt,t', 'an,chn,ci,cn,it,mc,mi,n,rt,t', 'k,lt,mk,ml,t1,t2', 'cc,cct1,cct2,chn,ci,k,kt,mk,n,t', 'at,cn,ct,it1,k,mc,mi,mk,t', 'ci,cn,k,mc,mk,n,t', 'cn,ct,it1,it2,k,kt,mc,mi,mi_idx,mk,t', 'an,chn,ci,cn,it,k,mc,mi,mk,n,rt,t', 'cn,ct,k,lt,mc,mk,ml,t', 'ct,it,mc,mi_idx,t', 'cn,ct,k,lt,mc,mk,ml,t', 'ci,it1,it2,k,mi,mi_idx,mk,n,t', 'cn,ct,it1,it2,k,kt,mc,mi,mi_idx,mk,t', 'an,ci,cn,k,mc,mk,n,t', 'ci,k,mk,n,t', 'an1,ci,cn,mc,n1,rt,t', 'cn,ct,it,it2,kt,mc,mi,miidx,t', 'it,k,mi_idx,mk,t', 'an,chn,ci,cn,it,k,mc,mi,mk,n,rt,t', 'ci,cn,k,mc,mk,n,t', 'cc,cct1,cct2,chn,ci,k,kt,mk,n,t', 'cn,ct,k,lt,mc,mi,mk,ml,t', 'cc,cct1,cct2,ci,it1,it2,k,mi,mi_idx,mk,n,t', 'cn,ct,it1,it2,k,kt,mc,mi,mi_idx,mk,t', 'cn,k,mc,mk,t', 'ci,cn,k,mc,mk,n,t', 'chn,ci,cn,ct,mc,rt,t', 'cc,cct1,cn,ct,it1,k,kt,mc,mi,mk,t', 'k,mi,mk,t', 'an,cc,cct1,cct2,chn,ci,cn,it,it3,k,mc,mi,mk,n,pi,rt,t', 'cc,cct1,cct2,cn,ct,it1,it2,k,kt,mc,mi,mi_idx,mk,t', 'cn,ct,it,it2,kt,mc,mi,miidx,t', 'an,ci,cn,k,mc,mk,n,t', 'it1,it2,k,kt,mi,mi_idx,mk,t', 'cn,k,mc,mk,t', 'ci,cn,k,mc,mk,n,t', 'ci,it1,it2,mi,mi_idx,n,t', 'cc,cct1,cct2,cn,ct,k,lt,mc,mi,mk,ml,t', 'at,cn,ct,it1,k,mc,mi,mk,t', 'an1,ci,cn,mc,n1,rt,t', 'cn,ct,it1,it2,k,kt,mc,mi,mi_idx,mk,t', 'ct,it,mc,mi_idx,t', 'ct,it,mc,mi,t', 'cc,cct1,cn,ct,it1,k,kt,mc,mi,mk,t', 'cn,k,mc,mk,t', 'an,chn,ci,cn,mc,n,rt,t', 'cn,k,mc,mk,t', 'ct,it,mc,mi,t', 'ci,it1,it2,mi,mi_idx,n,t', 'cn,ct,it1,it2,mc,mi,mi_idx,t', 'an,ci,cn,k,mc,mk,n,t', 'cn,ct,k,lt,mc,mk,ml,t', 'an,chn,ci,cn,mc,n,rt,t', 'ci,it1,it2,k,mi,mi_idx,mk,n,t', 'ci,k,mk,n,t', 'cc,cct1,cct2,chn,ci,it2,k,kt,mi_idx,mk,n,t', 'ct,it,mc,mi_idx,t', 'an,ci,it,lt,ml,n,pi,t', 'cn1,cn2,it1,it2,kt1,kt2,lt,mc1,mc2,mi_idx1,mi_idx2,ml,t1,t2', 'an,chn,ci,cn,mc,n,rt,t', 'cc,cct1,cct2,cn,ct,it1,it2,k,kt,mc,mi,mi_idx,mk,t', 'ci,k,mk,n,t', 'an,chn,ci,cn,mc,n,rt,t', 'cc,cct1,cct2,cn,ct,it1,it2,k,kt,mc,mi,mi_idx,mk,t', 'cc,cct1,cct2,ci,it1,it2,k,mi,mi_idx,mk,n,t', 'k,mi,mk,t']
     # equ_tem = ["an,chn,ci,cn,mc,n,rt,t", "ci,k,mk,n,t", "a1,ci,cn,mc,n1,rt,t"]
     # equ_tem = ["chn,ci,cn,mc,n,rt,t", "an,ci,cn,mc,n,rt,t", "an,chn,cn,mc,n,rt,t", "an,chn,ci,mc,n,rt,t", "an,chn,ci,cn,n,rt,t", "an,chn,ci,cn,mc,rt,t",
     #            "an,chn,ci,cn,mc,n,t", "an,chn,ci,cn,mc,n,rt"]
@@ -196,6 +196,7 @@ def collects(finnode: plans_lib.Node, actor, exp: Experience, timeout, currTotal
             cur_join_ids = ','.join(
                 sorted([i.split(" AS ")[-1] for i in currentNode.leaf_ids()]))
             join_ids_to_append.append(cur_join_ids)
+    join_ids_to_append = join_ids_to_append[:1]
     for join_id in join_ids_to_append:
         exp_key = Exp.GetExpKeys()
         temp = join_id.split(',') # sort
@@ -354,8 +355,8 @@ if __name__ == '__main__':
             if retrain_count >= 3 and curr_file[q_send_cnt] not in sql_id: # 最好情况好于0.75
             # if retrain_count >= 5:
                 curNode = Nodes[q_send_cnt]
-                if curNode:
-                    collects(curNode, task_counter, Exp, None, tf_time[q_send_cnt], sqls_chunk[q_send_cnt], curr_file[q_send_cnt], model)
+                # if curNode:
+                #     collects(curNode, task_counter, Exp, None, tf_time[q_send_cnt], sqls_chunk[q_send_cnt], curr_file[q_send_cnt], model)
         for q_send_cnt in range(chunk_size):
             postgres.getPlans(sqls_chunk[q_send_cnt], None, check_hint_used=False, ENABLE_LEON=True, curr_file=curr_file[q_send_cnt])
 
@@ -552,7 +553,7 @@ if __name__ == '__main__':
             Exp.AppendExp(result[1], result[0])
 
         ##########删除等价类#############
-        Exp.DeleteEqSet(sql_id)
+        # Exp.DeleteEqSet(sql_id)
         eqset = Exp.GetEqSet()
         print("len_eqset", Exp._getEqNum())
         logger.log_metrics({"len_eqset": Exp._getEqNum()}, step=my_step)

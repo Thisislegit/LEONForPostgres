@@ -24,28 +24,28 @@ class LeonDataset(Dataset):
 
     def __getitem__(self, idx):
 
-        # if not self.queryfeature1:
-        #     return {
-        #         'labels': self.labels[idx],
-        #         'costs1': self.costs1[idx],
-        #         'costs2': self.costs2[idx],
-        #         'encoded_plans1': self.encoded_plans1[idx],
-        #         'encoded_plans2': self.encoded_plans2[idx],
-        #         'attns1': self.attns1[idx],
-        #         'attns2': self.attns2[idx]
-        #     }
-        # else:
-        return {
-            'labels': self.labels[idx],
-            'costs1': self.costs1[idx],
-            'costs2': self.costs2[idx],
-            'encoded_plans1': self.encoded_plans1[idx],
-            'encoded_plans2': self.encoded_plans2[idx],
-            'attns1': self.attns1[idx],
-            'attns2': self.attns2[idx],
-            'queryfeature1': self.queryfeature1[idx],
-            'queryfeature2': self.queryfeature2[idx]
+        if not isinstance(self.queryfeature1, torch.Tensor):
+            return {
+                'labels': self.labels[idx],
+                'costs1': self.costs1[idx],
+                'costs2': self.costs2[idx],
+                'encoded_plans1': self.encoded_plans1[idx],
+                'encoded_plans2': self.encoded_plans2[idx],
+                'attns1': self.attns1[idx],
+                'attns2': self.attns2[idx]
             }
+        else:
+            return {
+                'labels': self.labels[idx],
+                'costs1': self.costs1[idx],
+                'costs2': self.costs2[idx],
+                'encoded_plans1': self.encoded_plans1[idx],
+                'encoded_plans2': self.encoded_plans2[idx],
+                'attns1': self.attns1[idx],
+                'attns2': self.attns2[idx],
+                'queryfeature1': self.queryfeature1[idx],
+                'queryfeature2': self.queryfeature2[idx]
+                }
     
 def prepare_dataset(pairs, queryFeaturizer=True):
     labels = []

@@ -13,7 +13,7 @@ configs = {
     # training
     "loss_weight" : 0.5,
     'max_runtime' : 1,
-    'query_dim' : 820 # 666
+    'query_dim' : None # 666
 }
 
 plan_parameters = [
@@ -289,6 +289,7 @@ class SeqFormer(nn.Module):
             torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
 
     def forward(self, x, attn_mask=None, queryfeature=None):
+        queryfeature = None
         # query_feats: Query encoding vectors.  Shaped as [batch size, query dims].
         # change x shape to (batch, seq_len, input_size) from (batch, len)
         # one node is 18 bits
