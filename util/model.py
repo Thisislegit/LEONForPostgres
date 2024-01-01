@@ -79,10 +79,9 @@ class PL_Leon(pl.LightningModule):
         return loss
 
     def validation_step(self, batch):
-        if isinstance(batch, dict):
+        if batch.get('plan_encode'):
             return self.__validation_step_impl(batch)
-        labels, costs1, costs2, encoded_plans1, encoded_plans2, attns1, attns2 = batch
-        loss, acc  = self.getBatchPairsLoss(labels, costs1, costs2, encoded_plans1, encoded_plans2, attns1, attns2)
+        loss, acc  = self.getBatchPairsLoss(batch)
         self.log_dict({'v_loss': loss, 'v_acc': acc}, on_epoch=True)
         return loss
 
