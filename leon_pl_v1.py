@@ -258,6 +258,25 @@ if __name__ == '__main__':
     actors = [ActorThatQueries.options(name=f"actor{port}").remote(port) for port in ports]
     pool = ActorPool(actors)
     train_files, training_query = envs.load_train_files(conf['leon']['workload_type'])
+    # training_query = load_training_query("./train/training_query/job.txt")
+    # train_files = [i[0] for i in training_query]
+    # train_files = ['1a', '1b', '1c', '1d', '2a', '2b', '2c', '2d', '3a', '3b', '3c', '4a',
+    #                 '4b', '4c', '5a', '5b', '5c', '6a', '6b', '6c', '6d', '6e', '6f', '7a', 
+    #                 '7b', '7c', '8a', '8b', '8c', '8d', '9a', '9b', '9c', '9d', '10a', '10b', 
+    #                 '10c', '11a', '11b', '11c', '11d', '12a', '12b', '12c', '13a', '13b', '13c', 
+    #                 '13d', '14a', '14b', '14c', '15a', '15b', '15c', '15d', '16a', '16b', '16c',
+    #                 '16d', '17a', '17b', '17c', '17d', '17e', '17f', '18a', '18b', '18c', '19a',
+    #                 '19b', '19c', '19d', '20a', '20b', '20c', '21a', '21b', '21c', '22a', '22b',
+    #                 '22c', '22d', '23a', '23b', '23c', '24a', '24b', '25a', '25b', '25c', '26a', 
+    #                 '26b', '26c', '27a', '27b', '27c', '28a', '28b', '28c', '29a', '29b', '29c',
+    #                 '30a', '30b', '30c', '31a', '31b', '31c', '32a', '32b', '33a', '33b', '33c']
+    train_files = ['1a', '1b', '2a', '2b', '3a', '3b',
+                    '4b', '4c','5b', '5c', '6a', '6b',
+                    '7b', '7c', '8a', '8b','9c', '9d',
+                    '10c', '11a', '11b','12b', '12c',
+                    '13d', '14a', '14b', '14c', '15a',
+                    '18b', '18c', '19a', '19b', '19c']
+    random.shuffle(train_files)
     ray.get(dict_actor.write_sql_id.remote(train_files))
     chunk_size = 5 # the # of sqls in a chunk
     IF_TRAIN = True
@@ -286,7 +305,7 @@ if __name__ == '__main__':
     task_counter = ray.get_actor('counter')
     runtime_pg = 0
     runtime_leon = 0
-    max_exec_num = 50
+    max_exec_num = 100
     
     remote = bool(conf['leon']['remote'])
     pct = float(conf['leon']['pct']) # 执行 percent 比例的 plan
@@ -549,7 +568,7 @@ if __name__ == '__main__':
         print("len_eqset", Exp._getEqNum())
         logger.log_metrics({"len_eqset": Exp._getEqNum()}, step=my_step)
         for eq in eqset:
-            print(f"{Exp.GetQueryId(eq)} Eq: {eq}, len: {len(Exp.GetExp(eq))}, opt_time: {round(Exp.GetEqSet()[eq].opt_time, 2)}, eqset_latency: {round(Exp.GetEqSet()[eq].eqset_latency, 2)}")
+            print(f"{Exp.GetQueryId(eq)}Eq:{eq},len:{len(Exp.GetExp(eq))},opt_time:{round(Exp.GetEqSet()[eq].opt_time, 2)},eqset_latency:{round(Exp.GetEqSet()[eq].eqset_latency, 2)}")
         # print(eqset)
         end_time = time.time()
         logger.log_metrics({"Time/pick_nodes_time": end_time - start_time}, step=my_step)
@@ -581,6 +600,7 @@ if __name__ == '__main__':
             callbacks = load_callbacks(logger=None)
             trainer = pl.Trainer(accelerator="gpu",
                                 devices=[3],
+                                enable_progress_bar=False,
                                 max_epochs=100,
                                 callbacks=callbacks,
                                 logger=logger)
