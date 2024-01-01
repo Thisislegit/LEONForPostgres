@@ -31,6 +31,7 @@ import wandb
 import time
 from tqdm import tqdm
 from config import read_config
+import random
 
 conf = read_config()
 DEVICE = 'cuda:3' if torch.cuda.is_available() else 'cpu'
@@ -257,7 +258,7 @@ if __name__ == '__main__':
     dict_actor = ray.get_actor('querydict')
     actors = [ActorThatQueries.options(name=f"actor{port}").remote(port) for port in ports]
     pool = ActorPool(actors)
-    train_files, training_query = envs.load_train_files(conf['leon']['workload_type'])
+    # train_files, training_query = envs.load_train_files(conf['leon']['workload_type'])
     # training_query = load_training_query("./train/training_query/job.txt")
     # train_files = [i[0] for i in training_query]
     # train_files = ['1a', '1b', '1c', '1d', '2a', '2b', '2c', '2d', '3a', '3b', '3c', '4a',
