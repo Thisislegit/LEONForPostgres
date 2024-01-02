@@ -33,12 +33,14 @@ from util import envs
 import leon_experience
 from util import experience
 from util import hyperparams
+from util import dataset as ds
 # from balsa import models
 # from balsa import optimizer as balsa_opt
 from util import search
 # from balsa.util import dataset as ds
 from util import plans_lib
 from util import postgres
+from util import treeconv
 # import train_utils
 
 
@@ -59,7 +61,7 @@ class SimModel(pl.LightningModule):
         self.save_hyperparameters()
         self.use_tree_conv = use_tree_conv
         if use_tree_conv:
-            self.tree_conv = models.treeconv.TreeConvolution(
+            self.tree_conv = treeconv.TreeConvolution(
                 feature_size=query_feat_dims,
                 plan_size=plan_feat_dims,
                 label_size=1,
@@ -81,20 +83,22 @@ class SimModel(pl.LightningModule):
         return self.mlp(torch.cat([query_feat, plan_feat], -1))
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=3e-3)
+        optimizer = torch.optim.AdamW(self.parameters(), lr=0.001)
         return optimizer
 
     def training_step(self, batch, batch_idx):
         loss = self._ComputeLoss(batch)
-        result = pl.TrainResult(minimize=loss)
-        result.log('train_loss', loss, prog_bar=True)
-        return result
+        # result = pl.TrainResult(minimize=loss)
+        # result.log('train_loss', loss, prog_bar=True)
+        self.log('train_loss', loss)
+        return loss
 
     def validation_step(self, batch, batch_idx):
         val_loss = self._ComputeLoss(batch)
-        result = pl.EvalResult(checkpoint_on=val_loss, early_stop_on=val_loss)
-        result.log('val_loss', val_loss, prog_bar=True)
-        return result
+        # result = pl.EvalResult(checkpoint_on=val_loss, early_stop_on=val_loss)
+        # result.log('val_loss', val_loss, prog_bar=True)
+        self.log('val_loss', val_loss)
+        return val_loss
 
     def _ComputeLoss(self, batch):
         query_feat, plan_feat, *rest = batch
@@ -112,15 +116,18 @@ class SimModel(pl.LightningModule):
         if self.loss_type == 'mean_qerror':
             output_inverted = self.torch_invert_cost(output.reshape(-1,))
             target_inverted = self.torch_invert_cost(target.reshape(-1,))
-            return train_utils.QErrorLoss(output_inverted, target_inverted)
+            def QErrorLoss(outputs, targets):
+                return torch.where(outputs > targets, outputs / targets,
+                                targets / outputs).mean()
+            return QErrorLoss(output_inverted, target_inverted)
         return F.mse_loss(output.reshape(-1,), target.reshape(-1,))
 
-    def on_after_backward(self):
-        if self.global_step % 50 == 0:
-            norm_dict = self.grad_norm(norm_type=2)
-            total_norm = norm_dict['grad_2.0_norm_total']
-            self.logger.log_metrics({'total_grad_norm': total_norm},
-                                    step=self.global_step)
+    # def on_after_backward(self):
+    #     if self.global_step % 50 == 0:
+    #         norm_dict = self.grad_norm(norm_type=2)
+    #         total_norm = norm_dict['grad_2.0_norm_total']
+    #         self.logger.log_metrics({'total_grad_norm': total_norm},
+    #                                 step=self.global_step)
 
 
 class SimQueryFeaturizer(plans_lib.Featurizer):
@@ -433,7 +440,7 @@ class Sim(object):
         p.Define('infer_search_until_n_complete_plans', 1,
                  'Search until how many complete plans?')
         # Workload.
-        p.Define('workload', envs.JoinOrderBenchmark_Train.Params(),
+        p.Define('workload', envs.JoinOrderBenchmark.Params(),
                  'Params of the Workload, i.e., a set of queries.')
         # Data collection.
         p.Define('skip_data_collection_geq_num_rels', None,
@@ -460,7 +467,7 @@ class Sim(object):
                  'Path to write evaluation latency output into.')
         # Model/loss.
         p.Define('tree_conv_version', None, 'Options: None, V2.')
-        p.Define('loss_type', None, 'Options: None (MSE), mean_qerror.')
+        p.Define('loss_type', 'None', 'Options: None (MSE), mean_qerror.')
         return p
 
     @classmethod
@@ -776,7 +783,7 @@ class Sim(object):
         # unused.
         use_positions = data[2][0] is not None
         all_pa_pos_vecs = data[2]
-        dataset = ds.PlansDataset(
+        dataset = ds.PreTrainDataset(
             all_query_vecs,
             all_feat_vecs,
             all_pa_pos_vecs,
@@ -871,33 +878,23 @@ class Sim(object):
         if loggers is None:
             is_inner_params = False
             loggers = [
-                pl_loggers.TensorBoardLogger(save_dir=os.getcwd(),
-                                             version=None,
-                                             name='lightning_logs'),
-                pl_loggers.WandbLogger(save_dir=os.getcwd()),
+                pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs')
             ]
-        p_dict = balsa.utils.SanitizeToText(dict(p))
-        if is_inner_params:
-            # If 'loggers' is passed, some outer experiment hparams has
-            # specified a 'cls' field, so let's not let our cls: <class
-            # 'sim.Sim'> overwrite that.
-            p_dict.pop('cls', None)
-        for logger in loggers:
-            logger.log_hyperparams(p_dict)
         assert isinstance(loggers[-1], pl_loggers.WandbLogger), loggers[-1]
         self._LogPostgresConfigs(wandb_logger=loggers[-1])
         return pl.Trainer(
-            gpus=1 if torch.cuda.is_available() else 0,
+            accelerator="gpu",
+            devices=[3],
             max_epochs=p.epochs,
             # Add logging metrics per this many batches.
-            row_log_interval=10,
+            log_every_n_steps=10,
             # Do validation per this many train epochs.
             check_val_every_n_epoch=1,
             # Patience = # of validations with no improvements before stopping.
-            early_stop_callback=pl.callbacks.EarlyStopping(patience=5,
+            callbacks=pl.callbacks.EarlyStopping(monitor='val_loss',
+                                                           patience=5,
                                                            mode='min',
                                                            verbose=True),
-            weights_summary='full',
             logger=loggers,
             gradient_clip_val=p.gradient_clip_val,
             num_sanity_val_steps=2 if p.validate_fraction > 0 else 0,
@@ -969,7 +966,17 @@ class Sim(object):
             unused_bs, plan_feat_dims = batch[1].shape
         self.model = self._MakeModel(query_feat_dims=query_feat_dims,
                                      plan_feat_dims=plan_feat_dims)
-        balsa.models.ReportModel(self.model)
+        def ReportModel(model, blacklist=None):
+            ps = []
+            for name, p in model.named_parameters():
+                if blacklist is None or blacklist not in name:
+                    ps.append(np.prod(p.size()))
+            num_params = sum(ps)
+            mb = num_params * 4 / 1024 / 1024
+            print('Number of model parameters: {} (~= {:.1f}MB)'.format(num_params, mb))
+            print(model)
+            return mb
+        ReportModel(self.model)
 
         # Train or load.
         self.trainer = self._MakeTrainer(loggers=loggers)
@@ -1165,7 +1172,7 @@ def Main(argv):
     p = Sim.Params()
 
     p.workload.query_glob = '*.sql'
-    p.workload.query_glob = None
+    # p.workload.query_glob = None
     p.generic_ops_only_for_min_card_cost = False
 
     p.skip_data_collection_geq_num_rels = 12

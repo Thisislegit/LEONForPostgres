@@ -198,7 +198,7 @@ class JoinOrderBenchmark(Workload):
         # Needs to be an absolute path for rllib.
         # module_dir = os.path.abspath(os.path.dirname(balsa.__file__) + '/../')
         #  p.query_dir = os.path.join('/home/ht/PycharmProjects/pythonProject3', 'join-order-benchmark')
-        p.query_dir = 'join-order-benchmark'
+        p.query_dir = 'job'
         if not os.path.exists(p.query_dir):
             raise IOError('File Not Exists!')
         return p
@@ -211,10 +211,6 @@ class JoinOrderBenchmark(Workload):
         self.workload_info = plans_lib.WorkloadInfo(self.query_nodes)
         self.workload_info.SetPhysicalOps(p.search_space_join_ops,
                                           p.search_space_scan_ops)
-        fast_dev_run = 1
-        self.query_nodes = self.query_nodes[:fast_dev_run]
-        self.train_nodes = self.train_nodes[:fast_dev_run]
-        self.test_nodes = self.test_nodes[:fast_dev_run]
 
     def _LoadQueries(self):
         """Loads all queries into balsa.Node objects."""
