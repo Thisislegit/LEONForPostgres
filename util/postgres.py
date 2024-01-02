@@ -132,21 +132,22 @@ def GetCostFromPg(sql, hint, verbose=False, check_hint_used=False):
     with pg_executor.Cursor() as cursor:
         # GEQO must be disabled for hinting larger joins to work.
         _SetGeneticOptimizer('off', cursor)
-        node0 = SqlToPlanNode(sql, comment=hint, verbose=verbose,
+        node0 = SqlToPlanNode(sql, comment=hint, verbose=verbose, 
+                              keep_scans_joins_only=False,
                               cursor=cursor)[0]
         # This copies top-level node's cost (e.g., Aggregate) to the new top level
         # node (a Join).
-
-        node = plans_lib.FilterScansOrJoins(node0)
+        # node = plans_lib.FilterScansOrJoins(node0)
 
         _SetGeneticOptimizer('default', cursor)  # Restores.
-    # if check_hint_used:
-    #     expected = hint
-    #     actual = node.hint_str(with_physical_hints=ContainsPhysicalHints(hint))
-    #     assert expected == actual, 'Expected={}\nActual={}\nactual node:{}\nSQL={}'.format(
-    #         expected, actual, node, sql)
+    if check_hint_used:
+        node = plans_lib.FilterScansOrJoins(node0)
+        expected = hint
+        actual = node.hint_str(with_physical_hints=ContainsPhysicalHints(hint))
+        assert expected == actual, 'Expected={}\nActual={}\nactual node:{}\nSQL={}'.format(
+            expected, actual, node, sql)
 
-    return node.cost
+    return node0
 
 
 def getPlans(sql, hint, verbose=False, check_hint_used=False, ENABLE_LEON=False, curr_file=None):
@@ -294,6 +295,8 @@ def ParsePostgresPlanJson(json_dict):
         curr_node.cost = cost
         # Only available if 'analyze' is set (actual execution).
         curr_node.actual_time_ms = json_dict.get('Actual Total Time')
+        curr_node._card = json_dict.get('Plan Rows')
+        curr_node._width = json_dict.get('Plan Width')
         # Special case.
         if 'Relation Name' in json_dict:
             curr_node.table_name = json_dict['Relation Name']
@@ -350,6 +353,7 @@ def ParsePostgresPlanJson_1(json_dict, AliasToNames):
         # Only available if 'analyze' is set (actual execution).
         curr_node.actual_time_ms = json_dict.get('Actual Total Time')
         curr_node._card = json_dict.get('Plan Rows')
+        curr_node._width = json_dict.get('Plan Width')
         if 'Path Target' in json_dict:
             curr_node.info['select_exprs'] = json_dict['Path Target'].split(', ')
         # Special case.

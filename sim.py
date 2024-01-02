@@ -31,6 +31,7 @@ import torch.nn.functional as F
 from util import costing
 from util import envs
 import leon_experience
+from util import experience
 from util import hyperparams
 # from balsa import models
 # from balsa import optimizer as balsa_opt
@@ -845,7 +846,7 @@ class Sim(object):
         # The constructor of SRB realy only needs goal/query Nodes for
         # instantiating workload info metadata and featurizers (e.g., grab all
         # table names).
-        goals = [p.goal for p in self.simulation_data]
+        goals = [p.subplan for p in self.simulation_data]
         exp = experience.SimpleReplayBuffer(
             goals,
             workload_info=wi,  # Pass this in to significantly speed up ctor.
@@ -1181,20 +1182,20 @@ def Main(argv):
     p.plan_physical = True
     if p.plan_physical:
         # Use a plan featurizer that can process physical ops.
-        p.plan_featurizer_cls = plans_lib.PhysicalTreeNodeFeaturizer
+        p.plan_featurizer_cls = plans_lib.TreeNodeFeaturizer_V2
 
     # Pre-training via simulation data.
     sim = Sim(p)
     sim.CollectSimulationData()
     # Use None to retrain; pass a ckpt to reload.
-    # sim_ckpt = None
-    # train_data = None
-    # for i in range(5):
-    #     train_data = sim.Train(train_data, load_from_checkpoint=sim_ckpt)
-    #     sim.params.eval_output_path = 'eval-cost-{}.csv'.format(i)
-    #     sim.params.eval_latency_output_path = 'eval-latency-{}.csv'.format(i)
-    #     sim.EvaluateCost()
-    #     sim.EvaluateLatency()
+    sim_ckpt = None
+    train_data = None
+    for i in range(5):
+        train_data = sim.Train(train_data, load_from_checkpoint=sim_ckpt)
+        # sim.params.eval_output_path = 'eval-cost-{}.csv'.format(i)
+        # sim.params.eval_latency_output_path = 'eval-latency-{}.csv'.format(i)
+        # sim.EvaluateCost()
+        # sim.EvaluateLatency()
 
 
 if __name__ == '__main__':

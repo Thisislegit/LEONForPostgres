@@ -60,12 +60,13 @@ class PostgresCost(CostModel):
 
     def ScoreWithSql(self, node, sql):
         p = self.params
-        cost = postgres.GetCostFromPg(
+        node = postgres.GetCostFromPg(
             sql=sql,
             hint=node.hint_str(with_physical_hints=p.cost_physical_ops),
-            check_hint_used=True,
+            # Unused, since we collect acutal Nodes in the data collection
+            check_hint_used=False, 
         )
-        return cost
+        return node.cost, node
 
 
 class MinCardCost(CostModel):
