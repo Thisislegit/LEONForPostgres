@@ -199,7 +199,8 @@ if __name__ == '__main__':
                         fast_dev_run=False)
     trainer.fit(model, dataloader_train, dataloader_val)
     prev_optimizer_state_dict = trainer.optimizers[0].state_dict()
-
+    model_path = "./log/model.pth" 
+    torch.save(model.model, model_path)
 
 
     

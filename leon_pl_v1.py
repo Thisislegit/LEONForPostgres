@@ -238,7 +238,7 @@ def load_callbacks(logger):
 
 if __name__ == '__main__':
     pretrain = False
-    ports = [5438, 5439, 5440]
+    ports = [1120, 1125, 1130]
     if pretrain:
         # trainer = pl.Trainer(ckpt_path="./log/epoch=28-step=123685.ckpt")
         checkpoint = torch.load("./checkpoints/DACE.ckpt")
@@ -253,7 +253,7 @@ if __name__ == '__main__':
     # train_files = ['1a', '2a', '3a', '4a']
     with open ("./conf/namespace.txt", "r") as file:
         namespace = file.read().replace('\n', '')
-    context = ray.init(address='auto', namespace=namespace, _temp_dir=conf['leon']['ray_path'] + "/log/ray") # init only once
+    context = ray.init(address='121.48.161.202:56376', namespace=namespace, _temp_dir=conf['leon']['ray_path'] + "/log/ray") # init only once
     print(context.address_info)
     dict_actor = ray.get_actor('querydict')
     actors = [ActorThatQueries.options(name=f"actor{port}").remote(port) for port in ports]
@@ -278,6 +278,7 @@ if __name__ == '__main__':
                     '13d', '14a', '14b', '14c', '15a',
                     '18b', '18c', '19a', '19b', '19c']
     random.shuffle(train_files)
+    train_files = train_files * 75
     ray.get(dict_actor.write_sql_id.remote(train_files))
     chunk_size = 5 # the # of sqls in a chunk
     IF_TRAIN = True
@@ -316,8 +317,8 @@ if __name__ == '__main__':
     ch_start_idx = 0 # the start idx of the current chunk in train_files
     while ch_start_idx + chunk_size <= len(train_files):
         print(f"\n+++++++++ a chunk of sql from {ch_start_idx}  ++++++++")
-        # sqls_chunk = load_sql(train_files[ch_start_idx : ch_start_idx + chunk_size])
-        sqls_chunk = load_sql(list(range(ch_start_idx, ch_start_idx + chunk_size)), training_query=training_query)
+        sqls_chunk = load_sql(train_files[ch_start_idx : ch_start_idx + chunk_size])
+        # sqls_chunk = load_sql(list(range(ch_start_idx, ch_start_idx + chunk_size)), training_query=None)
         curr_file = train_files[ch_start_idx : ch_start_idx + chunk_size]
         print(train_files[ch_start_idx : ch_start_idx + chunk_size])
         time_ratio = []
