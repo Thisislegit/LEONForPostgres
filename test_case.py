@@ -13,7 +13,7 @@ configs = {
     # training
     "loss_weight" : 0.5,
     'max_runtime' : 1,
-    'query_dim' : None # 666
+    'query_dim' : 666 # 666
 }
 
 plan_parameters = [
@@ -249,8 +249,8 @@ class SeqFormer(nn.Module):
             self.mlp_activation = nn.GELU()
         elif mlp_activation == "LeakyReLU":
             self.mlp_activation = nn.LeakyReLU()
-        # self.mlp_hidden_dims = [128, 64, 32]
-        self.mlp_hidden_dims = [256, 128, 1]
+        self.mlp_hidden_dims = [128, 64, 32]
+        # self.mlp_hidden_dims = [256, 128, 1]
         self.mlp = nn.Sequential(
             *[
                 nn.Linear(embedding_size, self.mlp_hidden_dims[0]),
@@ -289,7 +289,7 @@ class SeqFormer(nn.Module):
             torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
 
     def forward(self, x, attn_mask=None, queryfeature=None):
-        queryfeature = None
+        # queryfeature = None
         # query_feats: Query encoding vectors.  Shaped as [batch size, query dims].
         # change x shape to (batch, seq_len, input_size) from (batch, len)
         # one node is 18 bits

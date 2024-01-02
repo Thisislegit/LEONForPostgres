@@ -752,7 +752,7 @@ static char* plan_to_json(LeonState * state, PlannerInfo *root, Path* plan, char
 }
 
 
-static bool should_leon_optimize(LeonState * state, int level, PlannerInfo * root, RelOptInfo * rel, char* leon_query_name) {
+static bool should_leon_optimize(LeonState * state, int level, int levels_needed, PlannerInfo * root, RelOptInfo * rel, char* leon_query_name) {
 
 	bool should_optimize = false;
 	MemoryContext oldContext = MemoryContextSwitchTo(state->leonContext);
@@ -769,7 +769,10 @@ static bool should_leon_optimize(LeonState * state, int level, PlannerInfo * roo
 
 	custom_snprintf(&buf, &buf_size, "{\"QueryId\": \"%s\", \"Relation IDs\": \"", leon_query_name);
 	debug_print_relids(root, rel->relids, &buf, &buf_size);
-	custom_snprintf(&buf, &buf_size, "\"}\n");
+	custom_snprintf(&buf, &buf_size, "\",");
+	custom_snprintf(&buf, &buf_size, "\"Current Level\": %d,", level);
+	custom_snprintf(&buf, &buf_size, "\"Levels Needed\": %d", levels_needed);
+	custom_snprintf(&buf, &buf_size, "}\n");
 
 	write_all_to_socket(conn_fd, buf);
 	pfree(buf);

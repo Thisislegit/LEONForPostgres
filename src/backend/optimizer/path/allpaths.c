@@ -3070,7 +3070,7 @@ standard_join_search(PlannerInfo *root, int levels_needed, List *initial_rels)
 
 			bool Opt_rel = false;
 			if (enable_leon)
-				Opt_rel = should_leon_optimize(leon_state, lev, root, rel, leon_query_name);
+				Opt_rel = should_leon_optimize(leon_state, lev, levels_needed, root, rel, leon_query_name);
 			if (enable_leon && Opt_rel)
 			{
 				ListCell *p;

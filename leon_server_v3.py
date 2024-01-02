@@ -36,7 +36,8 @@ class TaskCounter:
         self.recieved_task = 0
         self.RELOAD = True
         self.eq_summary = dict()
-        self.eqset = ['cc,cct1,cct2,chn,ci,k,kt,mk,n,t', 'cn,ct,k,lt,mc,mi,mk,ml,t', 'at,cn,ct,it1,k,mc,mi,mk,t', 'ct,it,mc,mi_idx,t', 'cc,cct1,cct2,chn,ci,it2,k,kt,mi_idx,mk,n,t', 'chn,ci,cn,ct,mc,rt,t', 'cc,cct1,cct2,chn,ci,it2,k,kt,mi_idx,mk,n,t', 'ci,cn,it1,it2,k,mc,mi,mi_idx,mk,n,t', 'cn,ct,k,lt,mc,mk,ml,t', 'it1,it2,k,kt,mi,mi_idx,mk,t', 'cn,ct,it,it2,kt,mc,mi,miidx,t', 'cc,cct1,cct2,cn,ct,k,lt,mc,mi,mk,ml,t', 'ci,k,mk,n,t', 'an,cc,cct1,cct2,chn,ci,cn,it,it3,k,mc,mi,mk,n,pi,rt,t', 'chn,ci,cn,ct,mc,rt,t', 'cc,cct1,cct2,cn,ct,k,lt,mc,mi,mk,ml,t', 'it1,it2,k,kt,mi,mi_idx,mk,t', 'an,ci,it,lt,ml,n,pi,t', 'cc,cct1,cct2,ci,it1,it2,k,mi,mi_idx,mk,n,t', 'an,ci,it,lt,ml,n,pi,t', 'an,chn,ci,cn,it,mc,mi,n,rt,t', 'an,cc,cct1,cct2,chn,ci,cn,it,it3,k,mc,mi,mk,n,pi,rt,t', 'ci,cn,k,mc,mk,n,t', 'ci,it1,it2,mi,mi_idx,n,t', 'it,k,mi_idx,mk,t', 'cn,ct,it1,it2,mc,mi,mi_idx,t', 'aka_t,cn,ct,it1,k,mc,mi,mk,t', 'an,ci,cn,k,mc,mk,n,t', 'ci,cn,it1,it2,k,mc,mi,mi_idx,mk,n,t', 'k,mi,mk,t', 'cn1,cn2,it1,it2,kt1,kt2,lt,mc1,mc2,mi_idx1,mi_idx2,ml,t1,t2', 'cn1,cn2,it1,it2,kt1,kt2,lt,mc1,mc2,mi_idx1,mi_idx2,ml,t1,t2', 'cn,ct,it1,it2,mc,mi,mi_idx,t', 'ci,cn,k,mc,mk,n,t', 'a1,ci,cn,mc,n1,rt,t', 'cn,ct,k,lt,mc,mi,mk,ml,t', 'cc,cct1,cn,ct,it1,k,kt,mc,mi,mk,t', 'an,ci,cn,mc,n,rt,t', 'ct,it,mc,mi,t', 'cn,ct,it,it2,kt,mc,mi,miidx,t', 'ci,k,mk,n,t', 'it,k,mi_idx,mk,t', 'k,lt,mk,ml,t1,t2', 'ci,cn,it1,it2,k,mc,mi,mi_idx,mk,n,t', 'an,chn,ci,cn,it,mc,mi,n,rt,t', 'ci,it1,it2,k,mi,mi_idx,mk,n,t', 'ci,k,mk,n,t', 'an,chn,ci,cn,it,mc,mi,n,rt,t', 'an,chn,ci,cn,it,mc,mi,n,rt,t', 'k,lt,mk,ml,t1,t2', 'cc,cct1,cct2,chn,ci,k,kt,mk,n,t', 'at,cn,ct,it1,k,mc,mi,mk,t', 'ci,cn,k,mc,mk,n,t', 'cn,ct,it1,it2,k,kt,mc,mi,mi_idx,mk,t', 'an,chn,ci,cn,it,k,mc,mi,mk,n,rt,t', 'cn,ct,k,lt,mc,mk,ml,t', 'ct,it,mc,mi_idx,t', 'cn,ct,k,lt,mc,mk,ml,t', 'ci,it1,it2,k,mi,mi_idx,mk,n,t', 'cn,ct,it1,it2,k,kt,mc,mi,mi_idx,mk,t', 'an,ci,cn,k,mc,mk,n,t', 'ci,k,mk,n,t', 'an1,ci,cn,mc,n1,rt,t', 'cn,ct,it,it2,kt,mc,mi,miidx,t', 'it,k,mi_idx,mk,t', 'an,chn,ci,cn,it,k,mc,mi,mk,n,rt,t', 'ci,cn,k,mc,mk,n,t', 'cc,cct1,cct2,chn,ci,k,kt,mk,n,t', 'cn,ct,k,lt,mc,mi,mk,ml,t', 'cc,cct1,cct2,ci,it1,it2,k,mi,mi_idx,mk,n,t', 'cn,ct,it1,it2,k,kt,mc,mi,mi_idx,mk,t', 'cn,k,mc,mk,t', 'ci,cn,k,mc,mk,n,t', 'chn,ci,cn,ct,mc,rt,t', 'cc,cct1,cn,ct,it1,k,kt,mc,mi,mk,t', 'k,mi,mk,t', 'an,cc,cct1,cct2,chn,ci,cn,it,it3,k,mc,mi,mk,n,pi,rt,t', 'cc,cct1,cct2,cn,ct,it1,it2,k,kt,mc,mi,mi_idx,mk,t', 'cn,ct,it,it2,kt,mc,mi,miidx,t', 'an,ci,cn,k,mc,mk,n,t', 'it1,it2,k,kt,mi,mi_idx,mk,t', 'cn,k,mc,mk,t', 'ci,cn,k,mc,mk,n,t', 'ci,it1,it2,mi,mi_idx,n,t', 'cc,cct1,cct2,cn,ct,k,lt,mc,mi,mk,ml,t', 'at,cn,ct,it1,k,mc,mi,mk,t', 'an1,ci,cn,mc,n1,rt,t', 'cn,ct,it1,it2,k,kt,mc,mi,mi_idx,mk,t', 'ct,it,mc,mi_idx,t', 'ct,it,mc,mi,t', 'cc,cct1,cn,ct,it1,k,kt,mc,mi,mk,t', 'cn,k,mc,mk,t', 'an,chn,ci,cn,mc,n,rt,t', 'cn,k,mc,mk,t', 'ct,it,mc,mi,t', 'ci,it1,it2,mi,mi_idx,n,t', 'cn,ct,it1,it2,mc,mi,mi_idx,t', 'an,ci,cn,k,mc,mk,n,t', 'cn,ct,k,lt,mc,mk,ml,t', 'an,chn,ci,cn,mc,n,rt,t', 'ci,it1,it2,k,mi,mi_idx,mk,n,t', 'ci,k,mk,n,t', 'cc,cct1,cct2,chn,ci,it2,k,kt,mi_idx,mk,n,t', 'ct,it,mc,mi_idx,t', 'an,ci,it,lt,ml,n,pi,t', 'cn1,cn2,it1,it2,kt1,kt2,lt,mc1,mc2,mi_idx1,mi_idx2,ml,t1,t2', 'an,chn,ci,cn,mc,n,rt,t', 'cc,cct1,cct2,cn,ct,it1,it2,k,kt,mc,mi,mi_idx,mk,t', 'ci,k,mk,n,t', 'an,chn,ci,cn,mc,n,rt,t', 'cc,cct1,cct2,cn,ct,it1,it2,k,kt,mc,mi,mi_idx,mk,t', 'cc,cct1,cct2,ci,it1,it2,k,mi,mi_idx,mk,n,t', 'k,mi,mk,t']
+        train_file, training_query = envs.load_train_files(conf['leon']['workload_type'])
+        self.eqset = envs.find_alias(training_query)
         self.online_flag = False # True表示要message False表示不要
 
     def Add_task(self):
@@ -135,6 +136,10 @@ class LeonModel:
 
         self.workload = envs.wordload_init(conf['leon']['workload_type'])
         self.queryFeaturizer = plans_lib.QueryFeaturizer(self.workload.workload_info)
+
+        self.model_type = "Transformer"
+        if self.model_type == "TreeConv":
+            self.nodeFeaturizer = plans_lib.PhysicalTreeNodeFeaturizer(self.workload.workload_info)
         
         statistics_file_path = "./statistics.json"
         self.feature_statistics = load_json(statistics_file_path)
@@ -163,16 +168,22 @@ class LeonModel:
 
         return seqs, None, attns, None, None
     
-    def get_calibrations(self, seqs, attns, QueryFeature=None):
+    def get_calibrations(self, seqs, attns, 
+                         QueryFeature=None,
+                         Trees=None, 
+                         Indexes=None):
         with torch.no_grad():
             # cost_iter
             self.__model.eval() # 关闭 drop out，否则模型波动大    
-            seqs = seqs.to(DEVICE)
-            attns = attns.to(DEVICE)
             QueryFeature = QueryFeature.to(DEVICE)
-            cali = self.__model(seqs, attns, QueryFeature) # cali.shape [# of plan, pad_length] cali 是归一化后的基数估计
-            cali_all = cali[:, 0] # [# of plan] -> [# of plan, 1] cali_all plan （cost_iter次）基数估计（归一化后）结果
-        # print(cali_all)
+            if self.model_type == "TreeConv":
+                cali_all = torch.tanh(self.__model(QueryFeature, Trees, Indexes)).add(1).squeeze(1)
+            else:
+                seqs = seqs.to(DEVICE)
+                attns = attns.to(DEVICE)
+                cali = self.__model(seqs, attns, QueryFeature) # cali.shape [# of plan, pad_length] cali 是归一化后的基数估计
+                cali_all = cali[:, 0] # [# of plan] -> [# of plan, 1] cali_all plan （cost_iter次）基数估计（归一化后）结果
+        
         return cali_all
     
     def encoding(self, X): 
@@ -221,6 +232,7 @@ class LeonModel:
             torch.save(model, path)
         else:
             model = torch.load(path, map_location='cuda:3')
+            print(f"load checkpoint {path} Successfully!")
             # ckpt = ckpt["state_dict"]
             # new_state_dict = OrderedDict()
             # for key, value in ckpt.items():
@@ -238,12 +250,15 @@ class LeonModel:
         if not isinstance(X, list):
             X = [X]
         Relation_IDs = X[0]['Relation IDs']
+        Current_Level = X[0]['Current Level']
+        Levels_Needed = X[0]['Levels Needed']
         if self.query_dict_flag:
             self.query_dict_flag = ray.get(self.query_dict.write_query_id.remote(X[0]['QueryId']))
         out = ','.join(sorted(Relation_IDs.split()))
-        if out in self.eqset:
+        if (out in self.eqset) and (Current_Level == Levels_Needed):
             self.current_eq_summary = self.eq_summary.get(out)
             print(X[0]['QueryId'], out)
+            print(Current_Level, Levels_Needed)
             return '1'
         else:
             return '0'
@@ -271,10 +286,10 @@ class LeonModel:
 
         # Validation Accuracy
         # TODO: 可能不在Eq Summary里面？确实有可能，有些等价类没有被训练到，因为没有收集message
-        if self.current_eq_summary is None or \
-            self.current_eq_summary[0] < 0.9:
-            print("out")
-            return ';'.join(['1.00,1,0' for _ in X])
+        # if self.current_eq_summary is None or \
+        #     self.current_eq_summary[0] < 0.9:
+        #     print("out")
+        #     return ';'.join(['1.00,1,0' for _ in X])
             
 
         # 编码

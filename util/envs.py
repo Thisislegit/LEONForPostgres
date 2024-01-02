@@ -6,6 +6,7 @@ import numpy as np
 import pickle
 from . import hyperparams, plans_lib, postgres
 import random
+import re
 
 _EPSILON = 1e-6
 
@@ -27,7 +28,7 @@ def load_sql(file_list: list, training_query=None):
     sqls = []
     for file_str in file_list:
         if training_query:
-            sqls.append(training_query[file_str][1])
+            sqls.append(training_query[file_str])
         else:
             sqlFile = './job/' + file_str + '.sql'
             if not os.path.exists(sqlFile):
@@ -424,6 +425,7 @@ def load_train_files(workload_type):
     if workload_type == 'job_training':
         training_query = load_training_query("./train/training_query/job.txt")
         train_files = [i[0] for i in training_query]
+        training_query = [i[1] for i in training_query]
     else:
         train_files = ['1a', '1b', '1c', '1d', '2a', '2b', '2c', '2d', '3a', '3b', '3c', '4a',
                     '4b', '4c', '5a', '5b', '5c', '6a', '6b', '6c', '6d', '6e', '6f', '7a', 
@@ -439,3 +441,17 @@ def load_train_files(workload_type):
         train_files = train_files * 75
         training_query = None
     return train_files, training_query
+
+def find_alias(training_query):
+    a = []
+    for sql_query in training_query:
+        # 提取FROM和WHERE之间的内容
+        from_where_content = re.search('FROM(.*)WHERE', sql_query.replace("\n", "")).group(1)
+
+        # 提取别名
+        aliases = re.findall(r'AS (\w+)', from_where_content)
+        
+        aliases = ",".join(sorted(aliases))
+        a.append(aliases)
+
+    return a
