@@ -986,6 +986,8 @@ class Sim(object):
                 'Loaded pretrained checkpoint: {}'.format(load_from_checkpoint))
         else:
             self.trainer.fit(self.model, self.train_loader, self.val_loader)
+            model_path = "./log/model.pth"
+            torch.save(self.model.tree_conv, model_path)
         return data
 
     def FreeData(self):

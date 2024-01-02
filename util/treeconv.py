@@ -17,11 +17,14 @@ class TreeConvolution(nn.Module):
         super(TreeConvolution, self).__init__()
         # None: default
         assert version is None, version
+        self.p = 0.2
         self.query_mlp = nn.Sequential(
             nn.Linear(feature_size, 128),
+            nn.Dropout(p=self.p),
             nn.LayerNorm(128),
             nn.LeakyReLU(),
             nn.Linear(128, 64),
+            nn.Dropout(p=self.p),
             nn.LayerNorm(64),
             nn.LeakyReLU(),
             nn.Linear(64, 32),
@@ -40,9 +43,11 @@ class TreeConvolution(nn.Module):
         )
         self.out_mlp = nn.Sequential(
             nn.Linear(128, 64),
+            nn.Dropout(p=self.p),
             nn.LayerNorm(64),
             nn.LeakyReLU(),
             nn.Linear(64, 32),
+            nn.Dropout(p=self.p),
             nn.LayerNorm(32),
             nn.LeakyReLU(),
             nn.Linear(32, label_size),
