@@ -220,6 +220,9 @@ class Node(object):
     def IsScan(self):
         return 'Scan' in self.node_type
 
+    def IsNull(self):
+        return self.node_type == 'Null'
+
     def HasEqualityFilters(self):
         return len(self.GetEqualityFilters()) > 0
 
@@ -781,6 +784,8 @@ class TreeNodeFeaturizer_V2(TreeNodeFeaturizer):
         vec[:num_ops] = self.one_ops[np.where(self.ops == node.node_type)[0][0]]
         vec[num_ops:num_ops + num_stats] = self.__get_stats(node)
         # Joined tables: [table: 1].
+        if node.IsNull():
+            return vec
         joined = node.leaf_ids()
         for rel_id in joined:
             idx = np.where(self.rel_ids == rel_id)[0][0]
@@ -789,12 +794,12 @@ class TreeNodeFeaturizer_V2(TreeNodeFeaturizer):
         return vec
 
     def FeaturizeLeaf(self, node):
-        assert node.IsScan()
+        # assert node.IsScan()
         vec = self.__call__(node)
         return vec
 
     def Merge(self, node, left_vec, right_vec):
-        assert node.IsJoin()
+        # assert node.IsJoin()
         len_join_enc = len(self.ops)
         # The relations under 'node' and their scan types.  Merging <=> summing.
         vec = left_vec + right_vec
