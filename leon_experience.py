@@ -247,7 +247,7 @@ class Experience:
                     if (j[0].info['sql_str'] != k[0].info['sql_str']) and (j[0].info['latency'] == TIME_OUT or k[0].info['latency'] == TIME_OUT):
                         continue
                     # if (j[0].info['latency'] == k[0].info['latency']): # latency 相同 1s之内不把他train_pair
-                    if max(j[0].info['latency'],k[0].info['latency']) / min(j[0].info['latency'],k[0].info['latency']) < 1.2:
+                    if max(j[0].info['latency'],k[0].info['latency']) / min(j[0].info['latency'],k[0].info['latency']) < 1.05:
                         continue
                     tem = [j, k]
                     # tem.append(j)

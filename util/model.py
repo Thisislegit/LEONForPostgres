@@ -79,7 +79,7 @@ class PL_Leon(pl.LightningModule):
         return loss
 
     def validation_step(self, batch):
-        if batch.get('plan_encode'):
+        if batch.get('plan_encode') is not None:
             return self.__validation_step_impl(batch)
         loss, acc  = self.getBatchPairsLoss(batch)
         self.log_dict({'v_loss': loss, 'v_acc': acc}, on_epoch=True)
@@ -99,7 +99,7 @@ class PL_Leon(pl.LightningModule):
                 for j in range(i + 1, len(join_tables)):
                     if (sql[i] != sql[j]) and (latency[i] != TIME_OUT or latency[j] != TIME_OUT):
                         continue
-                    if max(latency[i], latency[j]) / min(latency[i], latency[j]) < 1.2:
+                    if max(latency[i], latency[j]) / min(latency[i], latency[j]) < 1.05:
                         continue
                     if latency[i] > latency[j]:
                         label = 0
