@@ -691,8 +691,8 @@ debug_print_path(PlannerInfo *root, Path *path, int indent, char **stream, size_
 
   custom_snprintf(stream, buf_size, "\"Startup Cost\": %f,", path->startup_cost);
   custom_snprintf(stream, buf_size, "\"Total Cost\": %f,", path->total_cost);
-  custom_snprintf(stream, buf_size, "\"Plan Rows\": %f", path->rows);
-
+  custom_snprintf(stream, buf_size, "\"Plan Rows\": %f,", path->rows);
+  custom_snprintf(stream, buf_size, "\"Plan Width\": %d,", path->pathtarget->width);
 
 
 	// if (path->pathkeys)

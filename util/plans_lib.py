@@ -32,6 +32,7 @@ class Node(object):
         self.table_alias = None
 
         # Internal cached fields.
+        self._width = None
         self._card = None  # Used in MinCardCost.
         self._leaf_scan_op_copies = {}
 
@@ -350,12 +351,25 @@ class WorkloadInfo(object):
         scan_types = set()
         join_types = set()
         all_ops = set()
-
+        all_ops.add('Null')
         all_attributes = set()
+        mins = {"cost": float("inf"), "card": float("inf"), "width": float("inf")}
+        maxs = {"cost": -float("inf"), "card": -float("inf"), "width": -float("inf")}
 
         all_filters = collections.defaultdict(set)
 
         def _fill(root, node):
+            # collect statistics
+            if node.cost is not None:
+                mins["cost"] = min(mins["cost"], node.cost)
+                maxs["cost"] = max(maxs["cost"], node.cost)
+            if node._card is not None:
+                mins["card"] = min(mins["card"], node._card)
+                maxs["card"] = max(maxs["card"], node._card)
+            if node._width is not None:
+                mins["width"] = min(mins["width"], node._width)
+                maxs["width"] = max(maxs["width"], node._width)            
+
             all_ops.add(node.node_type)
 
             if node.table_name is not None:
@@ -389,6 +403,12 @@ class WorkloadInfo(object):
         self.join_types = np.asarray(sorted(list(join_types)))
         self.all_ops = np.asarray(sorted(list(all_ops)))
         self.all_attributes = np.asarray(sorted(list(all_attributes)))
+        self.mins = mins
+        self.maxs = maxs
+
+        # Debug Print MinMaxs
+        print("mins: ", mins)
+        print("maxs: ", maxs)
 
     def SetPhysicalOps(self, join_ops, scan_ops):
         old_scans = self.scan_types
@@ -535,6 +555,41 @@ def GatherUnaryFiltersInfo(nodes, with_alias=True, alias_only=False):
         node.info['all_filters'] = d
 
 
+def Binarize(nodes):
+    """Binaries the trees: each node has at most 2 children.
+    If and only a node has 1 children, add a Null node as the other child.
+    """
+    singleton_input = False
+    if isinstance(nodes, Node):
+        singleton_input = True
+        nodes = [nodes]
+
+    def _makeNullNode():
+        n = Node('Null')
+        n.cost = 0.0
+        n._card = 0
+        n._width = 0
+        return n
+
+    def _filter(node):
+        if not node.IsScan() and not node.IsJoin():
+            assert len(node.children) <= 2, node
+            if len(node.children) == 1:
+                node.children.append(_makeNullNode())
+            node.children = [_filter(c) for c in node.children]
+            return node
+
+        node.children = [_filter(c) for c in node.children]
+        return node
+
+    filtered = []
+    for n in nodes:
+        new_node = _filter(n.Copy())
+        filtered.append(new_node)
+    if singleton_input:
+        return filtered[0]
+    return filtered
+
 def FilterScansOrJoins(nodes):
     """Filters the trees: keeps only the scan and join nodes.
 
@@ -679,6 +734,78 @@ class TreeNodeFeaturizer(Featurizer):
             self.ops == node.node_type)[0][0]]
         return vec
 
+
+class Normalizer():
+    def __init__(self, mins: dict, maxs: dict) -> None:
+        self._mins = mins
+        self._maxs = maxs
+
+    def norm(self, x, name):
+        if name not in self._mins or name not in self._maxs:
+            raise Exception("fail to normalize " + name)
+
+        return (np.log(x + 1) - self._mins[name]) / (self._maxs[name] - self._mins[name])
+
+    def inverse_norm(self, x, name):
+        if name not in self._mins or name not in self._maxs:
+            raise Exception("fail to inversely normalize " + name)
+
+        return np.exp((x * (self._maxs[name] - self._mins[name])) + self._mins[name]) - 1
+
+    def contains(self, name):
+        return name in self._mins and name in self._maxs
+
+class TreeNodeFeaturizer_V2(TreeNodeFeaturizer):
+    """Featurizes a single Node.
+
+    Feature vector:
+       [ one-hot for operator ] [ multi-hot for all relations under this node ]
+
+    Width: |all_ops| + |rel_ids|.
+    """
+
+    def __init__(self, workload_info):
+        self.workload_info = workload_info
+        self.ops = workload_info.all_ops
+        self.one_ops = np.eye(self.ops.shape[0], dtype=np.float32)
+        self.rel_ids = workload_info.rel_ids
+        # cost, card, width
+        self.stats = workload_info.mins.keys()
+        self.normalizer = Normalizer(workload_info.mins, workload_info.maxs)
+
+    def __call__(self, node):
+        num_ops = len(self.ops)
+        num_stats = len(self.stats)
+        vec = np.zeros(num_ops + len(self.stats) + len(self.rel_ids), dtype=np.float32)
+        # Node type.
+        vec[:num_ops] = self.one_ops[np.where(self.ops == node.node_type)[0][0]]
+        vec[num_ops:num_ops + num_stats] = self.__get_stats(node)
+        # Joined tables: [table: 1].
+        joined = node.leaf_ids()
+        for rel_id in joined:
+            idx = np.where(self.rel_ids == rel_id)[0][0]
+            vec[idx + num_ops + num_stats] = 1.0
+        assert vec[num_ops + num_stats:].sum() == len(joined)
+        return vec
+
+    def FeaturizeLeaf(self, node):
+        assert node.IsScan()
+        vec = self.__call__(node)
+        return vec
+
+    def Merge(self, node, left_vec, right_vec):
+        assert node.IsJoin()
+        len_join_enc = len(self.ops)
+        # The relations under 'node' and their scan types.  Merging <=> summing.
+        vec = left_vec + right_vec
+        # Make sure the first part is correct.
+        vec[:len_join_enc] = self.one_ops[np.where(
+            self.ops == node.node_type)[0][0]]
+        vec[len_join_enc:len_join_enc + len(self.stats)] = self.__get_stats(node)
+        return vec
+    
+    def __get_stats(self, node):
+        return np.array([self.normalizer.norm(node.cost, "cost"), self.normalizer.norm(node._card, "card"), self.normalizer.norm(node._width, "width")], dtype=np.float32)
 
 class PhysicalTreeNodeFeaturizer(TreeNodeFeaturizer):
     """Featurizes a single Node with support for physical operators.

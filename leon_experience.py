@@ -41,7 +41,7 @@ class SubplanCost(
     # Unused fields: goal
     def ToSubplanGoalHint(self, with_physical_hints=False):
         """subplan's hint_str()--optionally with physical ops--and the goal."""
-        return 'subplan=\'{}\', goal=\'{}\''.format(
+        return 'subplan=\'{}\''.format(
             self.subplan.hint_str(with_physical_hints),
             ','.join(sorted(self.goal.leaf_ids(alias_only=True))))
 
@@ -50,7 +50,7 @@ class SubplanCost(
         """Basic string representation for quick inspection."""
         return 'SubplanGoalCost(subplan=\'{}\', goal=\'{}\', cost={})'.format(
             self.subplan.hint_str(),
-            ','.join(sorted(self.goal.leaf_ids(alias_only=True))), self.cost)
+            ','.join(sorted(self.subplan.leaf_ids(alias_only=True))), self.cost)
 
 
 class Experience:
