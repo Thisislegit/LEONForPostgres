@@ -104,8 +104,7 @@ class TreeConv1d(nn.Module):
         feats = self.weights(
             torch.gather(data, 2,
                          indexes.expand(-1, -1, self._in_dims).transpose(1, 2)))
-        zeros = torch.zeros((data.shape[0], self._out_dims),
-                            device=DEVICE).unsqueeze(2)
+        zeros = torch.zeros((data.shape[0], self._out_dims)).unsqueeze(2).to(feats.device)
         feats = torch.cat((zeros, feats), dim=2)
         return feats, indexes
 
