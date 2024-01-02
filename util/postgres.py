@@ -420,6 +420,7 @@ def EstimateFilterRows(nodes):
                 if key not in cache:
                     sql = 'EXPLAIN(format json) SELECT * FROM {} WHERE {};'.format(
                         table_id, pred)
+                    cursor.execute('SET enable_leon=off')
                     cursor.execute(sql)
                     json_dict = cursor.fetchall()[0][0][0]
                     num_rows = json_dict['Plan']['Plan Rows']

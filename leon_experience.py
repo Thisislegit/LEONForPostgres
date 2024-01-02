@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 from typing import List, Dict
 from statistics import mean
 from config import read_config
+import collections
 conf = read_config()
 TIME_OUT = 1000000
 
@@ -20,6 +21,36 @@ class EqSetInfo:
     query_dict: Dict[str, float] = field(default_factory=dict)
     eqset_latency: float = TIME_OUT
 
+
+class SubplanCost(
+        collections.namedtuple(
+            'SubplanCost',
+            ['subplan', 'cost'],
+        )):
+    """A collected training data point; wrapper around (subplan, goal, cost).
+
+    Attributes:
+
+      subplan: a balsa.Node.
+      goal: a balsa.Node. (deprecated in LEON version)
+      cost: the cost of 'goal'.  Specifically: start from subplan, eventually
+        reaching 'goal' (joining all leaf nodes & with all filters taken into
+        account), what's the cost of the terminal plan?
+    """
+
+    # Unused fields: goal
+    def ToSubplanGoalHint(self, with_physical_hints=False):
+        """subplan's hint_str()--optionally with physical ops--and the goal."""
+        return 'subplan=\'{}\', goal=\'{}\''.format(
+            self.subplan.hint_str(with_physical_hints),
+            ','.join(sorted(self.goal.leaf_ids(alias_only=True))))
+
+    # Unused fields: goal
+    def __repr__(self):
+        """Basic string representation for quick inspection."""
+        return 'SubplanGoalCost(subplan=\'{}\', goal=\'{}\', cost={})'.format(
+            self.subplan.hint_str(),
+            ','.join(sorted(self.goal.leaf_ids(alias_only=True))), self.cost)
 
 
 class Experience:
@@ -213,7 +244,7 @@ class Experience:
                     k = self.GetExp(eq)[k_index]
                     if (j[0].info['sql_str'] == k[0].info['sql_str']) and (j[0].hint_str() == k[0].hint_str()): # sql 和 hint 都相同   
                         continue
-                    if j[0].info['sql_str'] != k[0].info['sql_str']:
+                    if (j[0].info['sql_str'] != k[0].info['sql_str']) and (j[0].info['latency'] == TIME_OUT or k[0].info['latency'] == TIME_OUT):
                         continue
                     # if (j[0].info['latency'] == k[0].info['latency']): # latency 相同 1s之内不把他train_pair
                     if max(j[0].info['latency'],k[0].info['latency']) / min(j[0].info['latency'],k[0].info['latency']) < 1.2:

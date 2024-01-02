@@ -30,6 +30,16 @@ class CostModel(object):
         raise NotImplementedError('Abstract method')
 
 
+class NullCost(CostModel):
+    """Sets the cost of any plan to 0."""
+
+    def __call__(self, node, join_conds):
+        return 0
+
+    def ScoreWithSql(self, node, sql):
+        return 0
+
+
 class PostgresCost(CostModel):
     """The Postgres cost model."""
 
@@ -46,30 +56,10 @@ class PostgresCost(CostModel):
         #
         # In practice it should not affect the estimated costs too much.
         sql_str = node.to_sql(join_conds, with_select_exprs=True)
-
-        cost = self.ScoreWithSql(node, sql_str)
-        return cost, sql_str, node.hint_str()
-
-    def getCost_cache(self, node, join_conds, costCache):
-        p = self.params
-        sql_str = node.to_sql(join_conds, with_select_exprs=True)
-        hint_str = node.hint_str(with_physical_hints=p.cost_physical_ops)
-        hashstr = hint_str + sql_str
-        cost = costCache.get(hashstr)
-       # cost = 1
-        if cost == None:
-            cost = postgres.GetCostFromPg(
-                sql=sql_str,
-                hint=hint_str,
-                check_hint_used=True,
-            )
-            costCache[hashstr] = cost
-        return cost, sql_str, hint_str
+        return self.ScoreWithSql(node, sql_str)
 
     def ScoreWithSql(self, node, sql):
         p = self.params
-        #  print(sql)
-        #  print(node.hint_str(with_physical_hints=p.cost_physical_ops))
         cost = postgres.GetCostFromPg(
             sql=sql,
             hint=node.hint_str(with_physical_hints=p.cost_physical_ops),
@@ -114,7 +104,6 @@ class MinCardCost(CostModel):
         return postgres.GetAllTableNumRows([node.table_name])[node.table_name]
 
     def Score(self, node, join_conds):
-        p = self.params
         if node._card:
             return node._card
 
@@ -126,6 +115,5 @@ class MinCardCost(CostModel):
             c_t1 = self.Score(node.children[0], join_conds)
             c_t2 = self.Score(node.children[1], join_conds)
             node._card = card + c_t1 + c_t2
-        sql_str = node.to_sql(join_conds, with_select_exprs=True)
-        hint_str = node.hint_str(with_physical_hints=p.cost_physical_ops)
-        return node._card, sql_str, hint_str
+
+        return node._card

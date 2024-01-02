@@ -36,12 +36,12 @@ conf = read_config()
 DEVICE = 'cuda:3' if torch.cuda.is_available() else 'cpu'
 Transformer_model = SeqFormer(
                         input_dim=configs['node_length'],
-                        hidden_dim=256,
+                        hidden_dim=128,
                         output_dim=1,
                         mlp_activation="ReLU",
                         transformer_activation="gelu",
-                        mlp_dropout=0.1,
-                        transformer_dropout=0.1,
+                        mlp_dropout=0.2,
+                        transformer_dropout=0.2,
                         query_dim=configs['query_dim'],
                         padding_size=configs['pad_length']
                     )
@@ -172,7 +172,8 @@ def initEqSet():
     #            'mc,cn', 'mc,cn,t','mc,cn,t,at', 'cn,mc,t,ci', 'n,an', 'n,an,ci', 'it,mi', 'ct,mc',
     #            'ct,mc,t', 'ct,mc,t,mi', 'mc,cn', 'k,mk', 'k,mk,mi_idx', 'k,mk,miidx', 'a1,n1', 'a1,n1,ci']
     # equ_tem = ['an,chn,ci,cn,mc,n,rt,t', 'ci,k,mk,n,t', 'a1,ci,cn,mc,n1,rt,t', 'cn,ct,it,it2,kt,mc,mi,miidx,t', 'an,chn,ci,cn,it,mc,mi,n,rt,t', 'cn,ct,k,lt,mc,mk,ml,t', 'an,ci,it,lt,ml,n,pi,t', 'it,k,mi_idx,mk,t']
-    equ_tem = ['cc,cct1,cct2,chn,ci,k,kt,mk,n,t', 'cn,ct,k,lt,mc,mi,mk,ml,t', 'at,cn,ct,it1,k,mc,mi,mk,t', 'ct,it,mc,mi_idx,t', 'cc,cct1,cct2,chn,ci,it2,k,kt,mi_idx,mk,n,t', 'chn,ci,cn,ct,mc,rt,t', 'cc,cct1,cct2,chn,ci,it2,k,kt,mi_idx,mk,n,t', 'ci,cn,it1,it2,k,mc,mi,mi_idx,mk,n,t', 'cn,ct,k,lt,mc,mk,ml,t', 'it1,it2,k,kt,mi,mi_idx,mk,t', 'cn,ct,it,it2,kt,mc,mi,miidx,t', 'cc,cct1,cct2,cn,ct,k,lt,mc,mi,mk,ml,t', 'ci,k,mk,n,t', 'an,cc,cct1,cct2,chn,ci,cn,it,it3,k,mc,mi,mk,n,pi,rt,t', 'chn,ci,cn,ct,mc,rt,t', 'cc,cct1,cct2,cn,ct,k,lt,mc,mi,mk,ml,t', 'it1,it2,k,kt,mi,mi_idx,mk,t', 'an,ci,it,lt,ml,n,pi,t', 'cc,cct1,cct2,ci,it1,it2,k,mi,mi_idx,mk,n,t', 'an,ci,it,lt,ml,n,pi,t', 'an,chn,ci,cn,it,mc,mi,n,rt,t', 'an,cc,cct1,cct2,chn,ci,cn,it,it3,k,mc,mi,mk,n,pi,rt,t', 'ci,cn,k,mc,mk,n,t', 'ci,it1,it2,mi,mi_idx,n,t', 'it,k,mi_idx,mk,t', 'cn,ct,it1,it2,mc,mi,mi_idx,t', 'aka_t,cn,ct,it1,k,mc,mi,mk,t', 'an,ci,cn,k,mc,mk,n,t', 'ci,cn,it1,it2,k,mc,mi,mi_idx,mk,n,t', 'k,mi,mk,t', 'cn1,cn2,it1,it2,kt1,kt2,lt,mc1,mc2,mi_idx1,mi_idx2,ml,t1,t2', 'cn1,cn2,it1,it2,kt1,kt2,lt,mc1,mc2,mi_idx1,mi_idx2,ml,t1,t2', 'cn,ct,it1,it2,mc,mi,mi_idx,t', 'ci,cn,k,mc,mk,n,t', 'a1,ci,cn,mc,n1,rt,t', 'cn,ct,k,lt,mc,mi,mk,ml,t', 'cc,cct1,cn,ct,it1,k,kt,mc,mi,mk,t', 'an,ci,cn,mc,n,rt,t', 'ct,it,mc,mi,t', 'cn,ct,it,it2,kt,mc,mi,miidx,t', 'ci,k,mk,n,t', 'it,k,mi_idx,mk,t', 'k,lt,mk,ml,t1,t2', 'ci,cn,it1,it2,k,mc,mi,mi_idx,mk,n,t', 'an,chn,ci,cn,it,mc,mi,n,rt,t', 'ci,it1,it2,k,mi,mi_idx,mk,n,t', 'ci,k,mk,n,t', 'an,chn,ci,cn,it,mc,mi,n,rt,t', 'an,chn,ci,cn,it,mc,mi,n,rt,t', 'k,lt,mk,ml,t1,t2', 'cc,cct1,cct2,chn,ci,k,kt,mk,n,t', 'at,cn,ct,it1,k,mc,mi,mk,t', 'ci,cn,k,mc,mk,n,t', 'cn,ct,it1,it2,k,kt,mc,mi,mi_idx,mk,t', 'an,chn,ci,cn,it,k,mc,mi,mk,n,rt,t', 'cn,ct,k,lt,mc,mk,ml,t', 'ct,it,mc,mi_idx,t', 'cn,ct,k,lt,mc,mk,ml,t', 'ci,it1,it2,k,mi,mi_idx,mk,n,t', 'cn,ct,it1,it2,k,kt,mc,mi,mi_idx,mk,t', 'an,ci,cn,k,mc,mk,n,t', 'ci,k,mk,n,t', 'an1,ci,cn,mc,n1,rt,t', 'cn,ct,it,it2,kt,mc,mi,miidx,t', 'it,k,mi_idx,mk,t', 'an,chn,ci,cn,it,k,mc,mi,mk,n,rt,t', 'ci,cn,k,mc,mk,n,t', 'cc,cct1,cct2,chn,ci,k,kt,mk,n,t', 'cn,ct,k,lt,mc,mi,mk,ml,t', 'cc,cct1,cct2,ci,it1,it2,k,mi,mi_idx,mk,n,t', 'cn,ct,it1,it2,k,kt,mc,mi,mi_idx,mk,t', 'cn,k,mc,mk,t', 'ci,cn,k,mc,mk,n,t', 'chn,ci,cn,ct,mc,rt,t', 'cc,cct1,cn,ct,it1,k,kt,mc,mi,mk,t', 'k,mi,mk,t', 'an,cc,cct1,cct2,chn,ci,cn,it,it3,k,mc,mi,mk,n,pi,rt,t', 'cc,cct1,cct2,cn,ct,it1,it2,k,kt,mc,mi,mi_idx,mk,t', 'cn,ct,it,it2,kt,mc,mi,miidx,t', 'an,ci,cn,k,mc,mk,n,t', 'it1,it2,k,kt,mi,mi_idx,mk,t', 'cn,k,mc,mk,t', 'ci,cn,k,mc,mk,n,t', 'ci,it1,it2,mi,mi_idx,n,t', 'cc,cct1,cct2,cn,ct,k,lt,mc,mi,mk,ml,t', 'at,cn,ct,it1,k,mc,mi,mk,t', 'an1,ci,cn,mc,n1,rt,t', 'cn,ct,it1,it2,k,kt,mc,mi,mi_idx,mk,t', 'ct,it,mc,mi_idx,t', 'ct,it,mc,mi,t', 'cc,cct1,cn,ct,it1,k,kt,mc,mi,mk,t', 'cn,k,mc,mk,t', 'an,chn,ci,cn,mc,n,rt,t', 'cn,k,mc,mk,t', 'ct,it,mc,mi,t', 'ci,it1,it2,mi,mi_idx,n,t', 'cn,ct,it1,it2,mc,mi,mi_idx,t', 'an,ci,cn,k,mc,mk,n,t', 'cn,ct,k,lt,mc,mk,ml,t', 'an,chn,ci,cn,mc,n,rt,t', 'ci,it1,it2,k,mi,mi_idx,mk,n,t', 'ci,k,mk,n,t', 'cc,cct1,cct2,chn,ci,it2,k,kt,mi_idx,mk,n,t', 'ct,it,mc,mi_idx,t', 'an,ci,it,lt,ml,n,pi,t', 'cn1,cn2,it1,it2,kt1,kt2,lt,mc1,mc2,mi_idx1,mi_idx2,ml,t1,t2', 'an,chn,ci,cn,mc,n,rt,t', 'cc,cct1,cct2,cn,ct,it1,it2,k,kt,mc,mi,mi_idx,mk,t', 'ci,k,mk,n,t', 'an,chn,ci,cn,mc,n,rt,t', 'cc,cct1,cct2,cn,ct,it1,it2,k,kt,mc,mi,mi_idx,mk,t', 'cc,cct1,cct2,ci,it1,it2,k,mi,mi_idx,mk,n,t', 'k,mi,mk,t']
+    train_file, training_query = envs.load_train_files(conf['leon']['workload_type'])
+    equ_tem = envs.find_alias(training_query)
     # equ_tem = ["an,chn,ci,cn,mc,n,rt,t", "ci,k,mk,n,t", "a1,ci,cn,mc,n1,rt,t"]
     # equ_tem = ["chn,ci,cn,mc,n,rt,t", "an,ci,cn,mc,n,rt,t", "an,chn,cn,mc,n,rt,t", "an,chn,ci,mc,n,rt,t", "an,chn,ci,cn,n,rt,t", "an,chn,ci,cn,mc,rt,t",
     #            "an,chn,ci,cn,mc,n,t", "an,chn,ci,cn,mc,n,rt"]
@@ -239,14 +240,15 @@ if __name__ == '__main__':
     ports = [5438, 5439, 5440]
     if pretrain:
         # trainer = pl.Trainer(ckpt_path="./log/epoch=28-step=123685.ckpt")
-        checkpoint = torch.load("./log/epoch=28-step=123685.ckpt")
+        checkpoint = torch.load("./checkpoints/DACE.ckpt")
         # Modify the keys in the state_dict
         checkpoint['state_dict'] = \
         {key.replace('model.', ''): value for key, value in checkpoint['state_dict'].items()}
         # Load the transformed state_dict into your model
-        Transformer_model.load_state_dict(checkpoint['state_dict'])
+        Transformer_model.load_state_dict(checkpoint['state_dict'], strict=False)
         torch.save(Transformer_model, "./log/model.pth")
-    
+        print("load DACE model success")
+
     # train_files = ['1a', '2a', '3a', '4a']
     with open ("./conf/namespace.txt", "r") as file:
         namespace = file.read().replace('\n', '')
@@ -479,14 +481,17 @@ if __name__ == '__main__':
                     # Iterate over the sorted costs
                     for i in range(1, len(sorted_indices)):
                         # If the difference with the last selected cost is greater than 1.2, add it to the selected indices
-                        if (costs[sorted_indices[i]] / costs[selected_indices[-1]]) > 1.2:
+                        if (costs[sorted_indices[i]] / costs[selected_indices[-1]]) > 1.05:
                             selected_indices.append(sorted_indices[i])
                         if len(selected_indices) == num_to_exe:
                             break
                     if len(selected_indices) < num_to_exe:
-                        selected_indices = sorted_indices[:num_to_exe]
+                        for i in range(1, len(sorted_indices)):
+                            if sorted_indices[i] not in selected_indices:
+                                selected_indices.append(sorted_indices[i])
+                                if len(selected_indices) == num_to_exe:
+                                    break
                     costs_index = selected_indices
-
 
                     # print("ucb_idx to exe", ucb_idx[:num_to_exe])
                     # print("num_to_exe", num_to_exe)
@@ -599,7 +604,7 @@ if __name__ == '__main__':
         end_time = time.time()
         logger.log_metrics({"Time/train_time": end_time - start_time}, step=my_step)
         my_step += 1
-        with open("./log/exp_v3.pkl", 'wb') as f:
+        with open("./log/exp_v4.pkl", 'wb') as f:
             pickle.dump(Exp.OnlyGetExp(), f) 
         
 

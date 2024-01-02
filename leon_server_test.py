@@ -73,6 +73,7 @@ class LeonJSONHandler(JSONTCPHandler):
                 self.request.close()
             elif message_type == "should_opt":
                 print(self.__messages)
+                print(self.__messages[0]["Current Level"], self.__messages[0]["Levels Needed"])
                 response = str("1").encode()
                 self.request.sendall(response)
                 self.request.close()
