@@ -32,28 +32,35 @@ import time
 from tqdm import tqdm
 from config import read_config
 import random
+from util import treeconv
+from util import encoding
 
 conf = read_config()
 DEVICE = 'cuda:3' if torch.cuda.is_available() else 'cpu'
-Transformer_model = SeqFormer(
-                        input_dim=configs['node_length'],
-                        hidden_dim=128,
-                        output_dim=1,
-                        mlp_activation="ReLU",
-                        transformer_activation="gelu",
-                        mlp_dropout=0.2,
-                        transformer_dropout=0.2,
-                        query_dim=configs['query_dim'],
-                        padding_size=configs['pad_length']
-                    )
+model_type = conf['leon']['model_type']
 
 def load_model(model_path: str, prev_optimizer_state_dict=None):
     if not os.path.exists(model_path):
-        model = Transformer_model.to(DEVICE)
-        model = PL_Leon(model, prev_optimizer_state_dict)
+        if model_type == "Transformer":
+            print("load transformer model")
+            model = SeqFormer(
+                            input_dim=configs['node_length'],
+                            hidden_dim=128,
+                            output_dim=1,
+                            mlp_activation="ReLU",
+                            transformer_activation="gelu",
+                            mlp_dropout=0.2,
+                            transformer_dropout=0.2,
+                            query_dim=configs['query_dim'],
+                            padding_size=configs['pad_length']
+                        ).to(DEVICE)
+        elif model_type == "TreeConv":
+            print("load treeconv model")
+            model = treeconv.TreeConvolution(820, 54, 1).to(DEVICE)
+        torch.save(model, model_path)
     else:
         model = torch.load(model_path).to(DEVICE)
-        model = PL_Leon(model, prev_optimizer_state_dict)
+    model = PL_Leon(model, prev_optimizer_state_dict)
     
     return model
 
@@ -98,27 +105,24 @@ def plans_encoding(plans):
 
     return seqs, run_times, attns, loss_mask
 
-def get_calibrations(model, seqs, attns, queryfeature, IF_TRAIN):
+def get_calibrations(model, seqs, attns, queryfeature):
     seqs = seqs.to(DEVICE)
     attns = attns.to(DEVICE)
     queryfeature = queryfeature.to(DEVICE)
-    if IF_TRAIN:
-        cost_iter = 10 # training 用模型推理 10 次 获得模型不确定性
-        model.model.eval()
-        with torch.no_grad():
-            for i in range(cost_iter):
-                cali = model.model(seqs, attns, queryfeature) # cali.shape [# of plan, pad_length] cali 是归一化后的基数估计
+    cost_iter = 10 # training 用模型推理 10 次 获得模型不确定性
+    model.model.eval()
+    with torch.no_grad():
+        for i in range(cost_iter):
+            if model_type == "Transformer":
+                cali = model.model(seqs, attns, queryfeature)[:, 0] # cali.shape [# of plan, pad_length] cali 是归一化后的基数估计
+            elif model_type == "TreeConv":
+                cali = torch.tanh(model.model(seqs, attns, queryfeature)).add(1).squeeze(1)
+            if i == 0:
+                cali_all = cali.unsqueeze(1) # [# of plan] -> [# of plan, 1] cali_all plan （cost_iter次）基数估计（归一化后）结果
+            else:
+                cali_all = torch.cat((cali_all, cali.unsqueeze(1)), dim=1)
+    return cali_all
 
-                if i == 0:
-                    cali_all = cali[:, 0].unsqueeze(1) # [# of plan] -> [# of plan, 1] cali_all plan （cost_iter次）基数估计（归一化后）结果
-                else:
-                    cali_all = torch.cat((cali_all, cali[:, 0].unsqueeze(1)), dim=1)
-        return cali_all
-
-    else: 
-        cali = model.model(seqs, attns) # cali.shape [# of plan, pad_length] cali 是归一化后的基数估计
-        cali_all = cali[:, 0]
-        return cali_all
 
 def get_ucb_idx(cali_all, pgcosts):    
     cali_mean = cali_all.mean(dim = 1) # 每个 plan 的 cali 均值 [# of plan] | 值为 1 左右
@@ -168,18 +172,9 @@ def getNodesCost(nodes):
     return pgcosts
 
 def initEqSet():
-    # equ_tem = ['cn,mc', 'ct,mc', 'ct,mc,t', 'ci,cn,mc,t', 'cn,mc,t']
-    # equ_tem = ['t,mk,k', 'k,t,cct2,cc,mc', 'k,t,cct1,cc,mc', 'kt,t,cct2,cc,mc,cn', 'kt,t,cct1,cc,mc,cn',
-    #            'mc,cn', 'mc,cn,t','mc,cn,t,at', 'cn,mc,t,ci', 'n,an', 'n,an,ci', 'it,mi', 'ct,mc',
-    #            'ct,mc,t', 'ct,mc,t,mi', 'mc,cn', 'k,mk', 'k,mk,mi_idx', 'k,mk,miidx', 'a1,n1', 'a1,n1,ci']
-    # equ_tem = ['an,chn,ci,cn,mc,n,rt,t', 'ci,k,mk,n,t', 'a1,ci,cn,mc,n1,rt,t', 'cn,ct,it,it2,kt,mc,mi,miidx,t', 'an,chn,ci,cn,it,mc,mi,n,rt,t', 'cn,ct,k,lt,mc,mk,ml,t', 'an,ci,it,lt,ml,n,pi,t', 'it,k,mi_idx,mk,t']
     train_file, training_query = envs.load_train_files(conf['leon']['workload_type'])
     equ_tem = envs.find_alias(training_query)
-    # equ_tem = ["an,chn,ci,cn,mc,n,rt,t", "ci,k,mk,n,t", "a1,ci,cn,mc,n1,rt,t"]
-    # equ_tem = ["chn,ci,cn,mc,n,rt,t", "an,ci,cn,mc,n,rt,t", "an,chn,cn,mc,n,rt,t", "an,chn,ci,mc,n,rt,t", "an,chn,ci,cn,n,rt,t", "an,chn,ci,cn,mc,rt,t",
-    #            "an,chn,ci,cn,mc,n,t", "an,chn,ci,cn,mc,n,rt"]
     equ_set = set() # 用集合 方便 eq keys 中去重
-    # 'title,movie_keyword,keyword' -> 'keyword,movie_keyword,title'
     for i in equ_tem:
         e_tem = i.split(',')
         e_tem = ','.join(sorted(e_tem))
@@ -237,51 +232,25 @@ def load_callbacks(logger):
 
 
 if __name__ == '__main__':
-    pretrain = False
-    ports = [1120, 1125, 1130]
-    if pretrain:
-        # trainer = pl.Trainer(ckpt_path="./log/epoch=28-step=123685.ckpt")
-        checkpoint = torch.load("./checkpoints/DACE.ckpt")
-        # Modify the keys in the state_dict
-        checkpoint['state_dict'] = \
-        {key.replace('model.', ''): value for key, value in checkpoint['state_dict'].items()}
-        # Load the transformed state_dict into your model
-        Transformer_model.load_state_dict(checkpoint['state_dict'], strict=False)
-        torch.save(Transformer_model, "./log/model.pth")
-        print("load DACE model success")
 
-    # train_files = ['1a', '2a', '3a', '4a']
+    ports = [1120, 1125, 1130]
+    pretrain = True
+    if pretrain:
+        checkpoint = torch.load("./log/SimModel.pth")
+        torch.save(checkpoint, "./log/model.pth")
+        print("load SimModel success")
+
     with open ("./conf/namespace.txt", "r") as file:
         namespace = file.read().replace('\n', '')
-    context = ray.init(address='121.48.161.202:56376', namespace=namespace, _temp_dir=conf['leon']['ray_path'] + "/log/ray") # init only once
+    context = ray.init(address='121.48.161.202:63408', namespace=namespace, _temp_dir=conf['leon']['ray_path'] + "/log/ray") # init only once
     print(context.address_info)
-    dict_actor = ray.get_actor('querydict')
+    # dict_actor = ray.get_actor('querydict')
     actors = [ActorThatQueries.options(name=f"actor{port}").remote(port) for port in ports]
     pool = ActorPool(actors)
-    # train_files, training_query = envs.load_train_files(conf['leon']['workload_type'])
-    # training_query = load_training_query("./train/training_query/job.txt")
-    # train_files = [i[0] for i in training_query]
-    # train_files = ['1a', '1b', '1c', '1d', '2a', '2b', '2c', '2d', '3a', '3b', '3c', '4a',
-    #                 '4b', '4c', '5a', '5b', '5c', '6a', '6b', '6c', '6d', '6e', '6f', '7a', 
-    #                 '7b', '7c', '8a', '8b', '8c', '8d', '9a', '9b', '9c', '9d', '10a', '10b', 
-    #                 '10c', '11a', '11b', '11c', '11d', '12a', '12b', '12c', '13a', '13b', '13c', 
-    #                 '13d', '14a', '14b', '14c', '15a', '15b', '15c', '15d', '16a', '16b', '16c',
-    #                 '16d', '17a', '17b', '17c', '17d', '17e', '17f', '18a', '18b', '18c', '19a',
-    #                 '19b', '19c', '19d', '20a', '20b', '20c', '21a', '21b', '21c', '22a', '22b',
-    #                 '22c', '22d', '23a', '23b', '23c', '24a', '24b', '25a', '25b', '25c', '26a', 
-    #                 '26b', '26c', '27a', '27b', '27c', '28a', '28b', '28c', '29a', '29b', '29c',
-    #                 '30a', '30b', '30c', '31a', '31b', '31c', '32a', '32b', '33a', '33b', '33c']
-    train_files = ['1a', '1b', '2a', '2b', '3a', '3b',
-                    '4b', '4c','5b', '5c', '6a', '6b',
-                    '7b', '7c', '8a', '8b','9c', '9d',
-                    '10c', '11a', '11b','12b', '12c',
-                    '13d', '14a', '14b', '14c', '15a',
-                    '18b', '18c', '19a', '19b', '19c']
-    random.shuffle(train_files)
-    train_files = train_files * 75
-    ray.get(dict_actor.write_sql_id.remote(train_files))
+    
+    train_files, training_query = envs.load_train_files(conf['leon']['workload_type'])
+    # ray.get(dict_actor.write_sql_id.remote(train_files))
     chunk_size = 5 # the # of sqls in a chunk
-    IF_TRAIN = True
     model_path = "./log/model.pth"
     message_path = "./log/messages.pkl"
     prev_optimizer_state_dict = None
@@ -292,10 +261,13 @@ if __name__ == '__main__':
     
     workload = envs.wordload_init(conf['leon']['workload_type'])
     queryFeaturizer = plans_lib.QueryFeaturizer(workload.workload_info)
-    statistics_file_path = "./statistics.json"
-    feature_statistics = load_json(statistics_file_path)
-    add_numerical_scalers(feature_statistics)
-    op_name_to_one_hot = get_op_name_to_one_hot(feature_statistics)
+    if model_type == "Transformer":
+        statistics_file_path = "./statistics.json"
+        feature_statistics = load_json(statistics_file_path)
+        add_numerical_scalers(feature_statistics)
+        op_name_to_one_hot = get_op_name_to_one_hot(feature_statistics)
+    elif model_type == "TreeConv":
+        nodeFeaturizer = plans_lib.TreeNodeFeaturizer_V2(workload.workload_info)
     first_time = dict()
     last_train_pair = 0
     retrain_count = 3
@@ -317,8 +289,7 @@ if __name__ == '__main__':
     ch_start_idx = 0 # the start idx of the current chunk in train_files
     while ch_start_idx + chunk_size <= len(train_files):
         print(f"\n+++++++++ a chunk of sql from {ch_start_idx}  ++++++++")
-        sqls_chunk = load_sql(train_files[ch_start_idx : ch_start_idx + chunk_size])
-        # sqls_chunk = load_sql(list(range(ch_start_idx, ch_start_idx + chunk_size)), training_query=None)
+        sqls_chunk = load_sql(list(range(ch_start_idx, ch_start_idx + chunk_size)), training_query=training_query)
         curr_file = train_files[ch_start_idx : ch_start_idx + chunk_size]
         print(train_files[ch_start_idx : ch_start_idx + chunk_size])
         time_ratio = []
@@ -427,8 +398,9 @@ if __name__ == '__main__':
                         PKL_exist = False # the last message is already loaded
                         break
 
-                    curr_dict = ray.get(dict_actor.get_dict.remote())
-                    curr_sql_id = curr_dict[message[0]['QueryId']]
+                    # curr_dict = ray.get(dict_actor.get_dict.remote())
+                    # curr_sql_id = curr_dict[message[0]['QueryId']]
+                    curr_sql_id = message[0]['QueryId']
                     q_recieved_cnt = curr_file.index(curr_sql_id) # start to recieve equal sets from a new sql
                     if curr_QueryId != message[0]['QueryId']: # the QueryId of the first plan in the message
                         print(f"------------- recieving query {q_recieved_cnt} starting from idx {ch_start_idx} ------------")
@@ -437,15 +409,30 @@ if __name__ == '__main__':
                     print(f">>> message with {len(message)} plans")
                     
                     # STEP 1) get node
-                    nodes = PlanToNode(workload, message)
-
+                    if model_type == "Transformer":
+                        encoded_plans, attns, queryfeature, nodes = envs.leon_encoding(model_type, message, 
+                                                                                       require_nodes=True, workload=workload, 
+                                                                                       configs=configs, op_name_to_one_hot=op_name_to_one_hot,
+                                                                                       plan_parameters=plan_parameters, feature_statistics=feature_statistics)
+                    elif model_type == "TreeConv":
+                        encoded_plans, attns, queryfeature, nodes = envs.leon_encoding(model_type, message, 
+                                                                                       require_nodes=True, workload=workload, 
+                                                                                       queryFeaturizer=queryFeaturizer, nodeFeaturizer=nodeFeaturizer)
+                    # nodes = PlanToNode(workload, message)
+                    
                     if nodes is None:
                         continue
-                    encoded_plans, _, attns, _ = plans_encoding(message) # encoding. plan -> plan_encoding / seqs torch.Size([26, 1, 760])
-                    plans_lib.GatherUnaryFiltersInfo(nodes)
-                    postgres.EstimateFilterRows(nodes) 
-                    for node in nodes:
-                        node.info['query_feature'] = torch.from_numpy(queryFeaturizer(node))
+                    
+                    # plans_lib.GatherUnaryFiltersInfo(nodes)
+                    # postgres.EstimateFilterRows(nodes) 
+                    # null_nodes = plans_lib.Binarize(nodes)
+                    # query_vecs = torch.from_numpy(queryFeaturizer(nodes[0]))
+                    # for node in nodes:
+                    #     node.info['query_feature'] = query_vecs
+                    # if model_type == "Transformer":
+                    #     encoded_plans, _, attns, _ = plans_encoding(message) # encoding. plan -> plan_encoding / seqs torch.Size([26, 1, 760])
+                    # elif model_type == "TreeConv":
+                    #     encoded_plans, attns = encoding.TreeConvFeaturize(nodeFeaturizer, null_nodes)
                     
                     # STEP 2) pick node to execute
                     
@@ -482,14 +469,15 @@ if __name__ == '__main__':
                     ##################################################################
                     
                     costs = torch.tensor(getNodesCost(nodes)).to(DEVICE)
-                    OneNode = nodes[0]
-                    plans_lib.GatherUnaryFiltersInfo(OneNode)
-                    postgres.EstimateFilterRows(OneNode)  
-                    OneQueryFeature = queryFeaturizer(OneNode)
-                    OneQueryFeature = torch.from_numpy(OneQueryFeature).unsqueeze(0)
-                    queryfeature = OneQueryFeature.repeat(encoded_plans.shape[0], 1) 
+                    # OneNode = nodes[0]
+                    # plans_lib.GatherUnaryFiltersInfo(OneNode)
+                    # postgres.EstimateFilterRows(OneNode)  
+                    # OneQueryFeature = queryFeaturizer(OneNode)
+                    # OneQueryFeature = torch.from_numpy(OneQueryFeature).unsqueeze(0)
+                    # OneQueryFeature = nodes[0].info['query_feature'].unsqueeze(0)
+                    # queryfeature = OneQueryFeature.repeat(encoded_plans.shape[0], 1) 
                     model.model.to(DEVICE)
-                    cali_all = get_calibrations(model, encoded_plans, attns, queryfeature, IF_TRAIN)
+                    cali_all = get_calibrations(model, queryfeature, encoded_plans, attns)
                     ucb_idx = get_ucb_idx(cali_all, costs)
 
                     num_to_exe = min(math.ceil(pct * len(ucb_idx)), max_exec_num)

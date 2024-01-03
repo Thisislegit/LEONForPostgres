@@ -770,6 +770,7 @@ class TreeNodeFeaturizer_V2(TreeNodeFeaturizer):
     def __init__(self, workload_info):
         self.workload_info = workload_info
         self.ops = workload_info.all_ops
+        
         self.one_ops = np.eye(self.ops.shape[0], dtype=np.float32)
         self.rel_ids = workload_info.rel_ids
         # cost, card, width
@@ -781,7 +782,15 @@ class TreeNodeFeaturizer_V2(TreeNodeFeaturizer):
         num_stats = len(self.stats)
         vec = np.zeros(num_ops + len(self.stats) + len(self.rel_ids), dtype=np.float32)
         # Node type.
-        vec[:num_ops] = self.one_ops[np.where(self.ops == node.node_type)[0][0]]
+        try:
+            vec[:num_ops] = self.one_ops[np.where(
+                self.ops == node.node_type)[0][0]]
+        except:
+            self.ops = np.where(self.ops == 'Materialize', 'Material', self.ops)
+            self.ops = np.where(self.ops == 'NestedLoop', 'NestLoop', self.ops)
+            self.ops = np.array([entry.replace(' ', '') for entry in self.ops])
+            vec[:num_ops] = self.one_ops[np.where(
+                self.ops == node.node_type)[0][0]]
         vec[num_ops:num_ops + num_stats] = self.__get_stats(node)
         # Joined tables: [table: 1].
         if node.IsNull():
@@ -804,8 +813,19 @@ class TreeNodeFeaturizer_V2(TreeNodeFeaturizer):
         # The relations under 'node' and their scan types.  Merging <=> summing.
         vec = left_vec + right_vec
         # Make sure the first part is correct.
-        vec[:len_join_enc] = self.one_ops[np.where(
-            self.ops == node.node_type)[0][0]]
+        try:
+            vec[:len_join_enc] = self.one_ops[np.where(
+                self.ops == node.node_type)[0][0]]
+        except:
+            self.ops = np.where(self.ops == 'Materialize', 'Material', self.ops)
+            self.ops = np.where(self.ops == 'NestedLoop', 'NestLoop', self.ops)
+            self.ops = np.array([entry.replace(' ', '') for entry in self.ops])
+            try:
+                vec[:len_join_enc] = self.one_ops[np.where(
+                    self.ops == node.node_type)[0][0]]
+            except:
+                print(node.node_type)
+                print(self.ops)
         vec[len_join_enc:len_join_enc + len(self.stats)] = self.__get_stats(node)
         return vec
     

@@ -986,7 +986,7 @@ class Sim(object):
                 'Loaded pretrained checkpoint: {}'.format(load_from_checkpoint))
         else:
             self.trainer.fit(self.model, self.train_loader, self.val_loader)
-            model_path = "./log/model.pth"
+            model_path = "./log/SimModel.pth"
             torch.save(self.model.tree_conv, model_path)
         return data
 
@@ -1192,6 +1192,7 @@ def Main(argv):
     if p.plan_physical:
         # Use a plan featurizer that can process physical ops.
         p.plan_featurizer_cls = plans_lib.TreeNodeFeaturizer_V2
+        p.query_featurizer_cls = plans_lib.QueryFeaturizer
 
     # Pre-training via simulation data.
     sim = Sim(p)
@@ -1199,7 +1200,7 @@ def Main(argv):
     # Use None to retrain; pass a ckpt to reload.
     sim_ckpt = None
     train_data = None
-    for i in range(5):
+    for _ in range(1):
         train_data = sim.Train(train_data, load_from_checkpoint=sim_ckpt)
         # sim.params.eval_output_path = 'eval-cost-{}.csv'.format(i)
         # sim.params.eval_latency_output_path = 'eval-latency-{}.csv'.format(i)
