@@ -15,9 +15,12 @@ class PL_Leon(pl.LightningModule):
         self.outputs = []
 
     def forward(self, plans, attns, queryfeature=None):
-        if queryfeature is None:
-            return self.model(plans, attns)[:, 0]
-        return self.model(plans, attns, queryfeature)[:, 0]
+        if self.model.model_type == 'Transformer':
+            if queryfeature is None:
+                return self.model(plans, attns)[:, 0]
+            return self.model(plans, attns, queryfeature)[:, 0]
+        elif self.model.model_type == 'TreeConv':
+            return torch.tanh(self.model(queryfeature, plans, attns)).add(1).squeeze(1)
 
     def getBatchPairsLoss(self, batch):
         """

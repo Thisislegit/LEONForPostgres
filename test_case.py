@@ -278,6 +278,7 @@ class SeqFormer(nn.Module):
             self.node_embedding = nn.Embedding(16, node_embedding_dim)
             self.Norm = nn.BatchNorm1d(padding_size)
         self.apply(self._init_weights)
+        self.model_type = "Transformer"
         # self.sigmoid = nn.Sigmoid()
 
     def _init_weights(self, module):

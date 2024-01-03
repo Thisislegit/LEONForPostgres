@@ -8,7 +8,6 @@ import util.postgres as postgres
 import util.plans_lib as plans_lib
 import torch
 import os
-import util.DP as DP
 import copy
 import re
 import math
@@ -23,6 +22,7 @@ import pickle
 import ray
 import uuid
 from config import read_config
+from util import treeconv
 conf = read_config()
 
 GenerateUniqueNameSpace = lambda: str(uuid.uuid4())
@@ -96,28 +96,28 @@ class FileWriter:
     
 
     
-@ray.remote
-class QueryDict:
-    def __init__(self):
-        self.query_dict = dict()
-        self.sql_ids = None
+# @ray.remote
+# class QueryDict:
+#     def __init__(self):
+#         self.query_dict = dict()
+#         self.sql_ids = None
 
-    def write_sql_id(self, sql_ids):
-        self.sql_ids = sql_ids
+#     def write_sql_id(self, sql_ids):
+#         self.sql_ids = sql_ids
     
-    def write_query_id(self, query_id):
-        if self.sql_ids != [] and query_id not in self.query_dict.keys():
-            sql_id = self.sql_ids.pop(0)
-            self.query_dict[query_id] = sql_id
-            print(sql_id, query_id)
-            return True
-        elif self.sql_ids != []:
-            return True
-        else:
-            return False
+#     def write_query_id(self, query_id):
+#         if self.sql_ids != [] and query_id not in self.query_dict.keys():
+#             sql_id = self.sql_ids.pop(0)
+#             self.query_dict[query_id] = sql_id
+#             print(sql_id, query_id)
+#             return True
+#         elif self.sql_ids != []:
+#             return True
+#         else:
+#             return False
     
-    def get_dict(self):
-        return self.query_dict
+#     def get_dict(self):
+#         return self.query_dict
 
 
 class LeonModel:
@@ -130,21 +130,21 @@ class LeonModel:
         node_path = "./log/messages.pkl"
         self.writer_hander = FileWriter.options(name="leon_server").remote(node_path)
         self.task_counter = TaskCounter.options(name="counter").remote()
-        self.query_dict = QueryDict.options(name="querydict").remote()
-        self.query_dict_flag = True
+        # self.query_dict = QueryDict.options(name="querydict").remote()
+        # self.query_dict_flag = True
         self.eqset = None
 
         self.workload = envs.wordload_init(conf['leon']['workload_type'])
         self.queryFeaturizer = plans_lib.QueryFeaturizer(self.workload.workload_info)
 
-        self.model_type = "Transformer"
+        self.model_type = conf['leon']['model_type']
         if self.model_type == "TreeConv":
-            self.nodeFeaturizer = plans_lib.PhysicalTreeNodeFeaturizer(self.workload.workload_info)
-        
-        statistics_file_path = "./statistics.json"
-        self.feature_statistics = load_json(statistics_file_path)
-        add_numerical_scalers(self.feature_statistics)
-        self.op_name_to_one_hot = get_op_name_to_one_hot(self.feature_statistics)
+            self.nodeFeaturizer = plans_lib.TreeNodeFeaturizer_V2(self.workload.workload_info)
+        elif self.model_type == "Transformer":
+            statistics_file_path = "./statistics.json"
+            self.feature_statistics = load_json(statistics_file_path)
+            add_numerical_scalers(self.feature_statistics)
+            self.op_name_to_one_hot = get_op_name_to_one_hot(self.feature_statistics)
 
         self.eq_summary = dict()
         print("finish init")
@@ -169,32 +169,70 @@ class LeonModel:
         return seqs, None, attns, None, None
     
     def get_calibrations(self, seqs, attns, 
-                         QueryFeature=None,
-                         Trees=None, 
-                         Indexes=None):
+                         QueryFeature):
         with torch.no_grad():
             # cost_iter
             self.__model.eval() # 关闭 drop out，否则模型波动大    
             QueryFeature = QueryFeature.to(DEVICE)
+            seqs = seqs.to(DEVICE)
+            attns = attns.to(DEVICE)
             if self.model_type == "TreeConv":
-                cali_all = torch.tanh(self.__model(QueryFeature, Trees, Indexes)).add(1).squeeze(1)
-            else:
-                seqs = seqs.to(DEVICE)
-                attns = attns.to(DEVICE)
+                cali_all = torch.tanh(self.__model(seqs, attns, QueryFeature)).add(1).squeeze(1)
+            elif self.model_type == "Transformer":
                 cali = self.__model(seqs, attns, QueryFeature) # cali.shape [# of plan, pad_length] cali 是归一化后的基数估计
                 cali_all = cali[:, 0] # [# of plan] -> [# of plan, 1] cali_all plan （cost_iter次）基数估计（归一化后）结果
         
         return cali_all
     
     def encoding(self, X): 
-        seqs, _, attns, _, _ = self.plans_encoding(X)
-        OneNode = PlanToNode(self.workload, [X[0]])[0]
-        plans_lib.GatherUnaryFiltersInfo(OneNode)
-        postgres.EstimateFilterRows(OneNode)  
-        OneQueryFeature = self.queryFeaturizer(OneNode)
-        OneQueryFeature = torch.from_numpy(OneQueryFeature).unsqueeze(0)
-        queryfeature = OneQueryFeature.repeat(seqs.shape[0], 1) 
-        return seqs, attns, queryfeature
+        # if self.model_type == "Transformer":
+        #     seqs, _, attns, _, _ = self.plans_encoding(X)
+        #     OneNode = PlanToNode(self.workload, [X[0]])[0]
+        #     plans_lib.GatherUnaryFiltersInfo(OneNode)
+        #     postgres.EstimateFilterRows(OneNode)  
+        #     OneQueryFeature = self.queryFeaturizer(OneNode)
+        #     OneQueryFeature = torch.from_numpy(OneQueryFeature).unsqueeze(0)
+        #     queryfeature = OneQueryFeature.repeat(seqs.shape[0], 1)
+        #     return seqs, attns, queryfeature
+        # elif self.model_type == "TreeConv":
+        #     nodes = []
+        #     null_nodes = []
+        #     queryencoding = []
+        #     for i in range(0, len(X)):
+        #         node = postgres.ParsePostgresPlanJson_1(X[i], self.workload.workload_info.alias_to_names)
+        #         if node.info['join_cond'] == ['']: # return 1.00
+        #             return None, None, None
+                
+        #         plans_lib.GatherUnaryFiltersInfo(node)
+        #         postgres.EstimateFilterRows(node)   
+        #         null_node = plans_lib.Binarize(node)
+        #         if i == 0:
+        #             temp = node.to_sql(node.info['join_cond'], with_select_exprs=True)
+        #             node.info['sql_str'] = temp
+        #             query_vecs = torch.from_numpy(self.queryFeaturizer(node)).unsqueeze(0)
+        #         node.info['sql_str'] = temp
+        #         queryencoding.append(query_vecs)
+        #         nodes.append(node)
+        #         null_nodes.append(null_node)
+        #     if nodes:
+        #         tensor_query_encoding = (torch.cat(queryencoding, dim=0))
+        #         trees, indexes = encoding.TreeConvFeaturize(self.nodeFeaturizer, null_nodes)
+        #         # print("tensor_query_encoding", tensor_query_encoding.shape,
+        #         #     "trees", trees.shape,
+        #         #     "indexes", indexes.shape)
+        #     return tensor_query_encoding, trees, indexes
+        if self.model_type == "Transformer":
+            encoded_plans, attns, queryfeature, _ = envs.leon_encoding(self.model_type, X, 
+                                                                           require_nodes=False, workload=self.workload, 
+                                                                           configs=configs, op_name_to_one_hot=self.op_name_to_one_hot,
+                                                                           plan_parameters=plan_parameters, feature_statistics=self.feature_statistics)
+            return encoded_plans, attns, queryfeature
+
+        elif self.model_type == "TreeConv":
+            trees, indexes, queryfeature, _ = envs.leon_encoding(self.model_type, X, 
+                                                                           require_nodes=False, workload=self.workload, 
+                                                                           queryFeaturizer=self.queryFeaturizer, nodeFeaturizer=self.nodeFeaturizer)
+            return queryfeature, trees, indexes
     
     def inference(self, seqs, attns, QueryFeature=None):
         cali_all = self.get_calibrations(seqs, attns, QueryFeature)
@@ -218,27 +256,26 @@ class LeonModel:
     
     def load_model(self, path):
         if not os.path.exists(path):
-            model = SeqFormer(
-                input_dim=configs['node_length'],
-                hidden_dim=256,
-                output_dim=1,
-                mlp_activation="ReLU",
-                transformer_activation="gelu",
-                mlp_dropout=0.1,
-                transformer_dropout=0.1,
-                query_dim=configs['query_dim'],
-                padding_size=configs['pad_length']
-                ).to(DEVICE) # server.py 和 train.py 中的模型初始化也需要相同, 这里还没加上！！！
+            if self.model_type == "Transformer":
+                print("load transformer model")
+                model = SeqFormer(
+                    input_dim=configs['node_length'],
+                    hidden_dim=256,
+                    output_dim=1,
+                    mlp_activation="ReLU",
+                    transformer_activation="gelu",
+                    mlp_dropout=0.1,
+                    transformer_dropout=0.1,
+                    query_dim=configs['query_dim'],
+                    padding_size=configs['pad_length']
+                    ).to(DEVICE) # server.py 和 train.py 中的模型初始化也需要相同, 这里还没加上！！！
+            elif self.model_type == "TreeConv":
+                print("load treeconv model")
+                model = treeconv.TreeConvolution(820, 54, 1).to(DEVICE)
             torch.save(model, path)
         else:
             model = torch.load(path, map_location='cuda:3')
             print(f"load checkpoint {path} Successfully!")
-            # ckpt = ckpt["state_dict"]
-            # new_state_dict = OrderedDict()
-            # for key, value in ckpt.items():
-            # new_key = key.replace("model.", "")
-            # new_state_dict[new_key] = value
-            # self.net.load_state_dict(new_state_dict, strict=False)
         return model
     
     def infer_equ(self, messages):
@@ -252,8 +289,8 @@ class LeonModel:
         Relation_IDs = X[0]['Relation IDs']
         Current_Level = X[0]['Current Level']
         Levels_Needed = X[0]['Levels Needed']
-        if self.query_dict_flag:
-            self.query_dict_flag = ray.get(self.query_dict.write_query_id.remote(X[0]['QueryId']))
+        # if self.query_dict_flag:
+        #     self.query_dict_flag = ray.get(self.query_dict.write_query_id.remote(X[0]['QueryId']))
         out = ','.join(sorted(Relation_IDs.split()))
         if (out in self.eqset) and (Current_Level == Levels_Needed):
             self.current_eq_summary = self.eq_summary.get(out)
@@ -290,7 +327,10 @@ class LeonModel:
         #     self.current_eq_summary[0] < 0.9:
         #     print("out")
         #     return ';'.join(['1.00,1,0' for _ in X])
-            
+        # 新添加的等价类，但没有训练    
+        # if self.current_eq_summary is None:
+        #     print("out")
+        #     return ';'.join(['1.00,1,0' for _ in X])
 
         # 编码
         seqs, attns, QueryFeature = self.encoding(X)

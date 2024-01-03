@@ -1,12 +1,16 @@
 """Workload definitions."""
 import glob
 import os
-
 import numpy as np
 import pickle
-from . import hyperparams, plans_lib, postgres
+from . import hyperparams, plans_lib, postgres, encoding
+
 import random
 import re
+import torch
+import sys
+sys.path.append('..')
+import test_case
 
 _EPSILON = 1e-6
 
@@ -437,9 +441,10 @@ def load_train_files(workload_type):
                     '22c', '22d', '23a', '23b', '23c', '24a', '24b', '25a', '25b', '25c', '26a', 
                     '26b', '26c', '27a', '27b', '27c', '28a', '28b', '28c', '29a', '29b', '29c',
                     '30a', '30b', '30c', '31a', '31b', '31c', '32a', '32b', '33a', '33b', '33c']
+        training_query = load_sql(train_files)
         random.shuffle(train_files)
         train_files = train_files * 75
-        training_query = None
+        
     return train_files, training_query
 
 def find_alias(training_query):
@@ -455,3 +460,60 @@ def find_alias(training_query):
         a.append(aliases)
 
     return a
+
+def plans_encoding(plans, configs, op_name_to_one_hot, plan_parameters, feature_statistics):
+    '''
+    input. a list of plans in type of json
+    output. (seq_encoding, run_times, attention_mask, loss_mask)
+        - seq_encoding torch.Size([1, 760])
+    '''
+    seqs = []
+    attns = []
+    for x in plans:        
+        seq_encoding, run_times, attention_mask, loss_mask, database_id = test_case.get_plan_encoding(
+            x, configs, op_name_to_one_hot, plan_parameters, feature_statistics
+        ) # run_times 无法获取
+        seqs.append(seq_encoding) 
+        attns.append(attention_mask)
+
+    seqs = torch.stack(seqs, dim=0)
+    attns = torch.stack(attns, dim=0)
+
+    return seqs, run_times, attns, loss_mask
+
+def leon_encoding(model_type, X, require_nodes=False, workload=None,
+                  queryFeaturizer=None, nodeFeaturizer=None, 
+                  configs=None, op_name_to_one_hot=None, 
+                  plan_parameters=None, feature_statistics=None):
+    if model_type == "TreeConv" or require_nodes:
+        nodes = PlanToNode(workload, X)
+        if nodes is None:
+            return None, None, None, None
+        plans_lib.GatherUnaryFiltersInfo(nodes)
+        postgres.EstimateFilterRows(nodes) 
+        null_nodes = plans_lib.Binarize(nodes)
+        query_vecs = torch.from_numpy(queryFeaturizer(nodes[0]))
+        OneQueryFeature = query_vecs.unsqueeze(0)
+        
+        for node in nodes:
+            node.info['query_feature'] = query_vecs
+    if model_type == "Transformer":
+        if require_nodes == False:
+            OneNode = PlanToNode(workload, [X[0]])[0]
+            plans_lib.GatherUnaryFiltersInfo(OneNode)
+            postgres.EstimateFilterRows(OneNode)  
+            OneQueryFeature = queryFeaturizer(OneNode)
+            OneQueryFeature = torch.from_numpy(OneQueryFeature).unsqueeze(0)
+        encoded_plans, _, attns, _ = plans_encoding(X, configs, op_name_to_one_hot, plan_parameters, feature_statistics) # encoding. plan -> plan_encoding / seqs torch.Size([26, 1, 760])
+        queryfeature = OneQueryFeature.repeat(encoded_plans.shape[0], 1)
+        if require_nodes:
+            return encoded_plans, attns, queryfeature, nodes
+        else:
+            return encoded_plans, attns, queryfeature, None
+    elif model_type == "TreeConv":
+        trees, indexes = encoding.TreeConvFeaturize(nodeFeaturizer, null_nodes) 
+        queryfeature = OneQueryFeature.repeat(trees.shape[0], 1)
+        if require_nodes:
+            return trees, indexes, queryfeature, nodes
+        else:
+            return trees, indexes, queryfeature, None

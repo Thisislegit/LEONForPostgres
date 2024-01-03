@@ -53,6 +53,7 @@ class TreeConvolution(nn.Module):
             nn.Linear(32, label_size),
         )
         self.reset_weights()
+        self.model_type = "TreeConv"
 
     def reset_weights(self):
         for name, p in self.named_parameters():
@@ -155,12 +156,12 @@ def ReportModel(model, blacklist=None):
 
 
 # @profile
-def _batch(data):
-    lens = [vec.shape[0] for vec in data]
-    if len(set(lens)) == 1:
-        # Common path.
-        return np.asarray(data)
-    xs = np.zeros((len(data), np.max(lens), data[0].shape[1]), dtype=np.float32)
+def _batch(data, padding_size):
+    # lens = [vec.shape[0] for vec in data]
+    # if len(set(lens)) == 1:
+    #     # Common path.
+    #     return np.asarray(data)
+    xs = np.zeros((len(data), padding_size, data[0].shape[1]), dtype=np.float32)
     for i, vec in enumerate(data):
         xs[i, :vec.shape[0], :] = vec
     return xs
@@ -253,9 +254,9 @@ def _featurize_tree(curr_node, node_featurizer):
 
 
 # @profile
-def make_and_featurize_trees(trees, node_featurizer):
-    indexes = torch.from_numpy(_batch([_make_indexes(x) for x in trees])).long()
+def make_and_featurize_trees(trees, node_featurizer, padding_size):
+    indexes = torch.from_numpy(_batch([_make_indexes(x) for x in trees], padding_size)).long()
     trees = torch.from_numpy(
         _batch([_featurize_tree(x, node_featurizer) for x in trees
-                ])).transpose(1, 2)
+                ], padding_size)).transpose(1, 2)
     return trees, indexes
