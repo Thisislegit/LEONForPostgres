@@ -57,7 +57,7 @@ def load_model(model_path: str, prev_optimizer_state_dict=None):
                         ).to(DEVICE)
         elif model_type == "TreeConv":
             print("load treeconv model")
-            model = treeconv.TreeConvolution(820, 54, 1).to(DEVICE)
+            model = treeconv.TreeConvolution(666, 50, 1).to(DEVICE)
         torch.save(model, model_path)
     else:
         model = torch.load(model_path).to(DEVICE)
@@ -270,9 +270,8 @@ if __name__ == '__main__':
         print(f"File {file_path1} has been successfully deleted.")
     else:
         print(f"File {file_path1} does not exist.")
-
-    ports = [1120, 1125, 1130]
-    pretrain = True
+    pretrain = False
+    ports = [5438, 5439, 5440]
     if pretrain:
         checkpoint = torch.load("./log/SimModel.pth")
         torch.save(checkpoint, "./log/model.pth")
@@ -280,7 +279,9 @@ if __name__ == '__main__':
 
     with open ("./conf/namespace.txt", "r") as file:
         namespace = file.read().replace('\n', '')
-    context = ray.init(address='121.48.161.202:55932', namespace=namespace, _temp_dir=conf['leon']['ray_path'] + "/log/ray") # init only once
+    with open ("./conf/ray_address.txt", "r") as file:
+        ray_address = file.read().replace('\n', '')
+    context = ray.init(address=ray_address, namespace=namespace, _temp_dir=conf['leon']['ray_path'] + "/log/ray") # init only once
     print(context.address_info)
     # dict_actor = ray.get_actor('querydict')
     actors = [ActorThatQueries.options(name=f"actor{port}").remote(port) for port in ports]

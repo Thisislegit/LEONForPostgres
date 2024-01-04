@@ -243,7 +243,7 @@ class Experience:
             for i, j in enumerate(self.GetExp(eq)):
                 for k_index in range(i + 1, len(self.GetExp(eq))):
                     k = self.GetExp(eq)[k_index]
-                    if j[0].cost == k[0].cost:
+                    if (j[0].cost == k[0].cost):
                         continue
                     if (j[0].info['sql_str'] == k[0].info['sql_str']) and (j[0].hint_str() == k[0].hint_str()): # sql 和 hint 都相同   
                         continue

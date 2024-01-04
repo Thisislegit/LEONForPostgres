@@ -448,7 +448,7 @@ class Sim(object):
         p.Define('infer_search_until_n_complete_plans', 1,
                  'Search until how many complete plans?')
         # Workload.
-        p.Define('workload', envs.JoinOrderBenchmark.Params(),
+        p.Define('workload', envs.JoinOrderBenchmark_Train.Params(),
                  'Params of the Workload, i.e., a set of queries.')
         # Data collection.
         p.Define('skip_data_collection_geq_num_rels', None,
@@ -1253,13 +1253,15 @@ def Main(argv):
     p = Sim.Params()
 
     p.workload.query_glob = '*.sql'
-    # p.workload.query_glob = None
+    p.workload.query_glob = None
     p.generic_ops_only_for_min_card_cost = False
 
     p.skip_data_collection_geq_num_rels = 12
     p.search.cost_model = costing.PostgresCost.Params()
+    # p.search.collect_data_include_suboptimal = False
 
     p.plan_featurizer_cls = plans_lib.TreeNodeFeaturizer
+    p.query_featurizer_cls = plans_lib.QueryFeaturizer
 
     p.loss_type = 'mean_qerror'
 
