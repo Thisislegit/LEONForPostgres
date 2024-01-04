@@ -260,4 +260,27 @@ class Experience:
                     pairs.append(tem)
         return pairs
 
+    def PreGetpair(self):
+        """
+        a train pair
+        [[j cost, j latency, j query_vector, j node], [k ...]], ...
+        """
+        pairs = []
+        for eq in self.__exp.keys():
+            # if len(self.GetExp(eq)) < 8: 
+            #     continue
+            for i, j in enumerate(self.GetExp(eq)):
+                for k_index in range(i + 1, len(self.GetExp(eq))):
+                    k = self.GetExp(eq)[k_index]
+                    # if (j[0].info['latency'] == k[0].info['latency']): # latency 相同 1s之内不把他train_pair
+                    if max(j[0].info['latency'],k[0].info['latency']) / min(j[0].info['latency'],k[0].info['latency']) < 1.05:
+                        continue
+                    tem = [j, k]
+                    # tem.append(j)
+                    # tem.append(k)
+                    # tem.append(j[1]+j[2])
+                    # tem.append(k[1]+k[2])
+                    # 初始pairloss
+                    pairs.append(tem)
+        return pairs
 

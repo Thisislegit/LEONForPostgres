@@ -7,7 +7,7 @@ import json
 from sklearn.preprocessing import RobustScaler
 import torch.nn.functional as F
 import loralib as lora
-import lightning.pytorch as pl
+import pytorch_lightning as pl
  
 configs = {
     'node_length' : 18, # +1 for ???Path  # of node_types +2 

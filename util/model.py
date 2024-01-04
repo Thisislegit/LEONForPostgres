@@ -1,6 +1,6 @@
 import torch
-import lightning.pytorch as pl
-import lightning.pytorch.callbacks as plc
+import pytorch_lightning as pl
+import pytorch_lightning.callbacks as plc
 import torch.nn.functional as F
 import torch.nn as nn
 from leon_experience import TIME_OUT

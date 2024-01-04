@@ -14,11 +14,14 @@
 """Balsa simulation agent."""
 import collections
 import copy
+import gc
 import hashlib
 import os
 import pickle
 import time
 
+from tqdm import tqdm
+from leon_experience import Experience, TIME_OUT
 from absl import app
 from absl import logging
 import numpy as np
@@ -41,6 +44,9 @@ from util import search
 from util import plans_lib
 from util import postgres
 from util import treeconv
+from torch.utils.data import DataLoader
+
+from util.model import PL_Leon
 # import train_utils
 
 
@@ -838,6 +844,7 @@ class Sim(object):
 
         # Instantiate query featurizer once with train nodes, since it may need
         # to calculate normalization statistics.
+        self.plan_featurizer = p.plan_featurizer_cls(wi)
         self.query_featurizer = p.query_featurizer_cls(wi)
         self.query_featurizer.Fit(self.workload.Queries(split='train'))
 
@@ -853,23 +860,38 @@ class Sim(object):
         # The constructor of SRB realy only needs goal/query Nodes for
         # instantiating workload info metadata and featurizers (e.g., grab all
         # table names).
+        Exp = Experience(eq_set=[])
         goals = [p.subplan for p in self.simulation_data]
-        exp = experience.SimpleReplayBuffer(
-            goals,
-            workload_info=wi,  # Pass this in to significantly speed up ctor.
-            plan_featurizer_cls=p.plan_featurizer_cls,
-            query_featurizer_cls=self.query_featurizer,
-            # Saves expensive filtering; simulation data is already {Join,
-            # <Scan types>} only.
-            keep_scans_joins_only=False,
-        )
-        logging.info('featurize_with_subplans()')
-        data = exp.featurize_with_subplans(
-            subplans=[p.subplan for p in self.simulation_data],
-            rewrite_generic=not p.plan_physical)
+        # goals = goals[:100]
+        plans_lib.GatherUnaryFiltersInfo(goals)
+        postgres.EstimateFilterRows(goals)  
+        # for node in goals:
+        for node in tqdm(goals, desc='Processing goals', unit='goal'):
+            query_vecs = torch.from_numpy(self.query_featurizer(node))
+            node.info['query_feature'] = query_vecs
+            node.info['latency'] = node.cost
+            tbls = [table.split(' ')[-1] for table in node.leaf_ids(with_alias=True)]
+            eq_temp = ','.join(sorted(tbls))
+            Exp.AddEqSet(eq_temp)
+            Exp.AppendExp(eq_temp, [node, None, None])
 
-        if try_load:
-            self._SaveFeaturizedData(data)
+        # exp = experience.SimpleReplayBuffer(
+        #     goals,
+        #     workload_info=wi,  # Pass this in to significantly speed up ctor.
+        #     plan_featurizer_cls=p.plan_featurizer_cls,
+        #     query_featurizer_cls=self.query_featurizer,
+        #     # Saves expensive filtering; simulation data is already {Join,
+        #     # <Scan types>} only.
+        #     keep_scans_joins_only=False,
+        # )
+        # logging.info('featurize_with_subplans()')
+        # data = exp.featurize_with_subplans(
+        #     subplans=[p.subplan for p in self.simulation_data],
+        #     rewrite_generic=not p.plan_physical)
+
+        # if try_load:
+        #     self._SaveFeaturizedData(data)
+        data = Exp.PreGetpair()
         return data
 
     def _MakeTrainer(self, loggers=None):
@@ -884,7 +906,7 @@ class Sim(object):
         self._LogPostgresConfigs(wandb_logger=loggers[-1])
         return pl.Trainer(
             accelerator="gpu",
-            devices=[3],
+            devices=[1],
             max_epochs=p.epochs,
             # Add logging metrics per this many batches.
             log_every_n_steps=10,
@@ -948,46 +970,72 @@ class Sim(object):
 
         # Make the DataLoader.
         logging.info('_MakeDatasetAndLoader()')
-        self.train_dataset, self.train_loader, _, self.val_loader = \
-            self._MakeDatasetAndLoader(data)
-        batch = next(iter(self.train_loader))
-        logging.info(
-            'Example batch (query,plan,indexes,cost):\n{}'.format(batch))
+        # self.train_dataset, self.train_loader, _, self.val_loader = \
+        #     self._MakeDatasetAndLoader(data)
+        leon_dataset = ds.prepare_dataset(data, True, self.plan_featurizer)
+        dataset_size = len(leon_dataset)
+        train_size = int(0.9 * dataset_size)
+        val_size = dataset_size - train_size
+        train_ds, val_ds = torch.utils.data.random_split(leon_dataset, [train_size, val_size])
+        del data
+        gc.collect()
+        dataloader_train = DataLoader(train_ds, batch_size=256, shuffle=True, num_workers=4)
+        dataloader_val = DataLoader(val_ds, batch_size=256, shuffle=False, num_workers=4)
+        batch = next(iter(dataloader_train))
+        # batch = next(iter(self.train_loader))
+        # logging.info(
+        #     'Example batch (query,plan,indexes,cost):\n{}'.format(batch))
 
-        # Initialize model.
-        _, query_feat_dims = batch[0].shape
-        if issubclass(p.plan_featurizer_cls, plans_lib.TreeNodeFeaturizer):
-            # make_and_featurize_trees() tranposes the latter 2 dims.
-            unused_bs, plan_feat_dims, unused_max_tree_nodes = batch[1].shape
-            logging.info(
-                'unused_bs, plan_feat_dims, unused_max_tree_nodes {}'.format(
-                    (unused_bs, plan_feat_dims, unused_max_tree_nodes)))
-        else:
-            unused_bs, plan_feat_dims = batch[1].shape
-        self.model = self._MakeModel(query_feat_dims=query_feat_dims,
-                                     plan_feat_dims=plan_feat_dims)
-        def ReportModel(model, blacklist=None):
-            ps = []
-            for name, p in model.named_parameters():
-                if blacklist is None or blacklist not in name:
-                    ps.append(np.prod(p.size()))
-            num_params = sum(ps)
-            mb = num_params * 4 / 1024 / 1024
-            print('Number of model parameters: {} (~= {:.1f}MB)'.format(num_params, mb))
-            print(model)
-            return mb
-        ReportModel(self.model)
+        # # Initialize model.
+        # _, query_feat_dims = batch[0].shape
+        # if issubclass(p.plan_featurizer_cls, plans_lib.TreeNodeFeaturizer):
+        #     # make_and_featurize_trees() tranposes the latter 2 dims.
+        #     unused_bs, plan_feat_dims, unused_max_tree_nodes = batch[1].shape
+        #     logging.info(
+        #         'unused_bs, plan_feat_dims, unused_max_tree_nodes {}'.format(
+        #             (unused_bs, plan_feat_dims, unused_max_tree_nodes)))
+        # else:
+        #     unused_bs, plan_feat_dims = batch[1].shape
+        # self.model = self._MakeModel(query_feat_dims=query_feat_dims,
+        #                              plan_feat_dims=plan_feat_dims)
+        # def ReportModel(model, blacklist=None):
+        #     ps = []
+        #     for name, p in model.named_parameters():
+        #         if blacklist is None or blacklist not in name:
+        #             ps.append(np.prod(p.size()))
+        #     num_params = sum(ps)
+        #     mb = num_params * 4 / 1024 / 1024
+        #     print('Number of model parameters: {} (~= {:.1f}MB)'.format(num_params, mb))
+        #     print(model)
+        #     return mb
+        # ReportModel(self.model)
 
-        # Train or load.
-        self.trainer = self._MakeTrainer(loggers=loggers)
-        if load_from_checkpoint:
-            self.model = SimModel.load_from_checkpoint(load_from_checkpoint)
-            logging.info(
-                'Loaded pretrained checkpoint: {}'.format(load_from_checkpoint))
-        else:
-            self.trainer.fit(self.model, self.train_loader, self.val_loader)
-            model_path = "./log/SimModel.pth"
-            torch.save(self.model.tree_conv, model_path)
+        # # Train or load.
+        # self.trainer = self._MakeTrainer(loggers=loggers)
+        # if load_from_checkpoint:
+        #     self.model = SimModel.load_from_checkpoint(load_from_checkpoint)
+        #     logging.info(
+        #         'Loaded pretrained checkpoint: {}'.format(load_from_checkpoint))
+        # else:
+        #     self.trainer.fit(self.model, self.train_loader, self.val_loader)
+        model = treeconv.TreeConvolution(batch['queryfeature1'].shape[1], batch['encoded_plans1'].shape[1], 1)
+        model = PL_Leon(model)
+        trainer = pl.Trainer(accelerator="gpu",
+                                devices=[1],
+                                max_epochs=100,
+                                callbacks=pl.callbacks.EarlyStopping(
+                                                    monitor='v_acc',
+                                                    mode='max',
+                                                    patience=3,
+                                                    min_delta=0.001,
+                                                    check_on_train_epoch_end=False
+                                                ),
+                                logger = [
+                pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs')
+            ])
+        trainer.fit(model, dataloader_train, dataloader_val)
+        model_path = "./log/SimModel.pth"
+        torch.save(self.model.model, model_path)
         return data
 
     def FreeData(self):
@@ -1193,6 +1241,7 @@ def Main(argv):
         # Use a plan featurizer that can process physical ops.
         p.plan_featurizer_cls = plans_lib.TreeNodeFeaturizer_V2
         p.query_featurizer_cls = plans_lib.QueryFeaturizer
+    
 
     # Pre-training via simulation data.
     sim = Sim(p)
@@ -1209,4 +1258,6 @@ def Main(argv):
 
 
 if __name__ == '__main__':
+    
     app.run(Main)
+

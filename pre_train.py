@@ -1,8 +1,8 @@
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 import torch
-import lightning.pytorch as pl
-import lightning.pytorch.callbacks as plc
+import pytorch_lightning as pl
+import pytorch_lightning.callbacks as plc
 import torch.nn.functional as F
 import torch.nn as nn
 import os

@@ -10,7 +10,7 @@ from util.dataset import *
 from leon_experience import TIME_OUT
 import pytorch_lightning.loggers as pl_loggers
 from config import read_config
-import lightning.pytorch as pl
+import pytorch_lightning as pl
 
 conf = read_config()
 DEVICE = 'cuda:3' if torch.cuda.is_available() else 'cpu'
