@@ -676,7 +676,7 @@ class Sim(object):
     def _FeaturizedDataPath(self):
         p = self.params
         hash_key = Sim.HashOfFeaturizedData(p)
-        return 'data/sim-featurized-{}.pkl'.format(hash_key)
+        return './log/data/sim-featurized-{}.pkl'.format(hash_key)
 
     def _LoadFeaturizedData(self):
         path = self._FeaturizedDataPath()

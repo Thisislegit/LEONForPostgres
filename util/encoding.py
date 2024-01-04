@@ -15,7 +15,7 @@ def getCostbais(sql, hint=None):
     return node
 
 
-def TreeConvFeaturize(plan_featurizer, subplans, padding_size=60):
+def TreeConvFeaturize(plan_featurizer, subplans, padding_size=200):
     """Returns (featurized plans, tree conv indexes) tensors."""
     assert len(subplans) > 0
     trees, indexes = treeconv.make_and_featurize_trees(subplans,
