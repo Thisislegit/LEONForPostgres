@@ -37,7 +37,7 @@ from util import encoding
 import gc
 
 conf = read_config()
-DEVICE = 'cuda:3' if torch.cuda.is_available() else 'cpu'
+DEVICE = 'cuda:2' if torch.cuda.is_available() else 'cpu'
 model_type = conf['leon']['model_type']
 
 def load_model(model_path: str, prev_optimizer_state_dict=None):
@@ -253,7 +253,7 @@ if __name__ == '__main__':
 
     with open ("./conf/namespace.txt", "r") as file:
         namespace = file.read().replace('\n', '')
-    context = ray.init(address='121.48.161.202:62597', namespace=namespace, _temp_dir=conf['leon']['ray_path'] + "/log/ray") # init only once
+    context = ray.init(address='121.48.161.202:64464', namespace=namespace, _temp_dir=conf['leon']['ray_path'] + "/log/ray") # init only once
     print(context.address_info)
     # dict_actor = ray.get_actor('querydict')
     actors = [ActorThatQueries.options(name=f"actor{port}").remote(port) for port in ports]
@@ -261,8 +261,8 @@ if __name__ == '__main__':
     
     train_files, training_query = envs.load_train_files(conf['leon']['workload_type'])
     # ray.get(dict_actor.write_sql_id.remote(train_files))
-    chunk_size = 1 # the # of sqls in a chunk
-    min_batch_size = 1
+    chunk_size = 5 # the # of sqls in a chunk
+    min_batch_size = 256
     model_path = "./log/model.pth"
     message_path = "./log/messages.pkl"
     prev_optimizer_state_dict = None
@@ -285,7 +285,7 @@ if __name__ == '__main__':
     retrain_count = 3
     min_leon_time = dict()
     max_query_latency1 = 0
-    logger =  pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs', name="treeconv", project=conf['leon']['wandb_project'])
+    logger =  pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs', name="treeconv+内存管理", project=conf['leon']['wandb_project'])
     my_step = 0
     same_actor = ray.get_actor('leon_server')
     task_counter = ray.get_actor('counter')
@@ -495,6 +495,7 @@ if __name__ == '__main__':
                     cali_all = get_calibrations(model, queryfeature, encoded_plans, attns)
                     del queryfeature, encoded_plans, attns
                     gc.collect()
+                    torch.cuda.empty_cache()
 
                     ucb_idx = get_ucb_idx(cali_all, costs)
 
@@ -615,13 +616,15 @@ if __name__ == '__main__':
             model.optimizer_state_dict = prev_optimizer_state_dict
             callbacks = load_callbacks(logger=None)
             trainer = pl.Trainer(accelerator="gpu",
-                                devices=[3],
+                                devices=[2],
                                 enable_progress_bar=False,
                                 max_epochs=100,
                                 callbacks=callbacks,
                                 logger=logger)
             trainer.fit(model, dataloader_train, dataloader_val)
             prev_optimizer_state_dict = trainer.optimizers[0].state_dict()
+            del leon_dataset, dataloader_train, dataloader_val, dataset_val, batch_sampler
+            gc.collect()
 
         print("*"*20)
         print("Current Accuracy For Each EqSet: ", model.eq_summary)

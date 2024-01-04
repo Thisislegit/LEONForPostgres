@@ -1,3 +1,4 @@
+import gc
 import json
 import struct
 import socketserver
@@ -274,7 +275,7 @@ class LeonModel:
                 model = treeconv.TreeConvolution(820, 54, 1).to(DEVICE)
             torch.save(model, path)
         else:
-            model = torch.load(path, map_location='cuda:3')
+            model = torch.load(path, map_location='cuda:2')
             print(f"load checkpoint {path} Successfully!")
         return model
     
@@ -337,6 +338,9 @@ class LeonModel:
 
         # 推理
         cali_strs = self.inference(seqs, attns, QueryFeature)
+        del seqs, attns, QueryFeature
+        gc.collect()
+        torch.cuda.empty_cache()
         print("out")
         return cali_strs
 
