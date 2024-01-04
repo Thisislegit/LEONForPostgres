@@ -128,6 +128,9 @@ class LeonModel:
         self.__model = None
         context = ray.init(namespace=namespace, _temp_dir= conf['leon']['ray_path'] + "/log/ray") # ray should be init in sub process  
         print(context.address_info)
+        ray_address = context.address_info['address']
+        with open('./conf/ray_address.txt', 'w') as f:
+            f.write(ray_address)
         node_path = "./log/messages.pkl"
         self.writer_hander = FileWriter.options(name="leon_server").remote(node_path)
         self.task_counter = TaskCounter.options(name="counter").remote()
@@ -272,7 +275,7 @@ class LeonModel:
                     ).to(DEVICE) # server.py 和 train.py 中的模型初始化也需要相同, 这里还没加上！！！
             elif self.model_type == "TreeConv":
                 print("load treeconv model")
-                model = treeconv.TreeConvolution(820, 54, 1).to(DEVICE)
+                model = treeconv.TreeConvolution(666, 50, 1).to(DEVICE)
             torch.save(model, path)
         else:
             model = torch.load(path, map_location='cuda:2')

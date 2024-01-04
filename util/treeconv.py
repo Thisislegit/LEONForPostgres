@@ -52,7 +52,8 @@ class TreeConvolution(nn.Module):
             nn.LeakyReLU(),
             nn.Linear(32, label_size),
         )
-        self.reset_weights()
+        # self.reset_weights()
+        self.apply(self._init_weights)
         self.model_type = "TreeConv"
 
     def reset_weights(self):
@@ -67,6 +68,14 @@ class TreeConvolution(nn.Module):
                 # Layer norm weight.
                 # assert 'norm' in name and 'weight' in name, name
                 nn.init.ones_(p)
+    
+    def _init_weights(self, module):
+        if isinstance(module, nn.Linear):
+            torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
+            if module.bias is not None:
+                torch.nn.init.zeros_(module.bias)
+        elif isinstance(module, nn.Embedding):
+            torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
 
     def forward(self, query_feats, trees, indexes):
         """Forward pass.
