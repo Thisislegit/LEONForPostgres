@@ -34,6 +34,7 @@ from config import read_config
 import random
 from util import treeconv
 from util import encoding
+import gc
 
 conf = read_config()
 DEVICE = 'cuda:3' if torch.cuda.is_available() else 'cpu'
@@ -233,6 +234,16 @@ def load_callbacks(logger):
 
 if __name__ == '__main__':
 
+    file_path1 = "./log/messages.pkl"
+
+    # 检查文件是否存在
+    if os.path.exists(file_path1):
+        # 删除文件
+        os.remove(file_path1)
+        print(f"File {file_path1} has been successfully deleted.")
+    else:
+        print(f"File {file_path1} does not exist.")
+
     ports = [1120, 1125, 1130]
     pretrain = True
     if pretrain:
@@ -242,7 +253,7 @@ if __name__ == '__main__':
 
     with open ("./conf/namespace.txt", "r") as file:
         namespace = file.read().replace('\n', '')
-    context = ray.init(address='121.48.161.202:63408', namespace=namespace, _temp_dir=conf['leon']['ray_path'] + "/log/ray") # init only once
+    context = ray.init(address='121.48.161.202:62597', namespace=namespace, _temp_dir=conf['leon']['ray_path'] + "/log/ray") # init only once
     print(context.address_info)
     # dict_actor = ray.get_actor('querydict')
     actors = [ActorThatQueries.options(name=f"actor{port}").remote(port) for port in ports]
@@ -250,7 +261,8 @@ if __name__ == '__main__':
     
     train_files, training_query = envs.load_train_files(conf['leon']['workload_type'])
     # ray.get(dict_actor.write_sql_id.remote(train_files))
-    chunk_size = 5 # the # of sqls in a chunk
+    chunk_size = 1 # the # of sqls in a chunk
+    min_batch_size = 1
     model_path = "./log/model.pth"
     message_path = "./log/messages.pkl"
     prev_optimizer_state_dict = None
@@ -273,7 +285,7 @@ if __name__ == '__main__':
     retrain_count = 3
     min_leon_time = dict()
     max_query_latency1 = 0
-    logger =  pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs', name="新模型和pair方法", project=conf['leon']['wandb_project'])
+    logger =  pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs', name="treeconv", project=conf['leon']['wandb_project'])
     my_step = 0
     same_actor = ray.get_actor('leon_server')
     task_counter = ray.get_actor('counter')
@@ -447,9 +459,12 @@ if __name__ == '__main__':
                                     Exp.collectRate(node2.info['join_tables'], first_time[curr_file[q_recieved_cnt]], tf_time[q_recieved_cnt], curr_file[q_recieved_cnt])
                                     c_node = node1
                                     
+                                    # c_plan = [c_node,
+                                    #           encoded_plans[i],
+                                    #           attns[i]]
                                     c_plan = [c_node,
-                                              encoded_plans[i],
-                                              attns[i]]
+                                              None,
+                                              None]
                                     if node2.actual_time_ms is not None:
                                         c_plan[0].info['latency'] = node2.actual_time_ms
                                     else:
@@ -478,6 +493,9 @@ if __name__ == '__main__':
                     # queryfeature = OneQueryFeature.repeat(encoded_plans.shape[0], 1) 
                     model.model.to(DEVICE)
                     cali_all = get_calibrations(model, queryfeature, encoded_plans, attns)
+                    del queryfeature, encoded_plans, attns
+                    gc.collect()
+
                     ucb_idx = get_ucb_idx(cali_all, costs)
 
                     num_to_exe = min(math.ceil(pct * len(ucb_idx)), max_exec_num)
@@ -523,12 +541,18 @@ if __name__ == '__main__':
                             #     break
                           
                         # (2) add experience of certain EqSet key
+                        # a_plan = [a_node, # with sql, hint, latency, cost
+                        #           encoded_plans[node_idx],
+                        #           attns[node_idx]]
+                        # b_plan = [b_node,
+                        #           encoded_plans[cost_index],
+                        #           attns[cost_index]]
                         a_plan = [a_node, # with sql, hint, latency, cost
-                                  encoded_plans[node_idx],
-                                  attns[node_idx]]
+                                  None,
+                                  None]
                         b_plan = [b_node,
-                                  encoded_plans[cost_index],
-                                  attns[cost_index]]
+                                  None,
+                                  None]
                         # print(i)
                         if not Exp.isCache(eqKey, a_plan) and not envs.CurrCache(exec_plan, a_plan):
                             exec_plan.append((a_plan, (pg_time1[q_recieved_cnt] * 3 + planning_time), eqKey))
@@ -578,13 +602,15 @@ if __name__ == '__main__':
         #         retrain_count = 0
         # last_train_pair = len(train_pairs)
         # print(retrain_count)
-        if len(train_pairs) > 256:
-            leon_dataset = prepare_dataset(train_pairs, True)
-            dataloader_train = DataLoader(leon_dataset, batch_size=256, shuffle=True, num_workers=0)
+        if len(train_pairs) > min_batch_size:
+            leon_dataset = prepare_dataset(train_pairs, True, nodeFeaturizer)
+            del train_pairs
+            gc.collect()
+            dataloader_train = DataLoader(leon_dataset, batch_size=256, shuffle=True, num_workers=4)
             # dataloader_val = DataLoader(leon_dataset, batch_size=256, shuffle=False, num_workers=0)
-            dataset_val = BucketDataset(Exp.OnlyGetExp(), keys=Exp.GetExpKeys())
+            dataset_val = BucketDataset(Exp.OnlyGetExp(), keys=Exp.GetExpKeys(), nodeFeaturizer=nodeFeaturizer)
             batch_sampler = BucketBatchSampler(dataset_val.buckets, batch_size=1)
-            dataloader_val = DataLoader(dataset_val, batch_sampler=batch_sampler)
+            dataloader_val = DataLoader(dataset_val, batch_sampler=batch_sampler, num_workers=4)
             # model = load_model(model_path, prev_optimizer_state_dict).to(DEVICE)
             model.optimizer_state_dict = prev_optimizer_state_dict
             callbacks = load_callbacks(logger=None)

@@ -3,59 +3,79 @@ from torch.utils.data import Dataset, DataLoader, Sampler
 import pickle
 from leon_experience import Experience
 import random
-from util import plans_lib, postgres
+from util import plans_lib, postgres, encoding
 import numpy as np
 
 # create dataset
 class LeonDataset(Dataset):
-    def __init__(self, labels, costs1, costs2, encoded_plans1, encoded_plans2, attns1, attns2, queryfeature1=[], queryfeature2=[]):
+    def __init__(self, labels, costs1, costs2, nodes1=[], nodes2=[], nodeFeaturizer=None):
         self.labels = labels
         self.costs1 = costs1
         self.costs2 = costs2
-        self.encoded_plans1 = encoded_plans1
-        self.encoded_plans2 = encoded_plans2
-        self.attns1 = attns1
-        self.attns2 = attns2
-
-        self.queryfeature1 = queryfeature1
-        self.queryfeature2 = queryfeature2
+        # self.encoded_plans1 = encoded_plans1
+        # self.encoded_plans2 = encoded_plans2
+        # self.attns1 = attns1
+        # self.attns2 = attns2
+        self.nodeFeaturizer = nodeFeaturizer
+        self.nodes1 = nodes1
+        self.nodes2 = nodes2
+        assert self.nodes1[0].info.get('all_filters_est_rows') is not None
 
     def __len__(self):
         return len(self.labels)
 
     def __getitem__(self, idx):
+        
+        null_nodes1 = plans_lib.Binarize(self.nodes1[idx])
+        trees1, indexes1 = encoding.TreeConvFeaturize(self.nodeFeaturizer, [null_nodes1])
+        
+        null_nodes2 = plans_lib.Binarize(self.nodes2[idx])
+        trees2, indexes2 = encoding.TreeConvFeaturize(self.nodeFeaturizer, [null_nodes2])
+        query_feats1 = self.nodes1[idx].info['query_feature']
+        query_feats2 = self.nodes2[idx].info['query_feature']
+        return {
+            'labels': self.labels[idx],
+            'costs1': self.costs1[idx],
+            'costs2': self.costs2[idx],
+            'encoded_plans1': trees1.squeeze(0),
+            'encoded_plans2': trees2.squeeze(0),
+            'attns1': indexes1.squeeze(0),
+            'attns2': indexes2.squeeze(0),
+            'queryfeature1': query_feats1,
+            'queryfeature2': query_feats2
+        }
 
-        if not isinstance(self.queryfeature1, torch.Tensor):
-            return {
-                'labels': self.labels[idx],
-                'costs1': self.costs1[idx],
-                'costs2': self.costs2[idx],
-                'encoded_plans1': self.encoded_plans1[idx],
-                'encoded_plans2': self.encoded_plans2[idx],
-                'attns1': self.attns1[idx],
-                'attns2': self.attns2[idx]
-            }
-        else:
-            return {
-                'labels': self.labels[idx],
-                'costs1': self.costs1[idx],
-                'costs2': self.costs2[idx],
-                'encoded_plans1': self.encoded_plans1[idx],
-                'encoded_plans2': self.encoded_plans2[idx],
-                'attns1': self.attns1[idx],
-                'attns2': self.attns2[idx],
-                'queryfeature1': self.queryfeature1[idx],
-                'queryfeature2': self.queryfeature2[idx]
-                }
+        # if not isinstance(self.queryfeature1, torch.Tensor):
+        #     return {
+        #         'labels': self.labels[idx],
+        #         'costs1': self.costs1[idx],
+        #         'costs2': self.costs2[idx],
+        #         'encoded_plans1': self.encoded_plans1[idx],
+        #         'encoded_plans2': self.encoded_plans2[idx],
+        #         'attns1': self.attns1[idx],
+        #         'attns2': self.attns2[idx]
+        #     }
+        # else:
+        #     return {
+        #         'labels': self.labels[idx],
+        #         'costs1': self.costs1[idx],
+        #         'costs2': self.costs2[idx],
+        #         'encoded_plans1': self.encoded_plans1[idx],
+        #         'encoded_plans2': self.encoded_plans2[idx],
+        #         'attns1': self.attns1[idx],
+        #         'attns2': self.attns2[idx],
+        #         'queryfeature1': self.queryfeature1[idx],
+        #         'queryfeature2': self.queryfeature2[idx]
+        #         }
     
-def prepare_dataset(pairs, queryFeaturizer=True):
+def prepare_dataset(pairs, Shouldquery, nodeFeaturizer):
     labels = []
     costs1 = []
     costs2 = []
-    encoded_plans1 = []
-    encoded_plans2 = []
-    attns1 = []
-    attns2 = []
+    # encoded_plans1 = []
+    # encoded_plans2 = []
+    # attns1 = []
+    # attns2 = []
     Nodes1 = []
     Nodes2 = []
     for pair in pairs:
@@ -63,36 +83,38 @@ def prepare_dataset(pairs, queryFeaturizer=True):
             label = 0
         else:
             label = 1
-        if queryFeaturizer:
+        if Shouldquery:
             Nodes1.append(
-                pair[0][0].info['query_feature']
+                # pair[0][0].info['query_feature']
+                pair[0][0]
             )
             Nodes2.append(
-                pair[1][0].info['query_feature']
+                # pair[1][0].info['query_feature']
+                pair[1][0]
             )
         labels.append(label)
         costs1.append(pair[0][0].cost)
         costs2.append(pair[1][0].cost)
-        encoded_plans1.append(pair[0][1])
-        encoded_plans2.append(pair[1][1])
-        attns1.append(pair[0][2])
-        attns2.append(pair[1][2])
+        # encoded_plans1.append(pair[0][1])
+        # encoded_plans2.append(pair[1][1])
+        # attns1.append(pair[0][2])
+        # attns2.append(pair[1][2])
     labels = torch.tensor(labels)
     costs1 = torch.tensor(costs1)
     costs2 = torch.tensor(costs2)
-    encoded_plans1 = torch.stack(encoded_plans1)
-    encoded_plans2 = torch.stack(encoded_plans2)
-    attns1 = torch.stack(attns1)
-    attns2 = torch.stack(attns2)
-    if Nodes1 or Nodes2:
-        Nodes1 = torch.stack(Nodes1)
-        Nodes2 = torch.stack(Nodes2)
-    dataset = LeonDataset(labels, costs1, costs2, encoded_plans1, encoded_plans2, attns1, attns2, Nodes1, Nodes2)
+    # encoded_plans1 = torch.stack(encoded_plans1)
+    # encoded_plans2 = torch.stack(encoded_plans2)
+    # attns1 = torch.stack(attns1)
+    # attns2 = torch.stack(attns2)
+    # if Nodes1 or Nodes2:
+    #     Nodes1 = torch.stack(Nodes1)
+    #     Nodes2 = torch.stack(Nodes2)
+    dataset = LeonDataset(labels, costs1, costs2, Nodes1, Nodes2, nodeFeaturizer)
     return dataset
 
 
 class BucketDataset(Dataset):
-    def __init__(self, buckets, keys=None):
+    def __init__(self, buckets, keys=None, nodeFeaturizer=None):
         # filter buckets with in keys
         if keys:
             buckets = {key: value for key, value in buckets.items() if value and key in keys}
@@ -103,16 +125,20 @@ class BucketDataset(Dataset):
         self.buckets = list(buckets.values())
         # Flatten buckets
         self.buckets_item = [item for bucket in self.buckets_dict.values() for item in bucket]
+        self.nodeFeaturizer = nodeFeaturizer
         
 
     def __len__(self):
         return sum(len(bucket) for bucket in self.buckets)
 
     def __getitem__(self, idx):
+        
         node, b, c = self.buckets_item[idx]
+        null_node = plans_lib.Binarize(node)
+        trees, indexes = encoding.TreeConvFeaturize(self.nodeFeaturizer, [null_node])
         item = {'join_tables': node.info['join_tables'], \
-                'plan_encode': b, \
-                'att_encode': c, \
+                'plan_encode': trees.squeeze(0), \
+                'att_encode': indexes.squeeze(0), \
                 'latency': node.info['latency'], \
                 'cost': node.cost,\
                 'sql': node.info['sql_str'], \

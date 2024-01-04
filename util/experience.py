@@ -24,10 +24,10 @@ import time
 import numpy as np
 
 from util import treeconv
-from util import plans_lib, postgres
+from util import plans_lib, postgres, encoding
 
 
-def TreeConvFeaturize(plan_featurizer, subplans):
+def TreeConvFeaturize(plan_featurizer, subplans, padding_size=70):
     """Returns (featurized plans, tree conv indexes) tensors."""
     assert len(subplans) > 0
     # This class currently requires batch-featurizing, due to internal
@@ -35,7 +35,7 @@ def TreeConvFeaturize(plan_featurizer, subplans):
     print('Calling make_and_featurize_trees()...')
     t1 = time.time()
     trees, indexes = treeconv.make_and_featurize_trees(subplans,
-                                                       plan_featurizer)
+                                                       plan_featurizer, padding_size)
     print('took {:.1f}s'.format(time.time() - t1))
     return trees, indexes
 
@@ -390,7 +390,7 @@ class Experience(object):
         # Tree conv requires batch-featurization.
         if self.tree_conv and all_subtrees:
             assert len(all_feat_vecs) == 0 and len(all_pos_vecs) == 0
-            all_feat_vecs, all_pos_vecs = TreeConvFeaturize(
+            all_feat_vecs, all_pos_vecs = encoding.TreeConvFeaturize(
                 self.featurizer, all_subtrees)
 
         # Logging.
@@ -514,7 +514,7 @@ class Experience(object):
                 pprint.pprint(list(ret.values()))
 
         assert len(all_feat_vecs) == 0 and len(all_pos_vecs) == 0
-        all_feat_vecs, all_pos_vecs = TreeConvFeaturize(self.featurizer,
+        all_feat_vecs, all_pos_vecs = encoding.TreeConvFeaturize(self.featurizer,
                                                         all_subtrees)
 
         # Logging.
@@ -644,7 +644,7 @@ class Experience(object):
 
         if self.tree_conv:
             assert len(all_feat_vecs) == 0 and len(all_pos_vecs) == 0
-            all_feat_vecs, all_pos_vecs = TreeConvFeaturize(
+            all_feat_vecs, all_pos_vecs = encoding.TreeConvFeaturize(
                 self.featurizer, subtrees)
 
         return all_query_vecs, all_feat_vecs, all_pos_vecs, all_costs
@@ -692,7 +692,7 @@ class SimpleReplayBuffer(Experience):
         self.prepare(rewrite_generic, verbose)
         all_query_vecs = [None] * len(self.nodes)
         all_feat_vecs = [None] * len(self.nodes)
-        all_pa_pos_vecs = [None] * len(self.nodes)
+        all_pa_pos_vecs = [None] * len(self.nodes) 
         all_costs = [None] * len(self.nodes)
         for i, node in enumerate(self.nodes):
             all_query_vecs[i] = self.query_featurizer(node)
@@ -701,7 +701,7 @@ class SimpleReplayBuffer(Experience):
         print('Spent {:.1f}s'.format(time.time() - t1))
         if isinstance(self.featurizer, plans_lib.TreeNodeFeaturizer):
             binary_trees = [plans_lib.Binarize(node) for node in subplans]            
-            all_feat_vecs, all_pa_pos_vecs = TreeConvFeaturize(
+            all_feat_vecs, all_pa_pos_vecs = encoding.TreeConvFeaturize(
                 self.featurizer, binary_trees)
         else:
             for i, node in enumerate(self.nodes):

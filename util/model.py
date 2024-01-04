@@ -100,6 +100,8 @@ class PL_Leon(pl.LightningModule):
 
             for i in range(len(join_tables)):
                 for j in range(i + 1, len(join_tables)):
+                    if costs[i] == costs[j]:
+                        continue
                     if (sql[i] != sql[j]) and (latency[i] != TIME_OUT or latency[j] != TIME_OUT):
                         continue
                     if max(latency[i], latency[j]) / min(latency[i], latency[j]) < 1.05:
