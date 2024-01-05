@@ -47,6 +47,8 @@ from util import treeconv
 from torch.utils.data import DataLoader
 
 from util.model import PL_Leon
+
+from pytorch_lightning.strategies import DDPStrategy
 # import train_utils
 
 
@@ -979,8 +981,8 @@ class Sim(object):
         train_ds, val_ds = torch.utils.data.random_split(leon_dataset, [train_size, val_size])
         del data
         gc.collect()
-        dataloader_train = DataLoader(train_ds, batch_size=256, shuffle=True, num_workers=4)
-        dataloader_val = DataLoader(val_ds, batch_size=256, shuffle=False, num_workers=4)
+        dataloader_train = DataLoader(train_ds, batch_size=128, shuffle=True, num_workers=8)
+        dataloader_val = DataLoader(val_ds, batch_size=128, shuffle=False, num_workers=8)
         batch = next(iter(dataloader_train))
         # batch = next(iter(self.train_loader))
         # logging.info(
@@ -1018,24 +1020,40 @@ class Sim(object):
         #         'Loaded pretrained checkpoint: {}'.format(load_from_checkpoint))
         # else:
         #     self.trainer.fit(self.model, self.train_loader, self.val_loader)
+        # callbacks=pl.callbacks.EarlyStopping(
+        #                                             monitor='v_acc',
+        #                                             mode='max',
+        #                                             patience=5,
+        #                                             min_delta=0.001,
+        #                                             check_on_train_epoch_end=False
+        #                                         ),
         model = treeconv.TreeConvolution(batch['queryfeature1'].shape[1], batch['encoded_plans1'].shape[1], 1)
         model = PL_Leon(model)
-        trainer = pl.Trainer(accelerator="gpu",
-                                devices=[1],
-                                max_epochs=100,
-                                callbacks=pl.callbacks.EarlyStopping(
-                                                    monitor='v_acc',
-                                                    mode='max',
-                                                    patience=3,
-                                                    min_delta=0.001,
-                                                    check_on_train_epoch_end=False
-                                                ),
-                                logger = [
-                pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs')
-            ])
+        trainer = pl.Trainer(
+                    accelerator="gpu",
+                    strategy=DDPStrategy(find_unused_parameters=False),  # 指定分布式数据并行策略
+                    benchmark=True,
+                    profiler='simple',
+                    sync_batchnorm=True,
+                    devices=[1, 2],  # 指定使用的 GPU 设备编号
+                    max_epochs=100,
+                    callbacks=pl.callbacks.EarlyStopping(
+                        monitor='v_loss',
+                        patience=5,
+                        mode='min',
+                        verbose=True
+                    ),
+                    logger=[
+                        pl_loggers.WandbLogger(
+                            save_dir=os.getcwd() + '/logs',
+                            name="202401042215",
+                            project="wyz的pretrain"
+                        )
+                    ]
+                )
         trainer.fit(model, dataloader_train, dataloader_val)
         model_path = "./log/SimModel.pth"
-        torch.save(self.model.model, model_path)
+        torch.save(model.model, model_path)
         return data
 
     def FreeData(self):
