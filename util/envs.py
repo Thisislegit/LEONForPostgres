@@ -511,8 +511,13 @@ def leon_encoding(model_type, X, require_nodes=False, workload=None,
         else:
             return encoded_plans, attns, queryfeature, None
     elif model_type == "TreeConv":
-        trees, indexes = encoding.TreeConvFeaturize(nodeFeaturizer, null_nodes) 
-        queryfeature = OneQueryFeature.repeat(trees.shape[0], 1)
+        trees = []
+        indexes = []
+        for node in null_nodes:
+            tree, index = encoding.PreTreeConvFeaturize(nodeFeaturizer, [node]) 
+            trees.append(tree)
+            indexes.append(index)
+        queryfeature = OneQueryFeature.repeat(len(trees), 1)
         if require_nodes:
             return trees, indexes, queryfeature, nodes
         else:

@@ -5,10 +5,11 @@ from leon_experience import Experience
 import random
 from util import plans_lib, postgres, encoding
 import numpy as np
+import torch.nn.functional as F
 
 # create dataset
 class LeonDataset(Dataset):
-    def __init__(self, labels, costs1, costs2, nodes1=[], nodes2=[], nodeFeaturizer=None):
+    def __init__(self, labels, costs1, costs2, nodes1=[], nodes2=[], nodeFeaturizer=None, dict=None):
         self.labels = labels
         self.costs1 = costs1
         self.costs2 = costs2
@@ -17,6 +18,7 @@ class LeonDataset(Dataset):
         # self.attns1 = attns1
         # self.attns2 = attns2
         self.nodeFeaturizer = nodeFeaturizer
+        self.dict = dict
         self.nodes1 = nodes1
         self.nodes2 = nodes2
         assert self.nodes1[0].info.get('all_filters_est_rows') is not None
@@ -26,21 +28,33 @@ class LeonDataset(Dataset):
 
     def __getitem__(self, idx):
         
-        null_nodes1 = plans_lib.Binarize(self.nodes1[idx])
-        trees1, indexes1 = encoding.TreeConvFeaturize(self.nodeFeaturizer, [null_nodes1])
-        
-        null_nodes2 = plans_lib.Binarize(self.nodes2[idx])
-        trees2, indexes2 = encoding.TreeConvFeaturize(self.nodeFeaturizer, [null_nodes2])
+        # null_nodes1 = plans_lib.Binarize(self.nodes1[idx])
+        # trees1, indexes1 = encoding.TreeConvFeaturize(self.nodeFeaturizer, [null_nodes1])
+        target_cols = 200
+        trees1 = self.dict[self.nodes1[idx].info['index']][0].squeeze(0)
+        padding_cols = max(0, target_cols - trees1.size(1))
+        trees1 = F.pad(trees1, (0, padding_cols), value=0)
+        indexes1 = self.dict[self.nodes1[idx].info['index']][1].squeeze(0)
+        padding_cols = max(0, target_cols - indexes1.size(0))
+        indexes1 = F.pad(indexes1, (0, 0, 0, padding_cols), value=0)
+        trees2 = self.dict[self.nodes2[idx].info['index']][0].squeeze(0)
+        padding_cols = max(0, target_cols - trees2.size(1))
+        trees2 = F.pad(trees2, (0, padding_cols), value=0)
+        indexes2 = self.dict[self.nodes2[idx].info['index']][1].squeeze(0)
+        padding_cols = max(0, target_cols - indexes2.size(0))
+        indexes2 = F.pad(indexes2, (0, 0, 0, padding_cols), value=0)
+        # null_nodes2 = plans_lib.Binarize(self.nodes2[idx])
+        # trees2, indexes2 = encoding.TreeConvFeaturize(self.nodeFeaturizer, [null_nodes2])
         query_feats1 = self.nodes1[idx].info['query_feature']
         query_feats2 = self.nodes2[idx].info['query_feature']
         return {
             'labels': self.labels[idx],
             'costs1': self.costs1[idx],
             'costs2': self.costs2[idx],
-            'encoded_plans1': trees1.squeeze(0),
-            'encoded_plans2': trees2.squeeze(0),
-            'attns1': indexes1.squeeze(0),
-            'attns2': indexes2.squeeze(0),
+            'encoded_plans1': trees1,
+            'encoded_plans2': trees2,
+            'attns1': indexes1,
+            'attns2': indexes2,
             'queryfeature1': query_feats1,
             'queryfeature2': query_feats2
         }
@@ -68,7 +82,7 @@ class LeonDataset(Dataset):
         #         'queryfeature2': self.queryfeature2[idx]
         #         }
     
-def prepare_dataset(pairs, Shouldquery, nodeFeaturizer):
+def prepare_dataset(pairs, Shouldquery, nodeFeaturizer, dict=None):
     labels = []
     costs1 = []
     costs2 = []
@@ -109,12 +123,12 @@ def prepare_dataset(pairs, Shouldquery, nodeFeaturizer):
     # if Nodes1 or Nodes2:
     #     Nodes1 = torch.stack(Nodes1)
     #     Nodes2 = torch.stack(Nodes2)
-    dataset = LeonDataset(labels, costs1, costs2, Nodes1, Nodes2, nodeFeaturizer)
+    dataset = LeonDataset(labels, costs1, costs2, Nodes1, Nodes2, nodeFeaturizer, dict)
     return dataset
 
 
 class BucketDataset(Dataset):
-    def __init__(self, buckets, keys=None, nodeFeaturizer=None):
+    def __init__(self, buckets, keys=None, nodeFeaturizer=None, dict=None):
         # filter buckets with in keys
         if keys:
             buckets = {key: value for key, value in buckets.items() if value and key in keys}
@@ -126,6 +140,7 @@ class BucketDataset(Dataset):
         # Flatten buckets
         self.buckets_item = [item for bucket in self.buckets_dict.values() for item in bucket]
         self.nodeFeaturizer = nodeFeaturizer
+        self.dict = dict
         
 
     def __len__(self):
@@ -134,11 +149,18 @@ class BucketDataset(Dataset):
     def __getitem__(self, idx):
         
         node, b, c = self.buckets_item[idx]
-        null_node = plans_lib.Binarize(node)
-        trees, indexes = encoding.TreeConvFeaturize(self.nodeFeaturizer, [null_node])
+        # null_node = plans_lib.Binarize(node)
+        target_cols = 200
+        trees = self.dict[node.info['index']][0].squeeze(0)
+        padding_cols = max(0, target_cols - trees.size(1))
+        trees = F.pad(trees, (0, padding_cols), value=0)
+        indexes = self.dict[node.info['index']][1].squeeze(0)
+        padding_cols = max(0, target_cols - indexes.size(0))
+        indexes = F.pad(indexes, (0, 0, 0, padding_cols), value=0)
+        # trees, indexes = encoding.TreeConvFeaturize(self.nodeFeaturizer, [null_node])
         item = {'join_tables': node.info['join_tables'], \
-                'plan_encode': trees.squeeze(0), \
-                'att_encode': indexes.squeeze(0), \
+                'plan_encode': trees, \
+                'att_encode': indexes, \
                 'latency': node.info['latency'], \
                 'cost': node.cost,\
                 'sql': node.info['sql_str'], \

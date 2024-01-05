@@ -32,7 +32,7 @@ import torch
 import torch.nn.functional as F
 
 from util import costing
-from util import envs
+from util import envs, encoding
 import leon_experience
 from util import experience
 from util import hyperparams
@@ -685,13 +685,16 @@ class Sim(object):
         p = self.params
         hash_key = Sim.HashOfFeaturizedData(p)
         return './log/data/sim-featurized-{}.pkl'.format(hash_key)
+        # return './log/data/sim-featurized-1e43c723.pkl'
 
     def _LoadFeaturizedData(self):
         path = self._FeaturizedDataPath()
         try:
             with open(path, 'rb') as f:
                 data = torch.load(f)
+            print("load")
         except Exception as e:
+            print(e)
             return False, None
         logging.info('Loaded featurized data (len {}) from: {}'.format(
             len(data[0]), path))
@@ -849,8 +852,10 @@ class Sim(object):
         self.plan_featurizer = p.plan_featurizer_cls(wi)
         self.query_featurizer = p.query_featurizer_cls(wi)
         self.query_featurizer.Fit(self.workload.Queries(split='train'))
+        self.dict = {}
 
         if try_load:
+            print("try load featurized data")
             done, data = self._LoadFeaturizedData()
             if done:
                 return data
@@ -867,15 +872,20 @@ class Sim(object):
         # goals = goals[:100]
         plans_lib.GatherUnaryFiltersInfo(goals)
         postgres.EstimateFilterRows(goals)  
-        # for node in goals:
-        for node in tqdm(goals, desc='Processing goals', unit='goal'):
+        # for node in goals
+        for i, node in tqdm(enumerate(goals), desc='Processing goals', unit='goal'):
             query_vecs = torch.from_numpy(self.query_featurizer(node))
             node.info['query_feature'] = query_vecs
             node.info['latency'] = node.cost
+            null_nodes = plans_lib.Binarize(node)
+            trees, indexes = encoding.PreTreeConvFeaturize(self.plan_featurizer, [null_nodes]) 
             tbls = [table.split(' ')[-1] for table in node.leaf_ids(with_alias=True)]
             eq_temp = ','.join(sorted(tbls))
             Exp.AddEqSet(eq_temp)
+            self.dict[i] = (trees, indexes)
+            node.info['index'] = i
             Exp.AppendExp(eq_temp, [node, None, None])
+            
 
         # exp = experience.SimpleReplayBuffer(
         #     goals,
@@ -891,38 +901,39 @@ class Sim(object):
         #     subplans=[p.subplan for p in self.simulation_data],
         #     rewrite_generic=not p.plan_physical)
 
-        # if try_load:
-        #     self._SaveFeaturizedData(data)
-        data = Exp.PreGetpair()
+        
+        data = (Exp.PreGetpair(), self.dict)
+        if try_load:
+            self._SaveFeaturizedData(data)
         return data
 
-    def _MakeTrainer(self, loggers=None):
-        p = self.params
-        is_inner_params = True
-        if loggers is None:
-            is_inner_params = False
-            loggers = [
-                pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs')
-            ]
-        assert isinstance(loggers[-1], pl_loggers.WandbLogger), loggers[-1]
-        self._LogPostgresConfigs(wandb_logger=loggers[-1])
-        return pl.Trainer(
-            accelerator="gpu",
-            devices=[1],
-            max_epochs=p.epochs,
-            # Add logging metrics per this many batches.
-            log_every_n_steps=10,
-            # Do validation per this many train epochs.
-            check_val_every_n_epoch=1,
-            # Patience = # of validations with no improvements before stopping.
-            callbacks=pl.callbacks.EarlyStopping(monitor='val_loss',
-                                                           patience=5,
-                                                           mode='min',
-                                                           verbose=True),
-            logger=loggers,
-            gradient_clip_val=p.gradient_clip_val,
-            num_sanity_val_steps=2 if p.validate_fraction > 0 else 0,
-        )
+    # def _MakeTrainer(self, loggers=None):
+    #     p = self.params
+    #     is_inner_params = True
+    #     if loggers is None:
+    #         is_inner_params = False
+    #         loggers = [
+    #             pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs')
+    #         ]
+    #     assert isinstance(loggers[-1], pl_loggers.WandbLogger), loggers[-1]
+    #     self._LogPostgresConfigs(wandb_logger=loggers[-1])
+    #     return pl.Trainer(
+    #         accelerator="gpu",
+    #         devices=[1],
+    #         max_epochs=p.epochs,
+    #         # Add logging metrics per this many batches.
+    #         log_every_n_steps=10,
+    #         # Do validation per this many train epochs.
+    #         check_val_every_n_epoch=1,
+    #         # Patience = # of validations with no improvements before stopping.
+    #         callbacks=pl.callbacks.EarlyStopping(monitor='val_loss',
+    #                                                        patience=5,
+    #                                                        mode='min',
+    #                                                        verbose=True),
+    #         logger=loggers,
+    #         gradient_clip_val=p.gradient_clip_val,
+    #         num_sanity_val_steps=2 if p.validate_fraction > 0 else 0,
+    #     )
 
     def _GetPlanner(self):
         p = self.params
@@ -969,20 +980,22 @@ class Sim(object):
         data = train_data
         if data is None:
             data = self._FeaturizeTrainingData()
+            self.dict = data[1]
+            data = data[0]
 
         # Make the DataLoader.
         logging.info('_MakeDatasetAndLoader()')
         # self.train_dataset, self.train_loader, _, self.val_loader = \
         #     self._MakeDatasetAndLoader(data)
-        leon_dataset = ds.prepare_dataset(data, True, self.plan_featurizer)
+        leon_dataset = ds.prepare_dataset(data, True, self.plan_featurizer, self.dict)
         dataset_size = len(leon_dataset)
         train_size = int(0.9 * dataset_size)
         val_size = dataset_size - train_size
         train_ds, val_ds = torch.utils.data.random_split(leon_dataset, [train_size, val_size])
         del data
         gc.collect()
-        dataloader_train = DataLoader(train_ds, batch_size=128, shuffle=True, num_workers=8)
-        dataloader_val = DataLoader(val_ds, batch_size=128, shuffle=False, num_workers=8)
+        dataloader_train = DataLoader(train_ds, batch_size=1024, shuffle=True, num_workers=6)
+        dataloader_val = DataLoader(val_ds, batch_size=1024, shuffle=False, num_workers=6)
         batch = next(iter(dataloader_train))
         # batch = next(iter(self.train_loader))
         # logging.info(
@@ -1027,15 +1040,15 @@ class Sim(object):
         #                                             min_delta=0.001,
         #                                             check_on_train_epoch_end=False
         #                                         ),
+                    #         strategy=DDPStrategy(find_unused_parameters=False),  # 指定分布式数据并行策略
+                    # benchmark=True,
+                    # profiler='simple',
+                    # sync_batchnorm=True,
         model = treeconv.TreeConvolution(batch['queryfeature1'].shape[1], batch['encoded_plans1'].shape[1], 1)
         model = PL_Leon(model)
         trainer = pl.Trainer(
                     accelerator="gpu",
-                    strategy=DDPStrategy(find_unused_parameters=False),  # 指定分布式数据并行策略
-                    benchmark=True,
-                    profiler='simple',
-                    sync_batchnorm=True,
-                    devices=[1, 2],  # 指定使用的 GPU 设备编号
+                    devices=[1],  # 指定使用的 GPU 设备编号
                     max_epochs=100,
                     callbacks=pl.callbacks.EarlyStopping(
                         monitor='v_loss',
@@ -1054,7 +1067,7 @@ class Sim(object):
         trainer.fit(model, dataloader_train, dataloader_val)
         model_path = "./log/SimModel.pth"
         torch.save(model.model, model_path)
-        return data
+        return None
 
     def FreeData(self):
         self.simulation_data = None
