@@ -24,6 +24,7 @@ import ray
 import uuid
 from config import read_config
 from util import treeconv
+import torch.nn.functional as F
 conf = read_config()
 
 GenerateUniqueNameSpace = lambda: str(uuid.uuid4())
@@ -94,7 +95,32 @@ class FileWriter:
         else:
             return False
     
-    
+def _batch(trees, indexes, padding_size=200):
+    # 获取 batchsize
+    batch_size = len(trees)
+    tree_embedding_size = trees[0].size(1)
+    # 初始化填充后的张量
+    padded_trees = torch.zeros((batch_size, tree_embedding_size, padding_size))
+    padded_indexes = torch.zeros((batch_size, padding_size, 1))
+
+    for i in range(batch_size):
+        # 获取当前样本的原始树和索引张量
+        tree = trees[i]
+        index = indexes[i]
+
+        # 计算需要填充的列数
+        padding_cols_tree = max(0, padding_size - tree.size(2))
+        padding_cols_index = max(0, padding_size - index.size(1))
+
+        # 使用 F.pad 进行填充
+        padded_tree = F.pad(tree, (0, padding_cols_tree), value=0)
+        padded_index = F.pad(index, (0, 0, 0 , padding_cols_index), value=0)
+
+        # 将填充后的张量放入结果中
+        padded_trees[i, :, :] = padded_tree
+        padded_indexes[i, :, :] = padded_index
+
+    return padded_trees, padded_indexes.long()    
 
     
 # @ray.remote
@@ -181,7 +207,7 @@ class LeonModel:
             seqs = seqs.to(DEVICE)
             attns = attns.to(DEVICE)
             if self.model_type == "TreeConv":
-                cali_all = torch.tanh(self.__model(seqs, attns, QueryFeature)).add(1).squeeze(1)
+                cali_all = torch.tanh(self.__model(QueryFeature, seqs, attns)).add(1).squeeze(1)
             elif self.model_type == "Transformer":
                 cali = self.__model(seqs, attns, QueryFeature) # cali.shape [# of plan, pad_length] cali 是归一化后的基数估计
                 cali_all = cali[:, 0] # [# of plan] -> [# of plan, 1] cali_all plan （cost_iter次）基数估计（归一化后）结果
@@ -236,7 +262,9 @@ class LeonModel:
             trees, indexes, queryfeature, _ = envs.leon_encoding(self.model_type, X, 
                                                                            require_nodes=False, workload=self.workload, 
                                                                            queryFeaturizer=self.queryFeaturizer, nodeFeaturizer=self.nodeFeaturizer)
-            return queryfeature, trees, indexes
+            if isinstance(trees, list):
+                trees, indexes, = _batch(trees, indexes)
+            return trees, indexes, queryfeature
     
     def inference(self, seqs, attns, QueryFeature=None):
         cali_all = self.get_calibrations(seqs, attns, QueryFeature)
@@ -278,7 +306,7 @@ class LeonModel:
                 model = treeconv.TreeConvolution(666, 50, 1).to(DEVICE)
             torch.save(model, path)
         else:
-            model = torch.load(path, map_location='cuda:2')
+            model = torch.load(path, map_location=DEVICE)
             print(f"load checkpoint {path} Successfully!")
         return model
     
