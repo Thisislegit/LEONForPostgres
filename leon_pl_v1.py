@@ -231,6 +231,33 @@ def load_callbacks(logger):
     #         logging_interval='epoch'))
     return callbacks
 
+def _batch(trees, indexes, padding_size=200):
+    # 获取 batchsize
+    batch_size = len(trees)
+
+    # 初始化填充后的张量
+    padded_trees = torch.zeros((batch_size, 54, padding_size))
+    padded_indexes = torch.zeros((batch_size, padding_size, 1))
+
+    for i in range(batch_size):
+        # 获取当前样本的原始树和索引张量
+        tree = trees[i]
+        index = indexes[i]
+
+        # 计算需要填充的列数
+        padding_cols_tree = max(0, padding_size - tree.size(2))
+        padding_cols_index = max(0, padding_size - index.size(1))
+
+        # 使用 F.pad 进行填充
+        padded_tree = F.pad(tree, (0, padding_cols_tree), value=0)
+        padded_index = F.pad(index, (0, 0, 0 , padding_cols_index), value=0)
+
+        # 将填充后的张量放入结果中
+        padded_trees[i, :, :] = padded_tree
+        padded_indexes[i, :, :] = padded_index
+
+    return padded_trees, padded_indexes.long()
+    
 
 if __name__ == '__main__':
 
@@ -253,7 +280,7 @@ if __name__ == '__main__':
 
     with open ("./conf/namespace.txt", "r") as file:
         namespace = file.read().replace('\n', '')
-    context = ray.init(address='121.48.161.202:64464', namespace=namespace, _temp_dir=conf['leon']['ray_path'] + "/log/ray") # init only once
+    context = ray.init(address='121.48.161.202:55932', namespace=namespace, _temp_dir=conf['leon']['ray_path'] + "/log/ray") # init only once
     print(context.address_info)
     # dict_actor = ray.get_actor('querydict')
     actors = [ActorThatQueries.options(name=f"actor{port}").remote(port) for port in ports]
@@ -292,6 +319,8 @@ if __name__ == '__main__':
     runtime_pg = 0
     runtime_leon = 0
     max_exec_num = 100
+    encoding_dict = dict() # 用来存trees和indexes
+    index_encoding = 0 # 用来记录索引值
     
     remote = bool(conf['leon']['remote'])
     pct = float(conf['leon']['pct']) # 执行 percent 比例的 plan
@@ -470,11 +499,18 @@ if __name__ == '__main__':
                                     else:
                                         if c_plan[0].info.get('latency') is None:
                                             if not Exp.isCache(c_node.info['join_tables'], c_plan) and not envs.CurrCache(exec_plan, c_plan):
+                                                c_plan[0].info['index'] = index_encoding
+                                                encoding_dict[index_encoding] = (encoded_plans[i], attns[i])
+                                                index_encoding += 1
                                                 exec_plan.append((c_plan,(pg_time1[q_recieved_cnt] * 3 + planning_time), temp))
+                                                
                                             break
                                             # hint_node = plans_lib.FilterScansOrJoins(c_node.Copy())
                                             # c_plan[0].info['latency'], _ = getPG_latency(hint_node.info['sql_str'], hint_node.hint_str(), ENABLE_LEON=False, timeout_limit=(pg_time1[q_recieved_cnt] * 3 + planning_time)) # timeout 10s
                                     if not Exp.isCache(c_node.info['join_tables'], c_plan):
+                                        c_plan[0].info['index'] = index_encoding
+                                        encoding_dict[index_encoding] = (encoded_plans[i], attns[i])
+                                        index_encoding += 1
                                         Exp.AppendExp(c_node.info['join_tables'], c_plan)
                                     else:
                                         Exp.ChangeTime(c_node.info['join_tables'], c_plan)
@@ -492,8 +528,9 @@ if __name__ == '__main__':
                     # OneQueryFeature = nodes[0].info['query_feature'].unsqueeze(0)
                     # queryfeature = OneQueryFeature.repeat(encoded_plans.shape[0], 1) 
                     model.model.to(DEVICE)
-                    cali_all = get_calibrations(model, queryfeature, encoded_plans, attns)
-                    del queryfeature, encoded_plans, attns
+                    e_pad, a_pad = _batch(encoded_plans, attns)
+                    cali_all = get_calibrations(model, queryfeature, e_pad, a_pad)
+                    
                     gc.collect()
                     torch.cuda.empty_cache()
 
@@ -556,9 +593,16 @@ if __name__ == '__main__':
                                   None]
                         # print(i)
                         if not Exp.isCache(eqKey, a_plan) and not envs.CurrCache(exec_plan, a_plan):
+                            a_plan[0].info['index'] = index_encoding
+                            encoding_dict[index_encoding] = (encoded_plans[i], attns[i])
+                            index_encoding += 1
                             exec_plan.append((a_plan, (pg_time1[q_recieved_cnt] * 3 + planning_time), eqKey))
+                            
 
                         if not Exp.isCache(eqKey, b_plan) and not envs.CurrCache(exec_plan, b_plan):
+                            b_plan[0].info['index'] = index_encoding
+                            encoding_dict[index_encoding] = (encoded_plans[i], attns[i])
+                            index_encoding += 1
                             exec_plan.append((b_plan, (pg_time1[q_recieved_cnt] * 3 + planning_time), eqKey))
                             
                             
@@ -573,9 +617,12 @@ if __name__ == '__main__':
                         #     Exp.AppendExp(eqKey, b_plan)
                     # print("len(Exp.GetExp(eqKey))", len(Exp.GetExp(eqKey)))
         print("Curr_Plan_Len: ", len(exec_plan))
+        ## 给索引
         results = pool.map_unordered(actor_call, exec_plan)
         for result in results:
             Exp.AppendExp(result[1], result[0])
+
+        del queryfeature, encoded_plans, attns
 
         ##########删除等价类#############
         # Exp.DeleteEqSet(sql_id)
@@ -604,12 +651,12 @@ if __name__ == '__main__':
         # last_train_pair = len(train_pairs)
         # print(retrain_count)
         if len(train_pairs) > min_batch_size:
-            leon_dataset = prepare_dataset(train_pairs, True, nodeFeaturizer)
+            leon_dataset = prepare_dataset(train_pairs, True, nodeFeaturizer, encoding_dict)
             del train_pairs
             gc.collect()
             dataloader_train = DataLoader(leon_dataset, batch_size=256, shuffle=True, num_workers=4)
             # dataloader_val = DataLoader(leon_dataset, batch_size=256, shuffle=False, num_workers=0)
-            dataset_val = BucketDataset(Exp.OnlyGetExp(), keys=Exp.GetExpKeys(), nodeFeaturizer=nodeFeaturizer)
+            dataset_val = BucketDataset(Exp.OnlyGetExp(), keys=Exp.GetExpKeys(), nodeFeaturizer=nodeFeaturizer, dict=encoding_dict)
             batch_sampler = BucketBatchSampler(dataset_val.buckets, batch_size=1)
             dataloader_val = DataLoader(dataset_val, batch_sampler=batch_sampler, num_workers=4)
             # model = load_model(model_path, prev_optimizer_state_dict).to(DEVICE)

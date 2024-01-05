@@ -260,3 +260,11 @@ def make_and_featurize_trees(trees, node_featurizer, padding_size):
         _batch([_featurize_tree(x, node_featurizer) for x in trees
                 ], padding_size)).transpose(1, 2)
     return trees, indexes
+
+# @profile
+def Premake_and_featurize_trees(trees, node_featurizer, padding_size):
+    indexes = torch.from_numpy(np.asarray([_make_indexes(x) for x in trees])).long()
+    trees = torch.from_numpy(
+        np.asarray([_featurize_tree(x, node_featurizer) for x in trees
+                ])).transpose(1, 2)
+    return trees, indexes

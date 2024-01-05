@@ -22,6 +22,12 @@ def TreeConvFeaturize(plan_featurizer, subplans, padding_size=200):
                                                        plan_featurizer, padding_size)
     return trees, indexes
 
+def PreTreeConvFeaturize(plan_featurizer, subplans, padding_size=200):
+    """Returns (featurized plans, tree conv indexes) tensors."""
+    assert len(subplans) > 0
+    trees, indexes = treeconv.Premake_and_featurize_trees(subplans,
+                                                       plan_featurizer, padding_size)
+    return trees, indexes
 
 def getencoding_Balsa(sql, hint, workload):
     with pg_executor.Cursor() as cursor:
