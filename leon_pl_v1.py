@@ -234,9 +234,9 @@ def load_callbacks(logger):
 def _batch(trees, indexes, padding_size=200):
     # 获取 batchsize
     batch_size = len(trees)
-
+    tree_embedding_size = trees[0].size(1)
     # 初始化填充后的张量
-    padded_trees = torch.zeros((batch_size, 54, padding_size))
+    padded_trees = torch.zeros((batch_size, tree_embedding_size, padding_size))
     padded_indexes = torch.zeros((batch_size, padding_size, 1))
 
     for i in range(batch_size):
