@@ -735,6 +735,7 @@ class Sim(object):
             info_to_attach = {
                 'overall_join_graph': query_node.info['parsed_join_graph'],
                 'overall_join_conds': query_node.info['parsed_join_conds'],
+                'sql_str': query_node.info['sql_str'],
             }
             self.search.PushOnEnumeratedHook(
                 self._MakeOnEnumeratedHook(accum, info_to_attach, num_rels))
@@ -1049,7 +1050,7 @@ class Sim(object):
         trainer = pl.Trainer(
                     accelerator="gpu",
                     devices=[1],  # 指定使用的 GPU 设备编号
-                    max_epochs=100,
+                    max_epochs=20,
                     callbacks=pl.callbacks.EarlyStopping(
                         monitor='v_loss',
                         patience=5,
@@ -1258,7 +1259,7 @@ def Main(argv):
 
     p.skip_data_collection_geq_num_rels = 12
     p.search.cost_model = costing.PostgresCost.Params()
-    # p.search.collect_data_include_suboptimal = False
+    p.search.collect_data_include_suboptimal = True
 
     p.plan_featurizer_cls = plans_lib.TreeNodeFeaturizer
     p.query_featurizer_cls = plans_lib.QueryFeaturizer

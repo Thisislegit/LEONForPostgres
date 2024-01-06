@@ -271,9 +271,13 @@ class Experience:
             # if len(self.GetExp(eq)) < 8: 
             #     continue
             for i, j in enumerate(self.GetExp(eq)):
-                all_elements = list(range(i + 1, len(self.GetExp(eq))))
-                for k_index in random.sample(all_elements, min(10, len(all_elements))):
+                # all_elements = list(range(i + 1, len(self.GetExp(eq))))
+                # for k_index in random.sample(all_elements, min(10, len(all_elements))):
+                for k_index in range(i + 1, len(self.GetExp(eq))):    
                     k = self.GetExp(eq)[k_index]
+
+                    if (j[0].info['sql_str'] != k[0].info['sql_str']):
+                        continue
                     # if (j[0].info['latency'] == k[0].info['latency']): # latency 相同 1s之内不把他train_pair
                     if max(j[0].info['latency'],k[0].info['latency']) / min(j[0].info['latency'],k[0].info['latency']) < 1.05:
                         continue

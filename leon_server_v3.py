@@ -360,9 +360,9 @@ class LeonModel:
         #     print("out")
         #     return ';'.join(['1.00,1,0' for _ in X])
         # 新添加的等价类，但没有训练    
-        if self.current_eq_summary is None:
-            print("out")
-            return ';'.join(['1.00,1,0' for _ in X])
+        # if self.current_eq_summary is None:
+        #     print("out")
+        #     return ';'.join(['1.00,1,0' for _ in X])
 
         # 编码
         seqs, attns, QueryFeature = self.encoding(X)
