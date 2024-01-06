@@ -60,7 +60,7 @@ def load_model(model_path: str, prev_optimizer_state_dict=None):
             model = treeconv.TreeConvolution(666, 50, 1).to(DEVICE)
         torch.save(model, model_path)
     else:
-        model = torch.load(model_path).to(DEVICE)
+        model = torch.load(model_path, map_location=DEVICE).to(DEVICE)
     model = PL_Leon(model, prev_optimizer_state_dict)
     
     return model
@@ -273,7 +273,7 @@ if __name__ == '__main__':
     pretrain = True
     ports = [1120, 1125, 1130, 1135]
     if pretrain:
-        checkpoint = torch.load("./log/SimModel.pth")
+        checkpoint = torch.load("./log/SimModel.pth", map_location=DEVICE)
         torch.save(checkpoint, "./log/model.pth")
         print("load SimModel success")
 
@@ -322,6 +322,8 @@ if __name__ == '__main__':
     max_exec_num = 50
     encoding_dict = dict() # 用来存trees和indexes
     index_encoding = 0 # 用来记录索引值
+    train_gpu = int(conf['leon']['train_gpu'])
+    random_tensor = torch.rand((90000, 1000, 12)).to(f'cuda:{train_gpu}')
     
     remote = bool(conf['leon']['remote'])
     pct = float(conf['leon']['pct']) # 执行 percent 比例的 plan
@@ -625,6 +627,8 @@ if __name__ == '__main__':
             Exp.AppendExp(result[1], result[0])
 
         del queryfeature, encoded_plans, attns
+        gc.collect()
+        torch.cuda.empty_cache()
 
         ##########删除等价类#############
         # Exp.DeleteEqSet(sql_id)
@@ -668,8 +672,10 @@ if __name__ == '__main__':
             # model = load_model(model_path, prev_optimizer_state_dict).to(DEVICE)
             model.optimizer_state_dict = prev_optimizer_state_dict
             callbacks = load_callbacks(logger=None)
+            del random_tensor
+            torch.cuda.empty_cache()
             trainer = pl.Trainer(accelerator="gpu",
-                                devices=[3],
+                                devices=[train_gpu],
                                 enable_progress_bar=False,
                                 max_epochs=100,
                                 callbacks=callbacks,
@@ -679,6 +685,8 @@ if __name__ == '__main__':
             prev_optimizer_state_dict = trainer.optimizers[0].state_dict()
             del leon_dataset, train_ds, val_ds, dataloader_train, dataloader_val, dataset_test, batch_sampler, dataloader_test
             gc.collect()
+            torch.cuda.empty_cache()
+            random_tensor = torch.rand((90000, 1000, 12)).to(f'cuda:{train_gpu}')
 
         print("*"*20)
         print("Current Accuracy For Each EqSet: ", model.eq_summary)
