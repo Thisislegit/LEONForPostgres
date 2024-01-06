@@ -34,10 +34,10 @@ from config import read_config
 import random
 from util import treeconv
 from util import encoding
+from utils import *
 import gc
 
 conf = read_config()
-DEVICE = 'cuda:2' if torch.cuda.is_available() else 'cpu'
 model_type = conf['leon']['model_type']
 
 def load_model(model_path: str, prev_optimizer_state_dict=None):
@@ -210,7 +210,7 @@ def collects(finnode: plans_lib.Node, actor, exp: Experience, timeout, currTotal
 def load_callbacks(logger):
     callbacks = []
     callbacks.append(plc.EarlyStopping(
-        monitor='v_acc',
+        monitor='val_acc',
         mode='max',
         patience=3,
         min_delta=0.001,
@@ -270,8 +270,8 @@ if __name__ == '__main__':
         print(f"File {file_path1} has been successfully deleted.")
     else:
         print(f"File {file_path1} does not exist.")
-    pretrain = False
-    ports = [5438, 5439, 5440]
+    pretrain = True
+    ports = [1120, 1125, 1130, 1135]
     if pretrain:
         checkpoint = torch.load("./log/SimModel.pth")
         torch.save(checkpoint, "./log/model.pth")
@@ -291,7 +291,7 @@ if __name__ == '__main__':
     # ray.get(dict_actor.write_sql_id.remote(train_files))
     chunk_size = 5 # the # of sqls in a chunk
     min_batch_size = 256
-    model_path = "./log/model.pth"
+    model_path = "./log/model.pth" 
     message_path = "./log/messages.pkl"
     prev_optimizer_state_dict = None
     model = load_model(model_path)
@@ -313,7 +313,7 @@ if __name__ == '__main__':
     retrain_count = 3
     min_leon_time = dict()
     max_query_latency1 = 0
-    logger =  pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs', name="treeconv+内存管理", project=conf['leon']['wandb_project'])
+    logger =  pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs', name="新年新气象", project=conf['leon']['wandb_project'])
     my_step = 0
     same_actor = ray.get_actor('leon_server')
     task_counter = ray.get_actor('counter')
@@ -547,7 +547,7 @@ if __name__ == '__main__':
                     # Iterate over the sorted costs
                     for i in range(1, len(sorted_indices)):
                         # If the difference with the last selected cost is greater than 1.2, add it to the selected indices
-                        if (costs[sorted_indices[i]] / costs[selected_indices[-1]]) > 1.05:
+                        if (costs[sorted_indices[i]] / costs[selected_indices[-1]]) > 1.02:
                             selected_indices.append(sorted_indices[i])
                         if len(selected_indices) == num_to_exe:
                             break
@@ -595,14 +595,14 @@ if __name__ == '__main__':
                         # print(i)
                         if not Exp.isCache(eqKey, a_plan) and not envs.CurrCache(exec_plan, a_plan):
                             a_plan[0].info['index'] = index_encoding
-                            encoding_dict[index_encoding] = (encoded_plans[i], attns[i])
+                            encoding_dict[index_encoding] = (encoded_plans[node_idx], attns[node_idx])
                             index_encoding += 1
                             exec_plan.append((a_plan, (pg_time1[q_recieved_cnt] * 3 + planning_time), eqKey))
                             
 
                         if not Exp.isCache(eqKey, b_plan) and not envs.CurrCache(exec_plan, b_plan):
                             b_plan[0].info['index'] = index_encoding
-                            encoding_dict[index_encoding] = (encoded_plans[i], attns[i])
+                            encoding_dict[index_encoding] = (encoded_plans[node_idx], attns[node_idx])
                             index_encoding += 1
                             exec_plan.append((b_plan, (pg_time1[q_recieved_cnt] * 3 + planning_time), eqKey))
                             
@@ -655,23 +655,28 @@ if __name__ == '__main__':
             leon_dataset = prepare_dataset(train_pairs, True, nodeFeaturizer, encoding_dict)
             del train_pairs
             gc.collect()
-            dataloader_train = DataLoader(leon_dataset, batch_size=256, shuffle=True, num_workers=4)
-            # dataloader_val = DataLoader(leon_dataset, batch_size=256, shuffle=False, num_workers=0)
-            dataset_val = BucketDataset(Exp.OnlyGetExp(), keys=Exp.GetExpKeys(), nodeFeaturizer=nodeFeaturizer, dict=encoding_dict)
-            batch_sampler = BucketBatchSampler(dataset_val.buckets, batch_size=1)
-            dataloader_val = DataLoader(dataset_val, batch_sampler=batch_sampler, num_workers=4)
+            dataset_size = len(leon_dataset)
+            train_size = int(0.8 * dataset_size)
+            val_size = dataset_size - train_size
+            train_ds, val_ds = torch.utils.data.random_split(leon_dataset, [train_size, val_size])
+            dataloader_train = DataLoader(train_ds, batch_size=1536, shuffle=True, num_workers=7)
+            dataloader_val = DataLoader(val_ds, batch_size=1536, shuffle=False, num_workers=7)
+            dataset_test = BucketDataset(Exp.OnlyGetExp(), keys=Exp.GetExpKeys(), nodeFeaturizer=nodeFeaturizer, dict=encoding_dict)
+            batch_sampler = BucketBatchSampler(dataset_test.buckets, batch_size=1)
+            dataloader_test = DataLoader(dataset_test, batch_sampler=batch_sampler, num_workers=7)
             # model = load_model(model_path, prev_optimizer_state_dict).to(DEVICE)
             model.optimizer_state_dict = prev_optimizer_state_dict
             callbacks = load_callbacks(logger=None)
             trainer = pl.Trainer(accelerator="gpu",
-                                devices=[2],
+                                devices=[3],
                                 enable_progress_bar=False,
                                 max_epochs=100,
                                 callbacks=callbacks,
                                 logger=logger)
             trainer.fit(model, dataloader_train, dataloader_val)
+            trainer.test(model, dataloader_test)
             prev_optimizer_state_dict = trainer.optimizers[0].state_dict()
-            del leon_dataset, dataloader_train, dataloader_val, dataset_val, batch_sampler
+            del leon_dataset, train_ds, val_ds, dataloader_train, dataloader_val, dataset_test, batch_sampler, dataloader_test
             gc.collect()
 
         print("*"*20)

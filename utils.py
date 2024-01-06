@@ -8,7 +8,7 @@ import copy
 import util.encoding as encoding
 
 # DEVICE = 'cuda:1' if torch.cuda.is_available() else 'cpu'
-DEVICE = 'cuda:2' if torch.cuda.is_available() else 'cpu'
+DEVICE = 'cuda:1' if torch.cuda.is_available() else 'cpu'
 def load_json(path, namespace=True):
     with open(path) as json_file:
         if namespace:

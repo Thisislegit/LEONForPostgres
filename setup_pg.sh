@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # 设置 PostgreSQL 安装目录
-PREFIX_DIR="/data1/chenx/projects/pg_install_ml_5438"
+PREFIX_DIR="/data1/wyz/DATA_1120"
 
 # 执行 configure
 ./configure --prefix="$PREFIX_DIR"
@@ -22,7 +22,7 @@ cd "$PREFIX_DIR"
 ./bin/pg_ctl -D ./data restart
 ./bin/pg_ctl -D ./data1 restart
 ./bin/pg_ctl -D ./data2 restart
+./bin/pg_ctl -D ./data3 restart
 
-
-cd "/data1/chenx/projects/LEONForPostgres/conf"
+cd "/data1/wyz/online/LEONForPostgres/conf"
 python pre_warm.py
