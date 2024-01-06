@@ -48,3 +48,4 @@ log/
 logs/
 conf/namespace.txt
 wandb/
+conf/ray_address.txt

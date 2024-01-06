@@ -118,3 +118,8 @@ for chunk in chunks:
 
 
     
+- [x] Online Training 
+
+    Tree Conv Model and Pretrain
+    
+    ![Alt text](Figs/online.png)
