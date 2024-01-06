@@ -319,7 +319,7 @@ if __name__ == '__main__':
     task_counter = ray.get_actor('counter')
     runtime_pg = 0
     runtime_leon = 0
-    max_exec_num = 100
+    max_exec_num = 50
     encoding_dict = dict() # 用来存trees和indexes
     index_encoding = 0 # 用来记录索引值
     
@@ -618,6 +618,7 @@ if __name__ == '__main__':
                         #     Exp.AppendExp(eqKey, b_plan)
                     # print("len(Exp.GetExp(eqKey))", len(Exp.GetExp(eqKey)))
         print("Curr_Plan_Len: ", len(exec_plan))
+        exec_plan = sorted(exec_plan, key=lambda x: x[0][0].cost, reverse=True)
         ## 给索引
         results = pool.map_unordered(actor_call, exec_plan)
         for result in results:
