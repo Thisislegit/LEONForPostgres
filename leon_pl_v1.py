@@ -271,7 +271,7 @@ if __name__ == '__main__':
     else:
         print(f"File {file_path1} does not exist.")
     pretrain = True
-    ports = [1120, 1125, 1130, 1135]
+    ports = [5438, 5439, 5440]
     if pretrain:
         checkpoint = torch.load("./log/SimModel.pth", map_location=DEVICE)
         torch.save(checkpoint, "./log/model.pth")
@@ -664,8 +664,8 @@ if __name__ == '__main__':
             train_size = int(0.8 * dataset_size)
             val_size = dataset_size - train_size
             train_ds, val_ds = torch.utils.data.random_split(leon_dataset, [train_size, val_size])
-            dataloader_train = DataLoader(train_ds, batch_size=1536, shuffle=True, num_workers=7)
-            dataloader_val = DataLoader(val_ds, batch_size=1536, shuffle=False, num_workers=7)
+            dataloader_train = DataLoader(train_ds, batch_size=512, shuffle=True, num_workers=5)
+            dataloader_val = DataLoader(val_ds, batch_size=512, shuffle=False, num_workers=5)
             dataset_test = BucketDataset(Exp.OnlyGetExp(), keys=Exp.GetExpKeys(), nodeFeaturizer=nodeFeaturizer, dict=encoding_dict)
             batch_sampler = BucketBatchSampler(dataset_test.buckets, batch_size=1)
             dataloader_test = DataLoader(dataset_test, batch_sampler=batch_sampler, num_workers=7)

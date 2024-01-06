@@ -267,8 +267,10 @@ class DynamicProgramming(object):
 
                             if p.collect_data_include_suboptimal:
                                 # Call registered hooks on the costed subplan.
-                                for hook in self.on_enumerated_hooks:
-                                    hook(actual_node, cost)
+                                # Only call on optimal plans for each k-relation.
+                                if level == num_rels:
+                                    for hook in self.on_enumerated_hooks:
+                                        hook(actual_node, cost)
 
                             # Record if better cost.
                             if join_ids not in dp_table or dp_table[join_ids][
