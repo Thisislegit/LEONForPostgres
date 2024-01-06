@@ -77,15 +77,22 @@ class PL_Leon(pl.LightningModule):
 
 
     def training_step(self, batch):
-        loss, acc  = self.getBatchPairsLoss(batch)
-        self.log_dict({'t_loss': loss, 't_acc': acc}, on_epoch=True)
+        loss, acc = self.getBatchPairsLoss(batch)
+        self.log_dict({'train_loss': loss, 'train_acc': acc}, on_epoch=True)
         return loss
 
     def validation_step(self, batch):
         if batch.get('plan_encode') is not None:
             return self.__validation_step_impl(batch)
-        loss, acc  = self.getBatchPairsLoss(batch)
-        self.log_dict({'v_loss': loss, 'v_acc': acc}, on_epoch=True)
+        loss, acc = self.getBatchPairsLoss(batch)
+        self.log_dict({'val_loss': loss, 'val_acc': acc}, on_epoch=True)
+        return loss
+    
+    def test_step(self, batch):
+        if batch.get('plan_encode') is not None:
+            return self.__validation_step_impl(batch)
+        loss, acc = self.getBatchPairsLoss(batch)
+        self.log_dict({'test_loss': loss, 'test_acc': acc}, on_epoch=True)
         return loss
 
     def __validation_step_impl(self, batch):
@@ -162,7 +169,7 @@ class PL_Leon(pl.LightningModule):
         self.outputs.append((accuracy, loss, len(labels)))
         return accuracy, loss, len(labels)
 
-    def on_validation_epoch_end(self):
+    def on_test_epoch_end(self):
         accuracy = 0
         total = 0
         loss = 0
@@ -176,7 +183,7 @@ class PL_Leon(pl.LightningModule):
         
         accuracy /= total
         loss /= total
-        self.log_dict({'v_acc': accuracy, 'v_loss': loss}, on_epoch=True)
+        self.log_dict({'test_acc': accuracy, 'test_loss': loss}, on_epoch=True)
 
         # clear outputs
         self.outputs.clear()

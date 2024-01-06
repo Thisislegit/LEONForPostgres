@@ -33,18 +33,18 @@ from tqdm import tqdm
 from config import read_config
 
 conf = read_config()
-DEVICE = 'cuda:3' if torch.cuda.is_available() else 'cpu'
-Transformer_model = SeqFormer(
-                        input_dim=configs['node_length'],
-                        hidden_dim=256,
-                        output_dim=1,
-                        mlp_activation="ReLU",
-                        transformer_activation="gelu",
-                        mlp_dropout=0.1,
-                        transformer_dropout=0.1,
-                        query_dim=configs['query_dim'],
-                        padding_size=configs['pad_length']
-                    )
+DEVICE = 'cuda:1' if torch.cuda.is_available() else 'cpu'
+# Transformer_model = SeqFormer(
+#                         input_dim=configs['node_length'],
+#                         hidden_dim=256,
+#                         output_dim=1,
+#                         mlp_activation="ReLU",
+#                         transformer_activation="gelu",
+#                         mlp_dropout=0.1,
+#                         transformer_dropout=0.1,
+#                         query_dim=configs['query_dim'],
+#                         padding_size=configs['pad_length']
+#                     )
 
 
 # UNFINISHED hint sql -> pgcosts
