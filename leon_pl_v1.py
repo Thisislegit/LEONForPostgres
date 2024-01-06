@@ -289,7 +289,7 @@ if __name__ == '__main__':
     
     train_files, training_query = envs.load_train_files(conf['leon']['workload_type'])
     # ray.get(dict_actor.write_sql_id.remote(train_files))
-    chunk_size = 5 # the # of sqls in a chunk
+    chunk_size = 6 # the # of sqls in a chunk
     min_batch_size = 256
     model_path = "./log/model.pth" 
     message_path = "./log/messages.pkl"
@@ -602,7 +602,7 @@ if __name__ == '__main__':
 
                         if not Exp.isCache(eqKey, b_plan) and not envs.CurrCache(exec_plan, b_plan):
                             b_plan[0].info['index'] = index_encoding
-                            encoding_dict[index_encoding] = (encoded_plans[node_idx], attns[node_idx])
+                            encoding_dict[index_encoding] = (encoded_plans[cost_index], attns[cost_index])
                             index_encoding += 1
                             exec_plan.append((b_plan, (pg_time1[q_recieved_cnt] * 3 + planning_time), eqKey))
                             
