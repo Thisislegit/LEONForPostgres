@@ -123,3 +123,7 @@ for chunk in chunks:
     Tree Conv Model and Pretrain
     
     ![Alt text](Figs/online.png)
+
+    Tree Conv Model and Without Pretrain
+
+    ![Alt text](Figs/online_nopretrain.jpg)
