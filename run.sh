@@ -10,6 +10,22 @@ if [ ! -d "./logs/" ]; then
     mkdir "./logs/"
 fi
 
+PREFIX_DIR="/data1/wyz/DATA_1120"
+
+cd "$PREFIX_DIR"
+
+# 重启 PostgreSQL
+./bin/pg_ctl -D ./data restart
+./bin/pg_ctl -D ./data1 restart
+./bin/pg_ctl -D ./data2 restart
+./bin/pg_ctl -D ./data3 restart
+
+cd "/data1/wyz/online/LEONForPostgres/conf"
+python pre_warm.py
+
+cd ..
+
+
 # 进入 log 目录并删除 model.pth 和 message.pkl
 cd log
 rm model.pth

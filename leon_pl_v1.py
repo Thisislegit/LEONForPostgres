@@ -57,7 +57,7 @@ def load_model(model_path: str, prev_optimizer_state_dict=None):
                         ).to(DEVICE)
         elif model_type == "TreeConv":
             print("load treeconv model")
-            model = treeconv.TreeConvolution(666, 50, 1).to(DEVICE)
+            model = treeconv.TreeConvolution(820, 54, 1).to(DEVICE)
         torch.save(model, model_path)
     else:
         model = torch.load(model_path, map_location=DEVICE).to(DEVICE)
@@ -270,8 +270,8 @@ if __name__ == '__main__':
         print(f"File {file_path1} has been successfully deleted.")
     else:
         print(f"File {file_path1} does not exist.")
-    pretrain = True
-    ports = [5438, 5439, 5440]
+    pretrain = False
+    ports = [1120, 1125, 1130, 1135]
     if pretrain:
         checkpoint = torch.load("./log/SimModel.pth", map_location=DEVICE)
         torch.save(checkpoint, "./log/model.pth")
@@ -313,7 +313,7 @@ if __name__ == '__main__':
     retrain_count = 3
     min_leon_time = dict()
     max_query_latency1 = 0
-    logger =  pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs', name="新年新气象", project=conf['leon']['wandb_project'])
+    logger =  pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs', name="新年新气象nopretrain", project=conf['leon']['wandb_project'])
     my_step = 0
     same_actor = ray.get_actor('leon_server')
     task_counter = ray.get_actor('counter')
