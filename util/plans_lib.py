@@ -251,6 +251,7 @@ class Node(object):
             filters = []
         # FROM.
         from_str = self.leaf_ids()
+        from_str = sorted(from_str)
         from_str = ', '.join(from_str)
         # SELECT.
         if with_select_exprs:
@@ -270,6 +271,12 @@ class Node(object):
         if len(filters) > 0:
             filters = sorted(filters)
         if len(joins) > 0:
+            # sorted_joins = []
+            # for join in joins:
+            #     sorted_join = sorted(join.split(' = '))
+            #     join = ' = '.join(sorted_join)
+            #     sorted_joins.append(join)
+            # joins = sorted_joins
             joins = sorted(joins)
         select_str = '*' if len(select_exprs) == 0 else ','.join(select_exprs)
 

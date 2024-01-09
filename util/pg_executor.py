@@ -187,7 +187,6 @@ def MyCursor(database_port):
     try:
         with conn.cursor() as cursor:
             cursor.execute("SET client_encoding TO 'UTF8';")
-            cursor.execute(f"set leon_port={leon_port};")
             cursor.execute("load 'pg_hint_plan';")
 
             yield cursor
@@ -197,11 +196,15 @@ def MyCursor(database_port):
 def actor_call(actor, item):
     return actor.ActorExecute.remote(item)
 
+def actor_call_leon(actor, item):
+    return actor.ActorExecute_leon.remote(item)
+
 @ray.remote
 class ActorThatQueries:
-    def __init__(self, port):
+    def __init__(self, actor_port, our_port):
         # Initialize and configure your database connection here
-        self.port = port
+        self.port = actor_port
+        self.our_port = our_port
         self.TIME_OUT = 1000000
 
     def ActorExecute(self, plan):
@@ -239,7 +242,7 @@ class ActorThatQueries:
             s = fused_comment + '\n' + str(explain_str).rstrip() + '\n' + sql
         else:
             s = str(explain_str).rstrip() + '\n' + sql
-        with MyCursor(port) as cursor:
+        with MyCursor(self.port) as cursor:
             result = Execute(s, True, True, timeout, cursor).result
         if not result:
             exp[0].info['latency'] = self.TIME_OUT
@@ -247,4 +250,33 @@ class ActorThatQueries:
             json_dict = result[0][0][0]
             latency = float(json_dict['Execution Time'])
             exp[0].info['latency'] = latency
+        return (exp, plan[2])
+    
+
+    def ActorExecute_leon(self, plan):
+        # Implement the logic to query the database
+        exp = plan[0]
+        node = plan[0][0]
+        timeout = plan[1]
+        explain_str = 'explain(verbose, format json, analyze)'
+        sql = node.info['sql_str']
+
+        s = str(explain_str).rstrip() + '\n' + sql
+
+        with MyCursor(self.port) as cursor:
+            cursor.execute('SET enable_leon=on;')
+            cursor.execute(f"set leon_port={self.our_port};")
+            cursor.execute(f"SET leon_query_name='{plan[3]}';") # 第0个plan 0 
+            result = Execute(s, True, True, timeout, cursor).result
+        if not result:
+            exp[0].info['latency'] = self.TIME_OUT
+        else:
+            json_dict = result[0][0][0]
+            latency = float(json_dict['Execution Time'])
+            exp[0].info['latency'] = latency
+            if round(json_dict['Plan']['Total Cost'], 2) != round(plan[3], 2):
+                print(json_dict['Plan']['Total Cost'], plan[3])
+                print(sql)
+                return None
+
         return (exp, plan[2])
