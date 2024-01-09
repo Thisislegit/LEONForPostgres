@@ -17,20 +17,21 @@ class TreeConvolution(nn.Module):
         super(TreeConvolution, self).__init__()
         # None: default
         assert version is None, version
-        self.p = 0.2
+        self.query_p = 0.3
         self.query_mlp = nn.Sequential(
             nn.Linear(feature_size, 128),
-            nn.Dropout(p=self.p),
+            nn.Dropout(p=self.query_p),
             nn.LayerNorm(128),
             nn.LeakyReLU(),
             nn.Linear(128, 64),
-            nn.Dropout(p=self.p),
+            nn.Dropout(p=self.query_p),
             nn.LayerNorm(64),
             nn.LeakyReLU(),
             nn.Linear(64, 32),
         )
         self.conv = nn.Sequential(
             TreeConv1d(32 + plan_size, 512),
+            # TreeConv1d(plan_size, 512),
             TreeStandardize(),
             TreeAct(nn.LeakyReLU()),
             TreeConv1d(512, 256),
@@ -41,13 +42,14 @@ class TreeConvolution(nn.Module):
             TreeAct(nn.LeakyReLU()),
             TreeMaxPool(),
         )
+        self.plan_p = 0.2
         self.out_mlp = nn.Sequential(
             nn.Linear(128, 64),
-            nn.Dropout(p=self.p),
+            nn.Dropout(p=self.plan_p),
             nn.LayerNorm(64),
             nn.LeakyReLU(),
             nn.Linear(64, 32),
-            nn.Dropout(p=self.p),
+            nn.Dropout(p=self.plan_p),
             nn.LayerNorm(32),
             nn.LeakyReLU(),
             nn.Linear(32, label_size),
@@ -90,7 +92,8 @@ class TreeConvolution(nn.Module):
         Returns:
           Predicted costs: Tensor of float, sized [batch size, 1].
         """
-
+        # Give larger dropout to query features.
+        query_embs = nn.functional.dropout(query_feats, p=0.5)
         query_embs = self.query_mlp(query_feats.unsqueeze(1))
         query_embs = query_embs.transpose(1, 2)
         max_subtrees = trees.shape[-1]

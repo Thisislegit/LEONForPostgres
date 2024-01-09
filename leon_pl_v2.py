@@ -57,7 +57,7 @@ def load_model(model_path: str, prev_optimizer_state_dict=None):
                         ).to(DEVICE)
         elif model_type == "TreeConv":
             print("load treeconv model")
-            model = treeconv.TreeConvolution(820, 54, 1).to(DEVICE)
+            model = treeconv.TreeConvolution(666, 50, 1).to(DEVICE)
         torch.save(model, model_path)
     else:
         model = torch.load(model_path, map_location=DEVICE).to(DEVICE)
@@ -270,7 +270,7 @@ if __name__ == '__main__':
         print(f"File {file_path1} has been successfully deleted.")
     else:
         print(f"File {file_path1} does not exist.")
-    pretrain = False
+    pretrain = True
     
     if pretrain:
         checkpoint = torch.load("./log/SimModel.pth", map_location=DEVICE)
@@ -295,6 +295,7 @@ if __name__ == '__main__':
     # ray.get(dict_actor.write_sql_id.remote(train_files))
     chunk_size = 6 # the # of sqls in a chunk
     min_batch_size = 256
+    TIME_OUT_Ratio = 2
     model_path = "./log/model.pth" 
     message_path = "./log/messages.pkl"
     prev_optimizer_state_dict = None
@@ -317,7 +318,7 @@ if __name__ == '__main__':
     retrain_count = 3
     min_leon_time = dict()
     max_query_latency1 = 0
-    logger =  pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs', name="新年新气象nopretrain", project=conf['leon']['wandb_project'])
+    logger =  pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs', name="dropout query feature and no hint", project=conf['leon']['wandb_project'])
     my_step = 0
     same_actor = ray.get_actor('leon_server')
     task_counter = ray.get_actor('counter')
@@ -509,7 +510,7 @@ if __name__ == '__main__':
                                                 c_plan[0].info['index'] = index_encoding
                                                 encoding_dict[index_encoding] = (encoded_plans[i], attns[i])
                                                 index_encoding += 1
-                                                exec_plan.append((c_plan,(pg_time1[q_recieved_cnt] * 3 + planning_time), temp, c_node.cost))
+                                                exec_plan.append((c_plan,(pg_time1[q_recieved_cnt] * TIME_OUT_Ratio + planning_time), temp, c_node.cost))
                                                 
                                             break
                                             # hint_node = plans_lib.FilterScansOrJoins(c_node.Copy())
@@ -603,14 +604,14 @@ if __name__ == '__main__':
                             a_plan[0].info['index'] = index_encoding
                             encoding_dict[index_encoding] = (encoded_plans[node_idx], attns[node_idx])
                             index_encoding += 1
-                            exec_plan.append((a_plan, (pg_time1[q_recieved_cnt] * 3 + planning_time), eqKey, a_node.cost))
+                            exec_plan.append((a_plan, (pg_time1[q_recieved_cnt] * TIME_OUT_Ratio + planning_time), eqKey, a_node.cost))
                             
 
                         if not Exp.isCache(eqKey, b_plan) and not envs.CurrCache(exec_plan, b_plan):
                             b_plan[0].info['index'] = index_encoding
                             encoding_dict[index_encoding] = (encoded_plans[cost_index], attns[cost_index])
                             index_encoding += 1
-                            exec_plan.append((b_plan, (pg_time1[q_recieved_cnt] * 3 + planning_time), eqKey, b_node.cost))
+                            exec_plan.append((b_plan, (pg_time1[q_recieved_cnt] * TIME_OUT_Ratio + planning_time), eqKey, b_node.cost))
                             
                             
                         # if not Exp.isCache(eqKey, a_plan): # 该行放 get latency 前面 ！！！

@@ -58,7 +58,7 @@ def load_model(model_path: str, prev_optimizer_state_dict=None):
                         ).to(DEVICE)
         elif model_type == "TreeConv":
             print("load treeconv model")
-            model = treeconv.TreeConvolution(820, 54, 1).to(DEVICE)
+            model = treeconv.TreeConvolution(666, 50, 1).to(DEVICE)
         torch.save(model, model_path)
     else:
         model = torch.load(model_path, map_location=DEVICE).to(DEVICE)
@@ -317,7 +317,6 @@ if __name__ == '__main__':
     encoding_dict = dict() # 用来存trees和indexes
     index_encoding = 0 # 用来记录索引值
     train_gpu = int(conf['leon']['train_gpu'])
-    random_tensor = torch.rand((90000, 1000, 27)).to(f'cuda:{train_gpu}')
     
     with open ("./conf/namespace.txt", "r") as file:
         namespace = file.read().replace('\n', '')
@@ -405,28 +404,22 @@ if __name__ == '__main__':
                         continue
 
                     # 定义文件夹名称和路径
-                    folder_name = "my_job"
+                    folder_name = "train/training_query"
                     folder_path = os.path.join(os.getcwd(), folder_name)
 
-                    # 创建文件夹
+                    # Check if the folder already exists
                     if not os.path.exists(folder_path):
+                        # Create the folder
                         os.makedirs(folder_path)
 
-                    # 模拟一些数据，你需要替换这部分为你的实际数据
-
-
-                    # 构造文件名和文件内容
-                    file_name = f"{curr_file[q_send_cnt]}.sql"
+                    # Construct file name and file content
+                    file_name = "job_train.txt"
                     file_content = node[0].info['sql_str']
 
-                    # 完整文件路径
-                    file_path = os.path.join(folder_path, file_name)
-
-                    # 创建并写入文件
-                    with open(file_path, 'w') as file:
-                        file.write(file_content)
-
-                    print(f"文件已创建：{file_path}")
+                    # Append the content to the file
+                    with open(os.path.join(folder_path, file_name), "a") as f:
+                        f.write(f"{curr_file[q_send_cnt]}#####" + file_content + "\n")
+                    
         ch_start_idx += chunk_size
         if os.path.exists(message_path):
             os.remove(message_path)

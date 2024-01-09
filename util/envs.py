@@ -244,7 +244,7 @@ class JoinOrderBenchmark_Train(JoinOrderBenchmark):
         #  p.query_dir = os.path.join('/home/ht/PycharmProjects/pythonProject3', 'join-order-benchmark')
         module_dir = os.path.abspath(os.path.dirname(__file__)) + '/../'    
         print(module_dir)
-        p.query_dir = os.path.join(module_dir + './train/training_query/job.txt')
+        p.query_dir = os.path.join(module_dir + './train/training_query/job_train.txt')
         if not os.path.exists(p.query_dir):
             raise IOError('File Not Exists!')
         return p
@@ -427,7 +427,7 @@ def CurrCache(curr_exec, plan):
 
 def load_train_files(workload_type):
     if workload_type == 'job_training':
-        training_query = load_training_query("./train/training_query/job.txt")
+        training_query = load_training_query("./train/training_query/job_train.txt")
         train_files = [i[0] for i in training_query]
         training_query = [i[1] for i in training_query]
     else:

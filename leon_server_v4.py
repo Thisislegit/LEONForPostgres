@@ -316,7 +316,7 @@ class LeonModel:
                     ).to(DEVICE) # server.py 和 train.py 中的模型初始化也需要相同, 这里还没加上！！！
             elif self.model_type == "TreeConv":
                 print("load treeconv model")
-                model = treeconv.TreeConvolution(820, 54, 1).to(DEVICE)
+                model = treeconv.TreeConvolution(666, 50, 1).to(DEVICE)
             torch.save(model, path)
         else:
             model = torch.load(path, map_location=DEVICE)
@@ -401,9 +401,9 @@ class LeonModel:
 
         # 推理
         cali_strs = self.inference(seqs, attns, QueryFeature)
-        del seqs, attns, QueryFeature
-        gc.collect()
-        torch.cuda.empty_cache()
+        # del seqs, attns, QueryFeature
+        # gc.collect()
+        # torch.cuda.empty_cache()
         print("out")
         return cali_strs
     
@@ -523,7 +523,7 @@ class SimpleLeonModel:
                     ).to(DEVICE) # server.py 和 train.py 中的模型初始化也需要相同, 这里还没加上！！！
             elif self.model_type == "TreeConv":
                 print("load treeconv model")
-                model = treeconv.TreeConvolution(820, 54, 1).to(DEVICE)
+                model = treeconv.TreeConvolution(666, 50, 1).to(DEVICE)
             torch.save(model, path)
         else:
             model = torch.load(path, map_location=DEVICE)
@@ -601,9 +601,9 @@ class SimpleLeonModel:
 
         # 推理
         cali_strs = self.inference(seqs, attns, QueryFeature)
-        del seqs, attns, QueryFeature
-        gc.collect()
-        torch.cuda.empty_cache()
+        # del seqs, attns, QueryFeature
+        # gc.collect()
+        # torch.cuda.empty_cache()
         print("out")
         return cali_strs
 
