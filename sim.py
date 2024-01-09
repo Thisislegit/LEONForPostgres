@@ -448,7 +448,7 @@ class Sim(object):
         p.Define('infer_search_until_n_complete_plans', 1,
                  'Search until how many complete plans?')
         # Workload.
-        p.Define('workload', envs.JoinOrderBenchmark_Train.Params(),
+        p.Define('workload', envs.JoinOrderBenchmark.Params(),
                  'Params of the Workload, i.e., a set of queries.')
         # Data collection.
         p.Define('skip_data_collection_geq_num_rels', None,
@@ -995,8 +995,8 @@ class Sim(object):
         train_ds, val_ds = torch.utils.data.random_split(leon_dataset, [train_size, val_size])
         del data
         gc.collect()
-        dataloader_train = DataLoader(train_ds, batch_size=1024, shuffle=True, num_workers=6)
-        dataloader_val = DataLoader(val_ds, batch_size=1024, shuffle=False, num_workers=6)
+        dataloader_train = DataLoader(train_ds, batch_size=1536, shuffle=True, num_workers=6)
+        dataloader_val = DataLoader(val_ds, batch_size=1536, shuffle=False, num_workers=6)
         batch = next(iter(dataloader_train))
         # batch = next(iter(self.train_loader))
         # logging.info(
@@ -1049,24 +1049,25 @@ class Sim(object):
         model = PL_Leon(model)
         trainer = pl.Trainer(
                     accelerator="gpu",
-                    devices=[1],  # 指定使用的 GPU 设备编号
+                    devices=[3],  # 指定使用的 GPU 设备编号
                     max_epochs=20,
                     callbacks=pl.callbacks.EarlyStopping(
-                        monitor='v_loss',
+                        monitor='val_loss',
                         patience=5,
                         mode='min',
+                        min_delta=0.001,
                         verbose=True
                     ),
                     logger=[
                         pl_loggers.WandbLogger(
                             save_dir=os.getcwd() + '/logs',
-                            name="202401042215",
+                            name="202401071406",
                             project="wyz的pretrain"
                         )
                     ]
                 )
         trainer.fit(model, dataloader_train, dataloader_val)
-        model_path = "./log/SimModel.pth"
+        model_path = "./log/SimModel2.pth"
         torch.save(model.model, model_path)
         return None
 

@@ -34,7 +34,7 @@ def load_sql(file_list: list, training_query=None):
         if training_query:
             sqls.append(training_query[file_str])
         else:
-            sqlFile = './job/' + file_str + '.sql'
+            sqlFile = './my_job/' + file_str + '.sql'
             if not os.path.exists(sqlFile):
                 raise IOError("File Not Exists!")
             with open(sqlFile, 'r') as f:
@@ -202,7 +202,7 @@ class JoinOrderBenchmark(Workload):
         # Needs to be an absolute path for rllib.
         # module_dir = os.path.abspath(os.path.dirname(balsa.__file__) + '/../')
         #  p.query_dir = os.path.join('/home/ht/PycharmProjects/pythonProject3', 'join-order-benchmark')
-        p.query_dir = 'job'
+        p.query_dir = 'my_job'
         if not os.path.exists(p.query_dir):
             raise IOError('File Not Exists!')
         return p
@@ -442,7 +442,7 @@ def load_train_files(workload_type):
                     '26b', '26c', '27a', '27b', '27c', '28a', '28b', '28c', '29a', '29b', '29c',
                     '30a', '30b', '30c', '31a', '31b', '31c', '32a', '32b', '33a', '33b', '33c']
         random.shuffle(train_files)
-        train_files = train_files * 75
+        train_files = train_files
         training_query = load_sql(train_files)
         
     return train_files, training_query

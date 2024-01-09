@@ -323,7 +323,7 @@ if __name__ == '__main__':
     encoding_dict = dict() # 用来存trees和indexes
     index_encoding = 0 # 用来记录索引值
     train_gpu = int(conf['leon']['train_gpu'])
-    random_tensor = torch.rand((90000, 1000, 12)).to(f'cuda:{train_gpu}')
+    random_tensor = torch.rand((90000, 1000, 27)).to(f'cuda:{train_gpu}')
     
     remote = bool(conf['leon']['remote'])
     pct = float(conf['leon']['pct']) # 执行 percent 比例的 plan
@@ -686,7 +686,7 @@ if __name__ == '__main__':
             del leon_dataset, train_ds, val_ds, dataloader_train, dataloader_val, dataset_test, batch_sampler, dataloader_test
             gc.collect()
             torch.cuda.empty_cache()
-            random_tensor = torch.rand((90000, 1000, 12)).to(f'cuda:{train_gpu}')
+            random_tensor = torch.rand((90000, 1000, 27)).to(f'cuda:{train_gpu}')
 
         print("*"*20)
         print("Current Accuracy For Each EqSet: ", model.eq_summary)
