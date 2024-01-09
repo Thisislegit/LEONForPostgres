@@ -90,6 +90,6 @@ def prewarm_pg(port):
             print(f"PostgreSQL Finish PreWarming, total time: {time.time() - start} s")
 
 if __name__ == "__main__":
-    for port in [1120, 1125, 1130, 1135]:
+    for port in eval(read_config('leon')['other_db_port']) + [int(read_config('PostgreSQL')['Port'])]:
         prewarm_pg(port)
     

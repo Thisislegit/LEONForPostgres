@@ -448,7 +448,7 @@ class Sim(object):
         p.Define('infer_search_until_n_complete_plans', 1,
                  'Search until how many complete plans?')
         # Workload.
-        p.Define('workload', envs.JoinOrderBenchmark.Params(),
+        p.Define('workload', envs.JoinOrderBenchmark_Train.Params(),
                  'Params of the Workload, i.e., a set of queries.')
         # Data collection.
         p.Define('skip_data_collection_geq_num_rels', None,
@@ -663,6 +663,7 @@ class Sim(object):
             with open(path, 'rb') as f:
                 self.simulation_data = pickle.load(f)
         except Exception as e:
+            print(e)
             return False
         logging.info('Loaded simulation data (len {}) from: {}'.format(
             len(self.simulation_data), path))
@@ -1260,7 +1261,7 @@ def Main(argv):
 
     p.skip_data_collection_geq_num_rels = 12
     p.search.cost_model = costing.PostgresCost.Params()
-    p.search.collect_data_include_suboptimal = True
+    # p.search.collect_data_include_suboptimal = True
 
     p.plan_featurizer_cls = plans_lib.TreeNodeFeaturizer
     p.query_featurizer_cls = plans_lib.QueryFeaturizer
@@ -1280,7 +1281,7 @@ def Main(argv):
 
     # Pre-training via simulation data.
     sim = Sim(p)
-    sim.CollectSimulationData()
+    # sim.CollectSimulationData()
     # Use None to retrain; pass a ckpt to reload.
     sim_ckpt = None
     train_data = None
