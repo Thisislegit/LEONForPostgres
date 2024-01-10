@@ -266,7 +266,7 @@ class ActorThatQueries:
         with MyCursor(self.port) as cursor:
             cursor.execute('SET enable_leon=on;')
             cursor.execute(f"set leon_port={self.our_port};")
-            cursor.execute(f"SET leon_query_name='{plan[3]}';") # 第0个plan 0 
+            cursor.execute(f"SET leon_query_name='picknode:{plan[3]}';") # 第0个plan 0 
             result = Execute(s, True, True, timeout, cursor).result
         if not result:
             exp[0].info['latency'] = self.TIME_OUT

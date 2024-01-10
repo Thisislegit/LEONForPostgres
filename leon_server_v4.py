@@ -360,9 +360,9 @@ class LeonModel:
         X = [json.loads(x) if isinstance(x, str) else x for x in X]
         # print(X[0])
         if self.Current_Level == self.Levels_Needed:
-            try:
+            if self.Query_Id.startswith("picknode:"):
+                pick_plan = float(self.Query_Id[len("picknode:"):])
                 # change_flag = False
-                pick_plan = float(self.Query_Id) # 选执行的plan
                 # print("Success begin hint leon", self.Query_Id)
                 # for j, i in enumerate(X):
                 #     if i['Plan']['Total Cost'] == pick_plan:
@@ -374,7 +374,7 @@ class LeonModel:
                 #         pickle.dump(X, f) 
                 # print("Success exec hint leon", self.Query_Id)
                 return ';'.join(['1.00,1,0' if i['Plan']['Total Cost'] != pick_plan else '0.01,0,9' for i in X]) + ';'
-            except:
+            else:
                 # print("fail",self.Query_Id)
                 pass
         try:
@@ -567,9 +567,9 @@ class SimpleLeonModel:
         X = [json.loads(x) if isinstance(x, str) else x for x in X]
         # print(X[0])
         if self.Current_Level == self.Levels_Needed:
-            try:
+            if self.Query_Id.startswith("picknode:"):
+                pick_plan = float(self.Query_Id[len("picknode:"):])
                 # change_flag = False
-                pick_plan = float(self.Query_Id) # 选执行的plan
                 # print("Success begin hint leon", self.Query_Id)
                 # for j, i in enumerate(X):
                 #     if i['Plan']['Total Cost'] == pick_plan:
@@ -581,7 +581,7 @@ class SimpleLeonModel:
                 #         pickle.dump(X, f) 
                 # print("Success exec hint leon", self.Query_Id)
                 return ';'.join(['1.00,1,0' if i['Plan']['Total Cost'] != pick_plan else '0.01,0,9' for i in X]) + ';'
-            except:
+            else:
                 # print("fail",self.Query_Id)
                 pass
 
