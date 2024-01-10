@@ -442,7 +442,7 @@ def load_train_files(workload_type):
                     '26b', '26c', '27a', '27b', '27c', '28a', '28b', '28c', '29a', '29b', '29c',
                     '30a', '30b', '30c', '31a', '31b', '31c', '32a', '32b', '33a', '33b', '33c']
         random.shuffle(train_files)
-        train_files = train_files
+        train_files = train_files * 3
         training_query = load_sql(train_files)
         
     return train_files, training_query

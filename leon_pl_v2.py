@@ -273,7 +273,7 @@ if __name__ == '__main__':
     pretrain = True
     
     if pretrain:
-        checkpoint = torch.load("./log/SimModel.pth", map_location=DEVICE)
+        checkpoint = torch.load("./log/SimModel2.pth", map_location=DEVICE)
         torch.save(checkpoint, "./log/model.pth")
         print("load SimModel success")
 
@@ -318,13 +318,14 @@ if __name__ == '__main__':
     retrain_count = 3
     min_leon_time = dict()
     max_query_latency1 = 0
-    logger =  pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs', name="dropout query feature and no hint", project=conf['leon']['wandb_project'])
+    logger =  pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs', name="新的picknode", project=conf['leon']['wandb_project'])
     my_step = 0
     same_actor = ray.get_actor('leon_server')
     task_counter = ray.get_actor('counter')
     runtime_pg = 0
     runtime_leon = 0
-    max_exec_num = 50
+    min_exec_num = 30
+    max_exec_num = 60
     encoding_dict = dict() # 用来存trees和indexes
     index_encoding = 0 # 用来记录索引值
     train_gpu = int(conf['leon']['train_gpu'])
@@ -332,7 +333,7 @@ if __name__ == '__main__':
     
     remote = bool(conf['leon']['remote'])
     pct = float(conf['leon']['pct']) # 执行 percent 比例的 plan
-    planning_time = 8000 # pg timout会考虑planning时间
+    planning_time = 15000 # pg timout会考虑planning时间
     sql_id = [] # 达到局部最优解的query集合
     # ===== ITERATION OF CHUNKS ====
     ch_start_idx = 0 # the start idx of the current chunk in train_files
@@ -492,7 +493,7 @@ if __name__ == '__main__':
                             temp = node1.info['join_tables'].split(',') # sort
                             temp = ','.join(sorted(temp))
                             if temp == node2.info['join_tables']:
-                                if round(node1.cost,2) == node2.cost:
+                                if round(node1.cost * 100) / 100 == node2.cost:
                                     Exp.collectRate(node2.info['join_tables'], first_time[curr_file[q_recieved_cnt]], tf_time[q_recieved_cnt], curr_file[q_recieved_cnt])
                                     c_node = node1
                                     
@@ -543,8 +544,8 @@ if __name__ == '__main__':
                     torch.cuda.empty_cache()
 
                     ucb_idx = get_ucb_idx(cali_all, costs)
-
-                    num_to_exe = min(math.ceil(pct * len(ucb_idx)), max_exec_num)
+                    min_exec_num = min(len(ucb_idx), min_exec_num)
+                    num_to_exe = max(min(math.ceil(pct * len(ucb_idx)), max_exec_num), min_exec_num)
                     # TODO: 选择cost 差异大于1.2的plan
                     # costs_index = torch.argsort(costs, descending=False)
                     costs = costs.cpu().numpy()
