@@ -373,7 +373,7 @@ class LeonModel:
                 #     with open("./error.pkl", 'wb') as f:
                 #         pickle.dump(X, f) 
                 # print("Success exec hint leon", self.Query_Id)
-                return ';'.join(['1.00,1,0' if i['Plan']['Total Cost'] != pick_plan else '0.01,0,9' for i in X])
+                return ';'.join(['1.00,1,0' if i['Plan']['Total Cost'] != pick_plan else '0.01,0,9' for i in X]) + ';'
             except:
                 # print("fail",self.Query_Id)
                 pass
@@ -392,9 +392,9 @@ class LeonModel:
         #     print("out")
         #     return ';'.join(['1.00,1,0' for _ in X])
         # 新添加的等价类，但没有训练    
-        # if self.current_eq_summary is None:
-        #     print("out")
-        #     return ';'.join(['1.00,1,0' for _ in X])
+        if self.current_eq_summary is None:
+            print("out")
+            return ';'.join(['1.00,1,0' for _ in X]) + ';'
 
         # 编码
         seqs, attns, QueryFeature = self.encoding(X)
@@ -405,7 +405,7 @@ class LeonModel:
         # gc.collect()
         # torch.cuda.empty_cache()
         print("out")
-        return cali_strs
+        return cali_strs + ';'
     
 
 class SimpleLeonModel:
@@ -580,7 +580,7 @@ class SimpleLeonModel:
                 #     with open("./error.pkl", 'wb') as f:
                 #         pickle.dump(X, f) 
                 # print("Success exec hint leon", self.Query_Id)
-                return ';'.join(['1.00,1,0' if i['Plan']['Total Cost'] != pick_plan else '0.01,0,9' for i in X])
+                return ';'.join(['1.00,1,0' if i['Plan']['Total Cost'] != pick_plan else '0.01,0,9' for i in X]) + ';'
             except:
                 # print("fail",self.Query_Id)
                 pass
@@ -592,9 +592,9 @@ class SimpleLeonModel:
         #     print("out")
         #     return ';'.join(['1.00,1,0' for _ in X])
         # 新添加的等价类，但没有训练    
-        # if self.current_eq_summary is None:
-        #     print("out")
-        #     return ';'.join(['1.00,1,0' for _ in X])
+        if self.current_eq_summary is None:
+            print("out")
+            return ';'.join(['1.00,1,0' for _ in X]) + ';'
 
         # 编码
         seqs, attns, QueryFeature = self.encoding(X)
@@ -605,7 +605,7 @@ class SimpleLeonModel:
         # gc.collect()
         # torch.cuda.empty_cache()
         print("out")
-        return cali_strs
+        return cali_strs + ';'
 
 class JSONTCPHandler(socketserver.BaseRequestHandler):
     def handle(self):
@@ -648,10 +648,27 @@ class LeonJSONHandler(JSONTCPHandler):
             self.__messages = self.__messages[1:]
             if message_type == "query":
                 result = self.server.leon_model.predict_plan(self.__messages)
+                print(len(result)/9)
                 response = str(result).encode()
                 # self.request.sendall(struct.pack("I", result))
-                self.request.sendall(response)
-                self.request.close()
+                try:
+                    self.request.sendall(response)
+                except Exception as e:
+                    print(f"发送响应时出错：{e}")
+                finally:
+                    self.request.close()
+
+                # chunk_size = 1024  # 设置每个块的大小
+
+                # try:
+                #     while response:
+                #         chunk = response[:chunk_size]
+                #         self.request.sendall(chunk)
+                #         response = response[chunk_size:]
+                # except Exception as e:
+                #     print(f"发送响应时出错：{e}")
+                # finally:
+                #     self.request.close()
             elif message_type == "should_opt":
                 result = self.server.leon_model.infer_equ(self.__messages)
                 # print(result)
