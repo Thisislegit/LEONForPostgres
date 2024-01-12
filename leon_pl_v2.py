@@ -57,7 +57,7 @@ def load_model(model_path: str, prev_optimizer_state_dict=None):
                         ).to(DEVICE)
         elif model_type == "TreeConv":
             print("load treeconv model")
-            model = treeconv.TreeConvolution(666, 50, 1).to(DEVICE)
+            model = treeconv.TreeConvolution(820, 54, 1).to(DEVICE)
         torch.save(model, model_path)
     else:
         model = torch.load(model_path, map_location=DEVICE).to(DEVICE)
@@ -261,15 +261,15 @@ def _batch(trees, indexes, padding_size=200):
 
 if __name__ == '__main__':
 
-    file_path1 = "./log/messages.pkl"
-
-    # 检查文件是否存在
-    if os.path.exists(file_path1):
-        # 删除文件
-        os.remove(file_path1)
-        print(f"File {file_path1} has been successfully deleted.")
-    else:
-        print(f"File {file_path1} does not exist.")
+    file_path = ["./log/messages.pkl", './log/model.pth']
+    for file_path1 in file_path:
+        # 检查文件是否存在
+        if os.path.exists(file_path1):
+            # 删除文件
+            os.remove(file_path1)
+            print(f"File {file_path1} has been successfully deleted.")
+        else:
+            print(f"File {file_path1} does not exist.")
     
     
     pretrain = False
@@ -679,9 +679,9 @@ if __name__ == '__main__':
             train_ds, val_ds = torch.utils.data.random_split(leon_dataset, [train_size, val_size])
             dataloader_train = DataLoader(train_ds, batch_size=512, shuffle=True, num_workers=5)
             dataloader_val = DataLoader(val_ds, batch_size=512, shuffle=False, num_workers=5)
-            dataset_test = BucketDataset(Exp.OnlyGetExp(), keys=Exp.GetExpKeys(), nodeFeaturizer=nodeFeaturizer, dict=encoding_dict)
-            batch_sampler = BucketBatchSampler(dataset_test.buckets, batch_size=1)
-            dataloader_test = DataLoader(dataset_test, batch_sampler=batch_sampler, num_workers=7)
+            # dataset_test = BucketDataset(Exp.OnlyGetExp(), keys=Exp.GetExpKeys(), nodeFeaturizer=nodeFeaturizer, dict=encoding_dict)
+            # batch_sampler = BucketBatchSampler(dataset_test.buckets, batch_size=1)
+            # dataloader_test = DataLoader(dataset_test, batch_sampler=batch_sampler, num_workers=7)
             # model = load_model(model_path, prev_optimizer_state_dict).to(DEVICE)
             model.optimizer_state_dict = prev_optimizer_state_dict
             callbacks = load_callbacks(logger=None)
@@ -694,9 +694,10 @@ if __name__ == '__main__':
                                 callbacks=callbacks,
                                 logger=logger)
             trainer.fit(model, dataloader_train, dataloader_val)
-            trainer.test(model, dataloader_test)
+            # trainer.test(model, dataloader_test)
             prev_optimizer_state_dict = trainer.optimizers[0].state_dict()
-            del leon_dataset, train_ds, val_ds, dataloader_train, dataloader_val, dataset_test, batch_sampler, dataloader_test
+            # del leon_dataset, train_ds, val_ds, dataloader_train, dataloader_val, dataset_test, batch_sampler, dataloader_test
+            del leon_dataset, train_ds, val_ds, dataloader_train, dataloader_val
             gc.collect()
             torch.cuda.empty_cache()
             random_tensor = torch.rand((90000, 1000, 27)).to(f'cuda:{train_gpu}')
