@@ -3586,6 +3586,17 @@ static struct config_int ConfigureNamesInt[] =
 		NULL, NULL, NULL
 	},
 
+	{
+		{"free_size", PGC_USERSET, QUERY_TUNING_COST,
+			gettext_noop("Leon Port in python"),
+			NULL,
+			GUC_EXPLAIN
+		},
+		&free_size,
+		50, 0, INT16_MAX,
+		NULL, NULL, NULL
+	},
+
 	/* End-of-list marker */
 	{
 		{NULL, 0, 0, NULL, NULL}, NULL, 0, 0, 0, NULL, NULL, NULL

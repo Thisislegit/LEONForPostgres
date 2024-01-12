@@ -72,6 +72,7 @@ bool		not_cali = false;
 char        *leon_query_name = "";
 char        *leon_host = "localhost";
 int         leon_port = 9999;
+int         free_size = 50;
 
 /* Hook for plugins to get control in set_rel_pathlist() */
 set_rel_pathlist_hook_type set_rel_pathlist_hook = NULL;
@@ -3073,8 +3074,11 @@ standard_join_search(PlannerInfo *root, int levels_needed, List *initial_rels)
 			if (enable_leon && Opt_rel)
 			{
 				ListCell *p;
+				
+				sort_savedpaths_by_cost(rel);
+				keep_first_50_rels(rel, free_size);
 				int length = list_length(rel->savedpaths);
-
+				
 				conn_fd = connect_to_leon(leon_state->leon_host, leon_state->leon_port);
 				if (conn_fd < 0) {
 					elog(WARNING, "Unable to connect to LEON server, reward for query will be dropped.");

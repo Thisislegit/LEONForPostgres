@@ -82,7 +82,24 @@ static void get_calibrations(double calibrations[], uint32 queryid, int32_t leng
       // one element is like "1.12," length 5
 	  // one element is like "1.12,0,6;"
 	  char *response = (char *)palloc0(9 * length * sizeof(char));
-      if (read(conn_fd, response, 9 * length * sizeof(char)) > 0) 
+	  char *buffer = (char *)palloc0(9 * length * sizeof(char));
+	  bool read_flag = false;
+	  ssize_t need = 0;
+	  ssize_t bytesRead;
+	  while(need != 9 * length * sizeof(char))
+	  {
+		bytesRead = read(conn_fd, buffer, 9 * length * sizeof(char));
+		if (bytesRead != -1)
+		{
+			memcpy(response + need, buffer, bytesRead);
+			need += bytesRead;
+			// elog(WARNING, "%zd", bytesRead);
+			// elog(WARNING, "%zd", need);
+		}
+			read_flag = true;
+	  }
+	  pfree(buffer);
+      if (read_flag) 
       {
 		char* unit;
 		char* token;
@@ -794,6 +811,42 @@ cleanup:
 	shutdown(conn_fd, SHUT_RDWR);
 	MemoryContextSwitchTo(oldContext);
 	return should_optimize;
+}
+
+static int compare_paths(const void *a, const void *b)
+{
+    Path *path_a = *(Path **)a;
+    Path *path_b = *(Path **)b;
+
+    // 根据路径的 cost 进行比较
+    if (path_a->total_cost < path_b->total_cost)
+        return -1;
+    else if (path_a->total_cost > path_b->total_cost)
+        return 1;
+    else
+        return 0;
+}
+
+// 对 savedpaths 列表按照 cost 进行排序
+void sort_savedpaths_by_cost(RelOptInfo *joinrel)
+{
+    if (joinrel->savedpaths != NIL)
+    {
+        list_sort(joinrel->savedpaths, compare_paths);
+    }
+}
+
+void keep_first_50_rels(RelOptInfo *joinrel, int free_size)
+{
+    if (joinrel->savedpaths != NIL)
+    {
+		if(list_length(joinrel->savedpaths) > free_size)
+		{
+			// 使用 list_truncate 保留前 50 个元素
+        	joinrel->savedpaths = list_truncate(joinrel->savedpaths, free_size);
+		}
+        
+    }
 }
 
 #endif

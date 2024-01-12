@@ -28,6 +28,7 @@ extern PGDLLIMPORT bool enable_leon;
 extern PGDLLIMPORT bool not_cali;
 extern PGDLLIMPORT char *leon_query_name;
 extern PGDLLIMPORT int leon_port;
+extern PGDLLIMPORT int free_size;
 
 /* Hook for plugins to get control in set_rel_pathlist() */
 typedef void (*set_rel_pathlist_hook_type) (PlannerInfo *root,
