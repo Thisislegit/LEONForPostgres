@@ -39,7 +39,7 @@ import gc
 
 conf = read_config()
 model_type = conf['leon']['model_type']
-
+pl.seed_everything(42)
 def load_model(model_path: str, prev_optimizer_state_dict=None):
     if not os.path.exists(model_path):
         if model_type == "Transformer":
@@ -271,11 +271,16 @@ if __name__ == '__main__':
     else:
         print(f"File {file_path1} does not exist.")
     
-    
-    pretrain = False
+    from traning_test import TreeConvolution
+    pretrain = True
     if pretrain:
-        checkpoint = torch.load("./log/SimModel3.pth", map_location=DEVICE)
-        torch.save(checkpoint, "./log/model.pth")
+        checkpoint = torch.load("./logs/wandb/run-20240111_121205-plrqk9t8/files/best-epoch=14-val_acc=0.773.ckpt", map_location=DEVICE)
+        checkpoint['state_dict'] = \
+        {key.replace('model.', ''): value for key, value in checkpoint['state_dict'].items()}
+        # Load the transformed state_dict into your model
+        pre_model = treeconv.TreeConvolution(820, 54, 1).to(DEVICE)
+        pre_model.load_state_dict(checkpoint['state_dict'])
+        torch.save(pre_model, "./log/model.pth")
         print("load SimModel success")
 
     with open ("./conf/namespace.txt", "r") as file:
@@ -319,7 +324,7 @@ if __name__ == '__main__':
     retrain_count = 3
     min_leon_time = dict()
     max_query_latency1 = 0
-    logger =  pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs', name="job_training", project=conf['leon']['wandb_project'])
+    logger =  pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs', name="eval_not cali", project=conf['leon']['wandb_project'])
     for key in conf:
         logger.log_hyperparams(conf[key])
     my_step = 0
@@ -332,7 +337,7 @@ if __name__ == '__main__':
     encoding_dict = dict() # 用来存trees和indexes
     index_encoding = 0 # 用来记录索引值
     train_gpu = int(conf['leon']['train_gpu'])
-    random_tensor = torch.rand((90000, 1000, 27)).to(f'cuda:{train_gpu}')
+    # random_tensor = torch.rand((90000, 1000, 27)).to(f'cuda:{train_gpu}')
     
     remote = bool(conf['leon']['remote'])
     pct = float(conf['leon']['pct']) # 执行 percent 比例的 plan
@@ -381,6 +386,9 @@ if __name__ == '__main__':
         runtime_leon += sum(tf_time)
         logger.log_metrics({f"Runtime/all_pg": runtime_pg}, step=my_step)
         logger.log_metrics({f"Runtime/all_leon": runtime_leon}, step=my_step)
+        my_step += 1
+        ch_start_idx = ch_start_idx + chunk_size
+        continue
         
         ###############收集新的等价类##############################
         ray.get(task_counter.WriteOnline.remote(True))
