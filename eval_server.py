@@ -212,7 +212,7 @@ class LeonModel:
         return seqs, None, attns, None, None
     
     def get_calibrations(self, seqs, attns, 
-                         QueryFeature):
+                         QueryFeature, nodes):
         with torch.no_grad():
             # cost_iter
             self.__model.eval() # 关闭 drop out，否则模型波动大    
@@ -220,7 +220,7 @@ class LeonModel:
             seqs = seqs.to(DEVICE)
             attns = attns.to(DEVICE)
             if self.model_type == "TreeConv":
-                cali_all = torch.tanh(self.__model(QueryFeature, seqs, attns)).add(1).squeeze(1)
+                cali_all = torch.log(torch.tensor([node.cost for node in nodes])) * torch.tanh(self.__model(QueryFeature, seqs, attns)).add(1).squeeze(1)
             elif self.model_type == "Transformer":
                 cali = self.__model(seqs, attns, QueryFeature) # cali.shape [# of plan, pad_length] cali 是归一化后的基数估计
                 cali_all = cali[:, 0] # [# of plan] -> [# of plan, 1] cali_all plan （cost_iter次）基数估计（归一化后）结果
@@ -272,31 +272,34 @@ class LeonModel:
             return encoded_plans, attns, queryfeature
 
         elif self.model_type == "TreeConv":
-            trees, indexes, queryfeature, _ = envs.leon_encoding(self.model_type, X, 
-                                                                           require_nodes=False, workload=self.workload, 
+            trees, indexes, queryfeature, nodes = envs.leon_encoding(self.model_type, X, 
+                                                                           require_nodes=True, workload=self.workload, 
                                                                            queryFeaturizer=self.queryFeaturizer, nodeFeaturizer=self.nodeFeaturizer)
             if isinstance(trees, list):
                 trees, indexes, = _batch(trees, indexes)
-            return trees, indexes, queryfeature
+            return trees, indexes, queryfeature, nodes
     
-    def inference(self, seqs, attns, QueryFeature=None):
-        cali_all = self.get_calibrations(seqs, attns, QueryFeature)
+    def inference(self, seqs, attns, QueryFeature=None, nodes=None):
+        cali_all = self.get_calibrations(seqs, attns, QueryFeature, nodes)
+        temp = torch.argmin(cali_all, dim=0)
+        return temp
+        cali_strs = ';'.join(['1.00,1,0' if i != temp else '0.01,0,9' for i in range(len(cali_all))]) + ';'
         # cali_all = 1000 * torch.rand(cali_all.shape[0])
         # print(cali_all)
         # cali_str = ['{:.2f}'.format(i) for i in cali_all.tolist()] # 最后一次 cali
-        def format_scientific_notation(number):
-            str_number = "{:e}".format(number)
-            mantissa, exponent = str_number.split('e')
-            mantissa = 9.994 if float(mantissa) >= 9.995 else float(mantissa)
-            mantissa = format(mantissa, '.2f')
-            exponent = int(exponent)
-            exponent = max(-9, min(9, exponent))
-            result = "{},{},{:d}".format(mantissa, '1' if exponent >= 0 else '0', abs(exponent))
-            return result
-        cali_str = [format_scientific_notation(i) for i in cali_all.tolist()] # 最后一次 cali
+        # def format_scientific_notation(number):
+        #     str_number = "{:e}".format(number)
+        #     mantissa, exponent = str_number.split('e')
+        #     mantissa = 9.994 if float(mantissa) >= 9.995 else float(mantissa)
+        #     mantissa = format(mantissa, '.2f')
+        #     exponent = int(exponent)
+        #     exponent = max(-9, min(9, exponent))
+        #     result = "{},{},{:d}".format(mantissa, '1' if exponent >= 0 else '0', abs(exponent))
+        #     return result
+        # cali_str = [format_scientific_notation(i) for i in cali_all.tolist()] # 最后一次 cali
         
-        # print("cali_str len", len(cali_str))
-        cali_strs = ';'.join(cali_str)
+        # # print("cali_str len", len(cali_str))
+        # cali_strs = ';'.join(cali_str)
         return cali_strs
     
     def load_model(self, path):
@@ -358,6 +361,10 @@ class LeonModel:
         #     if not x:
         #         return ','.join(['1.00' for _ in X]
         X = [json.loads(x) if isinstance(x, str) else x for x in X]
+        len_X = len(X)
+        X_index = np.argsort(np.asarray([x['Plan']['Total Cost'] for x in X]))
+        X_index = X_index[:50]
+        X = [X[i] for i in X_index]
         # print(X[0])
         if self.Current_Level == self.Levels_Needed:
             if self.Query_Id.startswith("picknode:"):
@@ -397,10 +404,12 @@ class LeonModel:
         #     return ';'.join(['1.00,1,0' for _ in X]) + ';'
 
         # 编码
-        seqs, attns, QueryFeature = self.encoding(X)
+        seqs, attns, QueryFeature, nodes = self.encoding(X)
 
         # 推理
-        cali_strs = self.inference(seqs, attns, QueryFeature)
+        cali_strs = self.inference(seqs, attns, QueryFeature, nodes)
+        good = X_index[cali_strs]
+        return ';'.join(['1.00,1,0' if i != good else '0.01,0,9' for i in range(len_X)]) + ';'
         # del seqs, attns, QueryFeature
         # gc.collect()
         # torch.cuda.empty_cache()
