@@ -127,3 +127,7 @@ for chunk in chunks:
     Tree Conv Model and Without Pretrain
 
     ![Alt text](Figs/online_nopretrain.jpg)
+
+    Tree Conv Model and No Pretrain on Job Training Workload
+
+    ![Alt text](Figs/job_training_1.jpg)
