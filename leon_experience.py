@@ -240,15 +240,17 @@ class Experience:
         for eq in self.__exp.keys():
             # if len(self.GetExp(eq)) < 8: 
             #     continue
-            min_dict = dict()
-            for j in self.GetExp(eq):
-                if j[0].info['sql_str'] not in min_dict:
-                    min_dict[j[0].info['sql_str']] = j
-                else:
-                    if j[0].cost < min_dict[j[0].info['sql_str']][0].cost:
-                        min_dict[j[0].info['sql_str']] = j
+            # min_dict = dict()
+            # for j in self.GetExp(eq):
+            #     if j[0].info['sql_str'] not in min_dict:
+            #         min_dict[j[0].info['sql_str']] = j
+            #     else:
+            #         if j[0].cost < min_dict[j[0].info['sql_str']][0].cost:
+            #             min_dict[j[0].info['sql_str']] = j
             for i, j in enumerate(self.GetExp(eq)):
-                for k in min_dict.values():
+                # for k in min_dict.values():
+                for k_index in range(i + 1, len(self.GetExp(eq))): 
+                    k = self.GetExp(eq)[k_index]   
                     if (j[0].cost == k[0].cost):
                         continue
                     if (j[0].info['sql_str'] == k[0].info['sql_str']) and (j[0].hint_str() == k[0].hint_str()): # sql 和 hint 都相同   

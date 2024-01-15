@@ -62,7 +62,7 @@ class PL_Leon(pl.LightningModule):
         calied_cost = torch.log(costs) * cali
         try:
             sigmoid = F.sigmoid(-(calied_cost[:batsize] - calied_cost[batsize:]))
-            loss = loss_fn(sigmoid, labels.float())
+            loss = loss_fn(sigmoid, labels.float()) + 0.2 * torch.abs(calied_cost - torch.log(costs)).mean()
         except:
             print(calied_cost, sigmoid)
         # print(loss)
