@@ -262,15 +262,15 @@ def _batch(trees, indexes, padding_size=200):
 
 if __name__ == '__main__':
 
-    file_path1 = "./log/messages.pkl"
-
-    # 检查文件是否存在
-    if os.path.exists(file_path1):
-        # 删除文件
-        os.remove(file_path1)
-        print(f"File {file_path1} has been successfully deleted.")
-    else:
-        print(f"File {file_path1} does not exist.")
+    file_path = ["./log/messages.pkl", './log/model.pth']
+    for file_path1 in file_path:
+        # 检查文件是否存在
+        if os.path.exists(file_path1):
+            # 删除文件
+            os.remove(file_path1)
+            print(f"File {file_path1} has been successfully deleted.")
+        else:
+            print(f"File {file_path1} does not exist.")
     
     
     pretrain = False
