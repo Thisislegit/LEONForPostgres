@@ -57,7 +57,8 @@ def load_model(model_path: str, prev_optimizer_state_dict=None):
                         ).to(DEVICE)
         elif model_type == "TreeConv":
             print("load treeconv model")
-            model = treeconv.TreeConvolution(666, 50, 1).to(DEVICE)
+            # model = treeconv.TreeConvolution(666, 50, 1).to(DEVICE)
+            model = treeconv.ResNet(666, 50, 1, [1, 1, 1, 1]).to(DEVICE)
         torch.save(model, model_path)
     else:
         model = torch.load(model_path, map_location=DEVICE).to(DEVICE)
@@ -212,7 +213,7 @@ def load_callbacks(logger):
     callbacks.append(plc.EarlyStopping(
         monitor='val_acc',
         mode='max',
-        patience=3,
+        patience=2,
         min_delta=0.001,
         check_on_train_epoch_end=False
     ))
@@ -319,7 +320,7 @@ if __name__ == '__main__':
     retrain_count = 3
     min_leon_time = dict()
     max_query_latency1 = 0
-    logger =  pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs', name="job_training", project=conf['leon']['wandb_project'])
+    logger =  pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs', name="resnet + abs costs, job_training in 202[同pair组队pct0.4,earlystoping 2 epoch]", project=conf['leon']['wandb_project'])
     for key in conf:
         logger.log_hyperparams(conf[key])
     my_step = 0
@@ -336,7 +337,7 @@ if __name__ == '__main__':
     
     remote = bool(conf['leon']['remote'])
     pct = float(conf['leon']['pct']) # 执行 percent 比例的 plan
-    planning_time = 15000 # pg timout会考虑planning时间
+    planning_time = 6000 # pg timout会考虑planning时间
     sql_id = [] # 达到局部最优解的query集合
     # ===== ITERATION OF CHUNKS ====
     ch_start_idx = 0 # the start idx of the current chunk in train_files
@@ -677,11 +678,11 @@ if __name__ == '__main__':
             train_size = int(0.8 * dataset_size)
             val_size = dataset_size - train_size
             train_ds, val_ds = torch.utils.data.random_split(leon_dataset, [train_size, val_size])
-            dataloader_train = DataLoader(train_ds, batch_size=512, shuffle=True, num_workers=5)
-            dataloader_val = DataLoader(val_ds, batch_size=512, shuffle=False, num_workers=5)
-            dataset_test = BucketDataset(Exp.OnlyGetExp(), keys=Exp.GetExpKeys(), nodeFeaturizer=nodeFeaturizer, dict=encoding_dict)
-            batch_sampler = BucketBatchSampler(dataset_test.buckets, batch_size=1)
-            dataloader_test = DataLoader(dataset_test, batch_sampler=batch_sampler, num_workers=7)
+            dataloader_train = DataLoader(train_ds, batch_size=1536, shuffle=True, num_workers=7)
+            dataloader_val = DataLoader(val_ds, batch_size=1536, shuffle=False, num_workers=7)
+            # dataset_test = BucketDataset(Exp.OnlyGetExp(), keys=Exp.GetExpKeys(), nodeFeaturizer=nodeFeaturizer, dict=encoding_dict)
+            # batch_sampler = BucketBatchSampler(dataset_test.buckets, batch_size=1)
+            # dataloader_test = DataLoader(dataset_test, batch_sampler=batch_sampler, num_workers=7)
             # model = load_model(model_path, prev_optimizer_state_dict).to(DEVICE)
             model.optimizer_state_dict = prev_optimizer_state_dict
             callbacks = load_callbacks(logger=None)
@@ -694,9 +695,9 @@ if __name__ == '__main__':
                                 callbacks=callbacks,
                                 logger=logger)
             trainer.fit(model, dataloader_train, dataloader_val)
-            trainer.test(model, dataloader_test)
+            # trainer.test(model, dataloader_test)
             prev_optimizer_state_dict = trainer.optimizers[0].state_dict()
-            del leon_dataset, train_ds, val_ds, dataloader_train, dataloader_val, dataset_test, batch_sampler, dataloader_test
+            del leon_dataset, train_ds, val_ds, dataloader_train, dataloader_val #, dataset_test, batch_sampler, dataloader_test
             gc.collect()
             torch.cuda.empty_cache()
             random_tensor = torch.rand((90000, 1000, 27)).to(f'cuda:{train_gpu}')

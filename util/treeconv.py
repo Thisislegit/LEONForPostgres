@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 import torch.nn as nn
-
+import torch.nn.functional as F
 from . import plans_lib
 
 DEVICE = 'cpu'
@@ -106,15 +106,108 @@ class TreeConvolution(nn.Module):
         out = self.out_mlp(out)
         return out
 
+class TreeResnetConvolution(nn.Module):
+    """Balsa's tree convolution neural net: (query, plan) -> value.
+
+    Value is either cost or latency.
+    """
+
+    def __init__(self, feature_size, plan_size, label_size, version=None):
+        super(TreeResnetConvolution, self).__init__()
+        # None: default
+        assert version is None, version
+        self.query_p = 0.3
+        self.query_mlp = nn.Sequential(
+            nn.Linear(feature_size, 128),
+            nn.Dropout(p=self.query_p),
+            nn.LayerNorm(128),
+            nn.LeakyReLU(),
+            nn.Linear(128, 64),
+            nn.Dropout(p=self.query_p),
+            nn.LayerNorm(64),
+            nn.LeakyReLU(),
+            nn.Linear(64, 32),
+        )
+
+        self.conv = nn.Sequential(TreeConv1d(32 + plan_size, 64, kernel_size=3, padding=1, stride=1),
+                    TreeStandardize(),
+                    TreeAct(nn.LeakyReLU()),
+                    TreeMaxPool_With_Kernel_Stride(),
+                    *resnet_block(64, 64, 2, first_block=True),
+                    *resnet_block(64, 128, 2),
+                    TreeAvgPool())
+        self.plan_p = 0.2
+        self.out_mlp = nn.Sequential(
+            nn.Linear(128, 64),
+            nn.Dropout(p=self.plan_p),
+            nn.LayerNorm(64),
+            nn.LeakyReLU(),
+            nn.Linear(64, 32),
+            nn.Dropout(p=self.plan_p),
+            nn.LayerNorm(32),
+            nn.LeakyReLU(),
+            nn.Linear(32, label_size),
+        )
+        # self.reset_weights()
+        self.apply(self._init_weights)
+        self.model_type = "TreeConv"
+
+    def reset_weights(self):
+        for name, p in self.named_parameters():
+            if p.dim() > 1:
+                # Weights/embeddings.
+                nn.init.normal_(p, std=0.02)
+            elif 'bias' in name:
+                # Layer norm bias; linear bias, etc.
+                nn.init.zeros_(p)
+            else:
+                # Layer norm weight.
+                # assert 'norm' in name and 'weight' in name, name
+                nn.init.ones_(p)
+    
+    def _init_weights(self, module):
+        if isinstance(module, nn.Linear):
+            torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
+            if module.bias is not None:
+                torch.nn.init.zeros_(module.bias)
+        elif isinstance(module, nn.Embedding):
+            torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
+
+    def forward(self, query_feats, trees, indexes):
+        """Forward pass.
+
+        Args:
+          query_feats: Query encoding vectors.  Shaped as
+            [batch size, query dims].
+          trees: The input plan features.  Shaped as
+            [batch size, plan dims, max tree nodes].
+          indexes: For Tree convolution.
+
+        Returns:
+          Predicted costs: Tensor of float, sized [batch size, 1].
+        """
+        # Give larger dropout to query features.
+        query_embs = nn.functional.dropout(query_feats, p=0.5)
+        query_embs = self.query_mlp(query_feats.unsqueeze(1))
+        query_embs = query_embs.transpose(1, 2)
+        max_subtrees = trees.shape[-1]
+        #    print(query_embs.shape)
+        query_embs = query_embs.expand(query_embs.shape[0], query_embs.shape[1],
+                                       max_subtrees)
+        concat = torch.cat((query_embs, trees), axis=1)
+
+        out = self.conv((concat, indexes))
+        out = self.out_mlp(out)
+        return out
 
 class TreeConv1d(nn.Module):
     """Conv1d adapted to tree data."""
 
-    def __init__(self, in_dims, out_dims):
+    def __init__(self, in_dims, out_dims, kernel_size=3, stride=3, padding=0):
         super().__init__()
         self._in_dims = in_dims
         self._out_dims = out_dims
-        self.weights = nn.Conv1d(in_dims, out_dims, kernel_size=3, stride=3)
+        self.weights = nn.Conv1d(in_dims, out_dims, kernel_size=kernel_size, stride=stride, padding=padding)
 
     def forward(self, trees):
         # trees: Tuple of (data, indexes)
@@ -132,9 +225,26 @@ class TreeMaxPool(nn.Module):
     def forward(self, trees):
         # trees: Tuple of (data, indexes)
         return trees[0].max(dim=2).values
+    
+class TreeAvgPool(nn.Module):
 
+    def forward(self, trees):
+        # trees: Tuple of (data, indexes)
+        return trees[0].mean(dim=2)
 
-class TreeAct(nn.Module):
+class TreeMaxPool_With_Kernel_Stride(nn.Module):
+
+    def __init__(self, kernel_size=3, stride=3, padding=0):
+        super(TreeMaxPool_With_Kernel_Stride, self).__init__()
+        self.kernel_size = kernel_size
+        self.stride = stride
+        self.padding = padding
+
+    def forward(self, trees):
+        # trees: Tuple of (data, indexes)
+        return (F.max_pool1d(trees[0], kernel_size=self.kernel_size, stride=self.stride, padding=self.padding), trees[1])
+
+class  TreeAct(nn.Module):
 
     def __init__(self, activation):
         super().__init__()
@@ -153,6 +263,126 @@ class TreeStandardize(nn.Module):
         s = torch.std(trees[0], dim=(1, 2)).unsqueeze(1).unsqueeze(1)
         standardized = (trees[0] - mu) / (s + 1e-5)
         return standardized, trees[1]
+
+class Residual(nn.Module):
+    def __init__(self, input_channels, num_channels,
+                 use_1x1conv=False, strides=1):
+        super().__init__()
+        self.conv1 = TreeConv1d(input_channels, num_channels,
+                                         kernel_size=3, padding=1, stride=strides)
+        self.conv2 = TreeConv1d(num_channels, num_channels,
+                                         kernel_size=3, padding=1)
+        if use_1x1conv:
+            self.conv3 = TreeConv1d(input_channels, num_channels,
+                                         kernel_size=1, stride=strides)
+        else:
+            self.conv3 = None
+        self.bn1 = TreeStandardize()
+        self.bn2 = TreeStandardize()
+        self.relu1 = TreeAct(nn.LeakyReLU())
+        self.relu2 = TreeAct(nn.LeakyReLU())
+
+    def forward(self, X):
+        Y = self.relu1(self.bn1(self.conv1(X)))
+        Y = self.bn2(self.conv2(Y))
+        if self.conv3:
+            X = self.conv3(X)
+        Y += X
+        return self.relu2(Y)
+    
+def resnet_block(input_channels, num_channels, num_residuals,
+                 first_block=False):
+    blk = []
+    for i in range(num_residuals):
+        if i == 0 and not first_block:
+            blk.append(Residual(input_channels, num_channels,
+                                use_1x1conv=True, strides=2))
+        else:
+            blk.append(Residual(num_channels, num_channels))
+    return blk
+
+class ResNet(nn.Module):
+    def __init__(self, feature_size, plan_size, label_size, \
+                 block, num_blocks, num_classes=1):
+        super(ResNet, self).__init__()
+        self.in_channels = plan_size + 32
+
+        self.conv1 = TreeConv1d(self.in_channels, 64)
+        self.bn1 = nn.BatchNorm1d(64)
+
+        self.in_channels = 64
+        self.layer1 = self._make_layer(block, 64, num_blocks[0])
+        self.layer2 = self._make_layer(block, 128, num_blocks[1])
+        self.layer3 = self._make_layer(block, 256, num_blocks[2])
+        self.layer4 = self._make_layer(block, 512, num_blocks[3])
+        # self.linear = nn.Linear(512, num_classes)
+        # self.max_pool = TreeMaxPool_With_Kernel_Stride()
+
+        self.query_p = 0.3
+        self.query_mlp = nn.Sequential(
+            nn.Linear(feature_size, 128),
+            nn.Dropout(p=self.query_p),
+            nn.LayerNorm(128),
+            nn.LeakyReLU(),
+            nn.Linear(128, 64),
+            nn.Dropout(p=self.query_p),
+            nn.LayerNorm(64),
+            nn.LeakyReLU(),
+            nn.Linear(64, 32),
+        )
+
+        # self.plan_p = 0.2
+        self.out_mlp = nn.Sequential(
+            nn.Linear(512, 32),
+            # nn.Dropout(p=self.plan_p),
+            nn.LeakyReLU(),
+            nn.Linear(32, label_size),
+        )
+
+        self.tree_pool = TreeMaxPool()
+
+        self.apply(self._init_weights)
+        self.model_type = "TreeConv"
+
+    def _init_weights(self, module):
+        if isinstance(module, nn.Linear):
+            torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
+            if module.bias is not None:
+                torch.nn.init.zeros_(module.bias)
+        elif isinstance(module, nn.Embedding):
+            torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
+
+    def _make_layer(self, block, out_channels, num_blocks, stride=3):
+        strides = [stride] + [1]*(num_blocks-1)
+        layers = []
+        for stride in strides:
+            layers.append(block(self.in_channels, out_channels))
+            self.in_channels = out_channels
+        return nn.Sequential(*layers)
+
+    def forward(self, query_feats, trees, indexes):
+        query_embs = nn.functional.dropout(query_feats, p=0.5)
+        query_embs = self.query_mlp(query_feats.unsqueeze(1))
+        query_embs = query_embs.transpose(1, 2)
+        max_subtrees = trees.shape[-1]
+        #    print(query_embs.shape)
+        query_embs = query_embs.expand(query_embs.shape[0], query_embs.shape[1],
+                                       max_subtrees)
+        concat = torch.cat((query_embs, trees), axis=1)
+
+
+        out, indexes = self.conv1((concat, indexes))
+        out = self.bn1(out)
+        out = F.relu(out)
+        # out, indexes = self.max_pool((out, indexes))
+        out, indexes = self.layer1((out, indexes))
+        out, indexes = self.layer2((out, indexes))
+        out, indexes = self.layer3((out, indexes))
+        out, indexes = self.layer4((out, indexes))
+        out = self.tree_pool((out, indexes))
+        # out = out.view(out.size(0), -1)
+        out = self.out_mlp(out)
+        return out
 
 
 def ReportModel(model, blacklist=None):

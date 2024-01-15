@@ -18,6 +18,8 @@ from lightning.pytorch.strategies import DDPStrategy
 import pytorch_lightning.callbacks as plc
 conf = read_config()
 
+pl.seed_everything(42)
+
 def Getpair(exp, key=None):
     pairs = []
     if key:
@@ -237,23 +239,28 @@ class TreeConvolution(nn.Module):
         # )
         self.conv = nn.Sequential(
             # TreeConv1d(32 + plan_size, 512),
-            TreeConv1d(plan_size, 256),
+            TreeConv1d(plan_size, 512),
             TreeStandardize(),
             TreeAct(nn.LeakyReLU()),
-            TreeConv1d(256, 128),
+            TreeConv1d(512, 512),
             TreeStandardize(),
             TreeAct(nn.LeakyReLU()),
-            TreeConv1d(128, 64),
+            TreeConv1d(512, 256),
             TreeStandardize(),
             TreeAct(nn.LeakyReLU()),
             TreeMaxPool(),
         )
         self.plan_p = 0.2
         self.out_mlp = nn.Sequential(
-            nn.Linear(64, 32),
+            nn.Linear(256, 128),
             nn.Dropout(p=self.plan_p),
+            nn.LayerNorm(128),
             nn.LeakyReLU(),
-            nn.Linear(32, label_size),
+            nn.Linear(128, 64),
+            nn.Dropout(p=self.plan_p),
+            nn.LayerNorm(64),
+            nn.LeakyReLU(),
+            nn.Linear(64, label_size),
         )
         # self.reset_weights()
         self.apply(self._init_weights)
@@ -345,6 +352,24 @@ class TreeAct(nn.Module):
         # trees: Tuple of (data, indexes)
         return self.activation(trees[0]), trees[1]
 
+class TreeMaxPool_With_Kernel_Stride(nn.Module):
+
+    def __init__(self, kernel_size=3, stride=3, padding=0):
+        super(TreeMaxPool_With_Kernel_Stride, self).__init__()
+        self.kernel_size = kernel_size
+        self.stride = stride
+        self.padding = padding
+
+    def forward(self, trees):
+        # trees: Tuple of (data, indexes)
+        data, indexes = trees
+        feats = F.max_pool1d(torch.gather(data, 2,
+                         indexes.expand(-1, -1, data.shape[1]).transpose(1, 2)), kernel_size=self.kernel_size, stride=self.stride, padding=self.padding)
+        zeros = torch.zeros((data.shape[0], data.shape[1])).unsqueeze(2).to(feats.device)
+        feats = torch.cat((zeros, feats), dim=2)
+        return (feats, indexes)
+
+
 
 class TreeStandardize(nn.Module):
 
@@ -417,11 +442,11 @@ class Test_Leon(PL_Leon):
         # print(costs2)
         # print(labels)
         # print(cali)
-        calied_cost = torch.log(costs) * cali
+        calied_cost = torch.log(costs) * cali 
         # calied_cost = cali
         try:
             sigmoid = F.sigmoid(-(calied_cost[:batsize] - calied_cost[batsize:]))
-            loss = loss_fn(sigmoid, labels.to(sigmoid.dtype))
+            loss = loss_fn(sigmoid, labels.to(sigmoid.dtype)) + 0.2 * torch.abs(calied_cost - torch.log(costs)).mean()
         except:
             print(calied_cost, sigmoid)
         # print(loss)
@@ -433,6 +458,129 @@ class Test_Leon(PL_Leon):
         
         
         return loss, accuracy
+    
+class TreeAvgPool(nn.Module):
+
+    def forward(self, trees):
+        # trees: Tuple of (data, indexes)
+        return trees[0].mean(dim=2)
+    
+class ResidualBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, stride=3):
+        super(ResidualBlock, self).__init__()
+        self.conv1 = TreeConv1d(in_channels, out_channels)
+        self.bn1 = nn.BatchNorm1d(out_channels)
+        self.relu = nn.LeakyReLU(inplace=True)
+        self.conv2 = TreeConv1d(out_channels, out_channels)
+        self.bn2 = nn.BatchNorm1d(out_channels)
+
+        self.shortcut = nn.Sequential()
+        if stride != 1 or in_channels != out_channels:
+            # self.shortcut = nn.Sequential(
+            #     nn.Conv1d(in_channels, out_channels, kernel_size=3, stride=3),
+            #     nn.BatchNorm1d(out_channels)
+            # )
+            self.shortcut = TreeConv1d(in_channels, out_channels)
+            self.shortcut_bn = nn.BatchNorm1d(out_channels)
+
+    def forward(self, x):
+        trees, indexes = x
+        residual = trees
+
+        out, indexes = self.conv1((trees, indexes))
+        out = self.bn1(out)
+        out = self.relu(out)
+        out, indexes = self.conv2((out, indexes))
+        out = self.bn2(out)
+        residual, index = self.shortcut((residual, indexes))
+        residual = self.shortcut_bn(residual)
+
+        out += residual
+        out = F.relu(out)
+        return out, indexes
+    
+class ResNet(nn.Module):
+    def __init__(self, feature_size, plan_size, label_size, \
+                 block, num_blocks, num_classes=1):
+        super(ResNet, self).__init__()
+        self.in_channels = plan_size + 32
+
+        self.conv1 = TreeConv1d(self.in_channels, 64)
+        self.bn1 = nn.BatchNorm1d(64)
+
+        self.in_channels = 64
+        self.layer1 = self._make_layer(block, 64, num_blocks[0])
+        self.layer2 = self._make_layer(block, 128, num_blocks[1])
+        self.layer3 = self._make_layer(block, 256, num_blocks[2])
+        self.layer4 = self._make_layer(block, 512, num_blocks[3])
+        # self.linear = nn.Linear(512, num_classes)
+        # self.max_pool = TreeMaxPool_With_Kernel_Stride()
+
+        self.query_p = 0.3
+        self.query_mlp = nn.Sequential(
+            nn.Linear(feature_size, 128),
+            nn.Dropout(p=self.query_p),
+            nn.LayerNorm(128),
+            nn.LeakyReLU(),
+            nn.Linear(128, 64),
+            nn.Dropout(p=self.query_p),
+            nn.LayerNorm(64),
+            nn.LeakyReLU(),
+            nn.Linear(64, 32),
+        )
+
+        # self.plan_p = 0.2
+        self.out_mlp = nn.Sequential(
+            nn.Linear(512, 32),
+            # nn.Dropout(p=self.plan_p),
+            nn.LeakyReLU(),
+            nn.Linear(32, label_size),
+        )
+
+        self.tree_pool = TreeMaxPool()
+
+        self.apply(self._init_weights)
+        self.model_type = "TreeConv"
+
+    def _init_weights(self, module):
+        if isinstance(module, nn.Linear):
+            torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
+            if module.bias is not None:
+                torch.nn.init.zeros_(module.bias)
+        elif isinstance(module, nn.Embedding):
+            torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
+
+    def _make_layer(self, block, out_channels, num_blocks, stride=3):
+        strides = [stride] + [1]*(num_blocks-1)
+        layers = []
+        for stride in strides:
+            layers.append(block(self.in_channels, out_channels))
+            self.in_channels = out_channels
+        return nn.Sequential(*layers)
+
+    def forward(self, query_feats, trees, indexes):
+        query_embs = nn.functional.dropout(query_feats, p=0.5)
+        query_embs = self.query_mlp(query_feats.unsqueeze(1))
+        query_embs = query_embs.transpose(1, 2)
+        max_subtrees = trees.shape[-1]
+        #    print(query_embs.shape)
+        query_embs = query_embs.expand(query_embs.shape[0], query_embs.shape[1],
+                                       max_subtrees)
+        concat = torch.cat((query_embs, trees), axis=1)
+
+
+        out, indexes = self.conv1((concat, indexes))
+        out = self.bn1(out)
+        out = F.relu(out)
+        # out, indexes = self.max_pool((out, indexes))
+        out, indexes = self.layer1((out, indexes))
+        out, indexes = self.layer2((out, indexes))
+        out, indexes = self.layer3((out, indexes))
+        out, indexes = self.layer4((out, indexes))
+        out = self.tree_pool((out, indexes))
+        # out = out.view(out.size(0), -1)
+        out = self.out_mlp(out)
+        return out
 
 if __name__ == '__main__':
 
@@ -447,8 +595,9 @@ if __name__ == '__main__':
     exp2_new = dict()
     key = None
     prev_optimizer_state_dict = None
-    model = treeconv.TreeConvolution(820, 54, 1)
+    model = ResNet(820, 54, 1, ResidualBlock, [1, 1, 1, 1])
     model = Test_Leon(model)
+    
     workload = envs.wordload_init('job')
     nodeFeaturizer = plans_lib.TreeNodeFeaturizer_V2(workload.workload_info)
     queryFeaturizer = plans_lib.QueryFeaturizer(workload.workload_info)
@@ -514,9 +663,9 @@ if __name__ == '__main__':
     #         dict_1[i] = (tree, index)
     #         i += 1
 
-    train_pairs1 = Getpair2(exp1_new, key=None)
+    train_pairs1 = Getpair(exp1_new, key=None)
     leon_dataset1 = prepare_dataset(train_pairs1, True, nodeFeaturizer, queryFeaturizer, dict=dict_1)
-    train_pairs2 = Getpair2(exp2_new, key=None)
+    train_pairs2 = Getpair(exp2_new, key=None)
     leon_dataset2 = prepare_dataset(train_pairs2, True, nodeFeaturizer, queryFeaturizer, dict=dict_1)
 
     def collate_fn(batch):
@@ -540,21 +689,21 @@ if __name__ == '__main__':
                 padded_batch[key] = torch.stack([item[key] for item in batch])
 
         return padded_batch
-    dataloader_train = DataLoader(leon_dataset1, batch_size=512, shuffle=True, num_workers=7, collate_fn=collate_fn)
-    dataloader_val = DataLoader(leon_dataset2, batch_size=512, shuffle=False, num_workers=7, collate_fn=collate_fn)
+    dataloader_train = DataLoader(leon_dataset1, batch_size=1024, shuffle=True, num_workers=7, collate_fn=collate_fn)
+    dataloader_val = DataLoader(leon_dataset2, batch_size=1024, shuffle=False, num_workers=7, collate_fn=collate_fn)
     # dataset_val = BucketDataset(exp1, keys=key)
     # batch_sampler = BucketBatchSampler(dataset_val.buckets, batch_size=1)
     # dataloader_val = DataLoader(dataset_val, batch_sampler=batch_sampler)
 
     # model = load_model(model_path, prev_optimizer_state_dict).to(DEVICE)
     model.optimizer_state_dict = prev_optimizer_state_dict
-    logger = pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs', name="no query+not cali+不组队 没有tanh + 减少参数 + 每个batchpadding + 只与cost最低组pair", project='leon3')
+    logger = pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs', name="同sql,resnet_torchabs", project='leon3')
 
     trainer = pl.Trainer(accelerator="gpu",
-                        #  strategy="ddp",
-                        #  sync_batchnorm=True,
-                        #  devices=[3],
-                        devices=[0, 2, 3],
+                         strategy="ddp",
+                         sync_batchnorm=True,
+                         devices=[0, 3],
+                        # devices=[3],
                         max_epochs=100,
                         logger=logger,
                         callbacks=[plc.ModelCheckpoint(
