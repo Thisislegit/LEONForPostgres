@@ -58,7 +58,7 @@ def load_model(model_path: str, prev_optimizer_state_dict=None):
         elif model_type == "TreeConv":
             print("load treeconv model")
             # model = treeconv.TreeConvolution(666, 50, 1).to(DEVICE)
-            model = treeconv.ResNet(666, 50, 1, [1, 1, 1, 1]).to(DEVICE)
+            model = treeconv.ResNet(666, 50, 1, treeconv.ResidualBlock, [1, 1, 1, 1]).to(DEVICE)
         torch.save(model, model_path)
     else:
         model = torch.load(model_path, map_location=DEVICE).to(DEVICE)

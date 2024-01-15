@@ -7,6 +7,40 @@ from . import plans_lib
 DEVICE = 'cpu'
 
 
+class ResidualBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, stride=3):
+        super(ResidualBlock, self).__init__()
+        self.conv1 = TreeConv1d(in_channels, out_channels)
+        self.bn1 = nn.BatchNorm1d(out_channels)
+        self.relu = nn.LeakyReLU(inplace=True)
+        self.conv2 = TreeConv1d(out_channels, out_channels)
+        self.bn2 = nn.BatchNorm1d(out_channels)
+
+        self.shortcut = nn.Sequential()
+        if stride != 1 or in_channels != out_channels:
+            # self.shortcut = nn.Sequential(
+            #     nn.Conv1d(in_channels, out_channels, kernel_size=3, stride=3),
+            #     nn.BatchNorm1d(out_channels)
+            # )
+            self.shortcut = TreeConv1d(in_channels, out_channels)
+            self.shortcut_bn = nn.BatchNorm1d(out_channels)
+
+    def forward(self, x):
+        trees, indexes = x
+        residual = trees
+
+        out, indexes = self.conv1((trees, indexes))
+        out = self.bn1(out)
+        out = self.relu(out)
+        out, indexes = self.conv2((out, indexes))
+        out = self.bn2(out)
+        residual, index = self.shortcut((residual, indexes))
+        residual = self.shortcut_bn(residual)
+
+        out += residual
+        out = F.relu(out)
+        return out, indexes
+
 class TreeConvolution(nn.Module):
     """Balsa's tree convolution neural net: (query, plan) -> value.
 
