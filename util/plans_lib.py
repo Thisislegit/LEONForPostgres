@@ -362,6 +362,7 @@ class WorkloadInfo(object):
         join_types = set()
         all_ops = set()
         all_ops.add('Null')
+        all_ops.add('Memoize')
         all_attributes = set()
         mins = {"cost": float("inf"), "card": float("inf"), "width": float("inf")}
         maxs = {"cost": -float("inf"), "card": -float("inf"), "width": -float("inf")}

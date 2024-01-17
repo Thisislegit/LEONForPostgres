@@ -11,6 +11,8 @@ import torch
 import sys
 sys.path.append('..')
 import test_case
+from config import read_config
+conf = read_config()
 
 _EPSILON = 1e-6
 
@@ -244,7 +246,7 @@ class JoinOrderBenchmark_Train(JoinOrderBenchmark):
         #  p.query_dir = os.path.join('/home/ht/PycharmProjects/pythonProject3', 'join-order-benchmark')
         module_dir = os.path.abspath(os.path.dirname(__file__)) + '/../'    
         print(module_dir)
-        p.query_dir = os.path.join(module_dir + './train/training_query/job_train.txt')
+        p.query_dir = os.path.join(module_dir + f'./train/training_query/{conf["leon"]["workload_type"]}.txt')
         if not os.path.exists(p.query_dir):
             raise IOError('File Not Exists!')
         return p
@@ -403,7 +405,7 @@ def wordload_init(workload_type):
     path = f'./log/workload_{workload_type}.pkl'
     
     if not os.path.exists(path):
-        if workload_type == 'job_training':
+        if workload_type == 'job_train' or workload_type == 'tpch_train':
             workload = JoinOrderBenchmark_Train(JoinOrderBenchmark_Train.Params())
         else:
             workload = JoinOrderBenchmark(JoinOrderBenchmark.Params())
@@ -426,8 +428,8 @@ def CurrCache(curr_exec, plan):
     return False
 
 def load_train_files(workload_type):
-    if workload_type == 'job_training':
-        training_query = load_training_query("./train/training_query/job_train.txt")
+    if workload_type == 'job_train' or workload_type == 'tpch_train':
+        training_query = load_training_query(f"./train/training_query/{workload_type}.txt")
         train_files = [i[0] for i in training_query]
         training_query = [i[1] for i in training_query]
     else:
