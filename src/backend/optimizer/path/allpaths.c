@@ -3029,6 +3029,33 @@ standard_join_search(PlannerInfo *root, int levels_needed, List *initial_rels)
 											ALLOCSET_DEFAULT_SIZES);
 	leon_state->leon_host = leon_host;
 	leon_state->leon_port = leon_port;
+
+
+	// Start with 'picknode:{plan[2]};{plan[3]}';
+	if (strncmp(leon_query_name, "picknode:", strlen("picknode:")) == 0)
+	{	
+		char *copy_name = strdup(leon_query_name);
+		char ** relnames = NULL;
+		int nrel = 0;
+		char *token = strtok(copy_name, ":");
+		char *token = strtok(NULL, ";");
+		char *relname = strtok(token, ",");
+		while (relname != NULL)
+        {
+            // 为新的 relname 分配空间
+            relnames = (char **)realloc(relnames, (nrel + 1) * sizeof(char *));
+            relnames[nrel] = strdup(relname);
+
+            nrel++;
+
+            relname = strtok(NULL, ",");
+        }
+
+		current_picknode_state = palloc(sizeof(PickNodeState));
+		current_picknode_state->node_level = nrel;
+		current_picknode_state->node_relids =NULL;
+		
+	}
 	}
 
 
@@ -3163,6 +3190,8 @@ standard_join_search(PlannerInfo *root, int levels_needed, List *initial_rels)
 	{
 		shutdown(conn_fd, SHUT_RDWR);
 		MemoryContextDelete(leon_state->leonContext);
+		if (current_picknode_state)
+			pfree(current_picknode_state);
 		pfree(leon_state);
 	}
 

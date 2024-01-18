@@ -22,6 +22,8 @@
 #include "partitioning/partbounds.h"
 #include "utils/memutils.h"
 
+#include "optimizer/ml_util.h"
+
 
 static void make_rels_by_clause_joins(PlannerInfo *root,
 									  RelOptInfo *old_rel,
