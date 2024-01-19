@@ -24,7 +24,7 @@ class LeonModel:
         # print(op_names)
         # seqs_encoding = [generate_seqs_encoding(x) for x in seqs]
         # print(seqs_encoding[0])
-        return ';'.join(['1.00,1,0' for _ in X])
+        return ';'.join(['1.00,1,0' for _ in X]) + ';'
 
 class JSONTCPHandler(socketserver.BaseRequestHandler):
     def handle(self):
