@@ -258,25 +258,66 @@ class ActorThatQueries:
         exp = plan[0]
         node = plan[0][0]
         timeout = plan[1]
-        explain_str = 'explain(verbose, format json, analyze)'
+        explain_str1 = 'explain(verbose, format json, analyze)'
+        explain_str2 = 'explain(verbose, format json)'
         sql = node.info['sql_str']
 
-        s = str(explain_str).rstrip() + '\n' + sql
+        s1 = str(explain_str1).rstrip() + '\n' + sql
+        s2 = str(explain_str2).rstrip() + '\n' + sql
 
         with MyCursor(self.port) as cursor:
             cursor.execute('SET enable_leon=on;')
             cursor.execute(f"set leon_port={self.our_port};")
-            cursor.execute(f"SET leon_query_name='picknode:{plan[3]}';") # 第0个plan 0 
-            result = Execute(s, True, True, timeout, cursor).result
+            cursor.execute(f"SET leon_query_name='picknode:{plan[2]};{plan[3]}';") # 第0个plan 0 
+            result = Execute(s2, True, True, timeout, cursor).result
+        
+        def explain_cost(n):
+                if 'Total Cost' in n:
+                    if abs(n['Total Cost'] - round(plan[3] * 100) / 100) < 0.02:
+                        return True
+                if 'Plans' in n:
+                    for sub_plan in n['Plans']:
+                        result = explain_cost(sub_plan)
+                        if result:
+                            return True
+                return False
+        
+        if not explain_cost(result[0][0][0]['Plan']):
+            return None
+
+        with MyCursor(self.port) as cursor:
+            cursor.execute('SET enable_leon=on;')
+            cursor.execute(f"set leon_port={self.our_port};")
+            cursor.execute(f"SET leon_query_name='picknode:{plan[2]};{plan[3]}';") # 第0个plan 0 
+            result = Execute(s1, True, True, timeout, cursor).result
         if not result:
             exp[0].info['latency'] = self.TIME_OUT
         else:
-            json_dict = result[0][0][0]
-            latency = float(json_dict['Execution Time'])
-            exp[0].info['latency'] = latency
-            if json_dict['Plan']['Total Cost'] != round(plan[3] * 100) / 100:
-                print(json_dict['Plan']['Total Cost'], plan[3])
-                print(sql)
+            # json_dict = result[0][0][0]
+            # latency = float(json_dict['Execution Time'])
+            # exp[0].info['latency'] = latency
+            # if json_dict['Plan']['Total Cost'] != round(plan[3] * 100) / 100:
+            #     print(json_dict['Plan']['Total Cost'], plan[3])
+            #     print(sql)
+            #     return None
+            json_dict = result[0][0][0]['Plan']
+
+            def find_actual_total_time(n):
+                if 'Total Cost' in n and 'Actual Total Time' in n:
+                    if abs(n['Total Cost'] - round(plan[3] * 100) / 100) < 0.02:
+                        return n['Actual Total Time']
+                
+                if 'Plans' in n:
+                    for sub_plan in n['Plans']:
+                        result = find_actual_total_time(sub_plan)
+                        if result is not None:
+                            return result
                 return None
 
+            latency = find_actual_total_time(json_dict)
+            if latency is None:
+                print('not found', plan[3])
+                return None
+            else:
+                exp[0].info['latency'] = latency
         return (exp, plan[2])

@@ -194,7 +194,7 @@ def collects(finnode: plans_lib.Node, actor, exp: Experience, timeout, currTotal
             cur_join_ids = ','.join(
                 sorted([i.split(" AS ")[-1] for i in currentNode.leaf_ids()]))
             join_ids_to_append.append(cur_join_ids)
-    join_ids_to_append = join_ids_to_append[:1]
+    # join_ids_to_append = join_ids_to_append[:1]
     for join_id in join_ids_to_append:
         exp_key = Exp.GetExpKeys()
         temp = join_id.split(',') # sort
@@ -295,7 +295,7 @@ if __name__ == '__main__':
     
     train_files, training_query = envs.load_train_files(conf['leon']['workload_type'])
     # ray.get(dict_actor.write_sql_id.remote(train_files))
-    chunk_size = 6 # the # of sqls in a chunk
+    chunk_size = 1 # the # of sqls in a chunk
     min_batch_size = 256
     TIME_OUT_Ratio = 2
     model_path = "./log/model.pth" 
@@ -304,6 +304,8 @@ if __name__ == '__main__':
     model = load_model(model_path)
     
     Exp = Experience(eq_set=initEqSet())
+    eqset = Exp.GetEqSet()
+    model.eq_summary = {key: 0 for key in eqset}
     print("Init workload and equal set keys")
     
     workload = envs.wordload_init(conf['leon']['workload_type'])
@@ -320,7 +322,7 @@ if __name__ == '__main__':
     retrain_count = 3
     min_leon_time = dict()
     max_query_latency1 = 0
-    logger =  pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs', name="resnet + abs costs, job_training in 202[同pair组队pct0.4,earlystoping 2 epoch]", project=conf['leon']['wandb_project'])
+    logger =  pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs', name="动态等价类 in 202", project=conf['leon']['wandb_project'])
     for key in conf:
         logger.log_hyperparams(conf[key])
     my_step = 0
@@ -374,7 +376,7 @@ if __name__ == '__main__':
                 min_leon_time[curr_file[q_send_cnt]] = query_latency2
             else:
                 min_leon_time[curr_file[q_send_cnt]] = min(min_leon_time[curr_file[q_send_cnt]], query_latency2)
-            if min_leon_time[curr_file[q_send_cnt]] / first_time[curr_file[q_send_cnt]] < 0.75 and curr_file[q_send_cnt] not in sql_id:
+            if min_leon_time[curr_file[q_send_cnt]] / first_time[curr_file[q_send_cnt]] < 0.8 and curr_file[q_send_cnt] not in sql_id:
                 sql_id.append(curr_file[q_send_cnt])
         logger.log_metrics({f"Runtime/pg_latency": sum(pg_time1)}, step=my_step)
         logger.log_metrics({f"Runtime/leon_latency": sum(tf_time)}, step=my_step)
@@ -383,14 +385,14 @@ if __name__ == '__main__':
         logger.log_metrics({f"Runtime/all_pg": runtime_pg}, step=my_step)
         logger.log_metrics({f"Runtime/all_leon": runtime_leon}, step=my_step)
         
-        ###############收集新的等价类##############################
-        ray.get(task_counter.WriteOnline.remote(True))
+        ###############收集新的等价类##############################  
         for q_send_cnt in range(chunk_size):
-            if retrain_count >= 3 and curr_file[q_send_cnt] not in sql_id: # 最好情况好于0.75
+            if retrain_count >= 3 and curr_file[q_send_cnt] not in sql_id: # 最好情况好于0.8
             # if retrain_count >= 5:
                 curNode = Nodes[q_send_cnt]
-                # if curNode:
-                #     collects(curNode, task_counter, Exp, None, tf_time[q_send_cnt], sqls_chunk[q_send_cnt], curr_file[q_send_cnt], model)
+                if curNode:
+                    collects(curNode, task_counter, Exp, None, tf_time[q_send_cnt], sqls_chunk[q_send_cnt], curr_file[q_send_cnt], model)
+        ray.get(task_counter.WriteOnline.remote(True))
         for q_send_cnt in range(chunk_size):
             postgres.getPlans(sqls_chunk[q_send_cnt], None, check_hint_used=False, ENABLE_LEON=True, curr_file=curr_file[q_send_cnt])
         ray.get(task_counter.WriteOnline.remote(False))
@@ -461,17 +463,19 @@ if __name__ == '__main__':
                         
                         curr_QueryId = message[0]['QueryId']
                     print(f">>> message with {len(message)} plans")
+                    for m in message:
+                        print(m['Plan']['Total Cost'])
                     
                     # STEP 1) get node
                     if model_type == "Transformer":
                         encoded_plans, attns, queryfeature, nodes = envs.leon_encoding(model_type, message, 
                                                                                        require_nodes=True, workload=workload, 
                                                                                        configs=configs, op_name_to_one_hot=op_name_to_one_hot,
-                                                                                       plan_parameters=plan_parameters, feature_statistics=feature_statistics)
+                                                                                       plan_parameters=plan_parameters, feature_statistics=feature_statistics, sql=sqls_chunk[q_recieved_cnt])
                     elif model_type == "TreeConv":
                         encoded_plans, attns, queryfeature, nodes = envs.leon_encoding(model_type, message, 
                                                                                        require_nodes=True, workload=workload, 
-                                                                                       queryFeaturizer=queryFeaturizer, nodeFeaturizer=nodeFeaturizer)
+                                                                                       queryFeaturizer=queryFeaturizer, nodeFeaturizer=nodeFeaturizer, sql=sqls_chunk[q_recieved_cnt])
                     # nodes = PlanToNode(workload, message)
                     
                     if nodes is None:
@@ -633,19 +637,23 @@ if __name__ == '__main__':
         exec_plan = sorted(exec_plan, key=lambda x: x[0][0].cost, reverse=True)
         ## 给索引
         results = pool.map_unordered(actor_call_leon, exec_plan)
+        loss_node = 0
         for result in results:
             if result == None:
-                print("*" * 50)
-                print("result is None")
+                loss_node += 1
+                # print("*" * 50)
+                # print("result is None")
                 continue
             Exp.AppendExp(result[1], result[0])
+        if loss_node > 0:
+            print("loss_node", loss_node)
 
         del queryfeature, encoded_plans, attns
         gc.collect()
         torch.cuda.empty_cache()
 
         ##########删除等价类#############
-        # Exp.DeleteEqSet(sql_id)
+        Exp.DeleteEqSet(sql_id)
         eqset = Exp.GetEqSet()
         print("len_eqset", Exp._getEqNum())
         logger.log_metrics({"len_eqset": Exp._getEqNum()}, step=my_step)
@@ -678,8 +686,8 @@ if __name__ == '__main__':
             train_size = int(0.8 * dataset_size)
             val_size = dataset_size - train_size
             train_ds, val_ds = torch.utils.data.random_split(leon_dataset, [train_size, val_size])
-            dataloader_train = DataLoader(train_ds, batch_size=1536, shuffle=True, num_workers=7)
-            dataloader_val = DataLoader(val_ds, batch_size=1536, shuffle=False, num_workers=7)
+            dataloader_train = DataLoader(train_ds, batch_size=1024, shuffle=True, num_workers=7)
+            dataloader_val = DataLoader(val_ds, batch_size=1024, shuffle=False, num_workers=7)
             # dataset_test = BucketDataset(Exp.OnlyGetExp(), keys=Exp.GetExpKeys(), nodeFeaturizer=nodeFeaturizer, dict=encoding_dict)
             # batch_sampler = BucketBatchSampler(dataset_test.buckets, batch_size=1)
             # dataloader_test = DataLoader(dataset_test, batch_sampler=batch_sampler, num_workers=7)
@@ -696,6 +704,7 @@ if __name__ == '__main__':
                                 logger=logger)
             trainer.fit(model, dataloader_train, dataloader_val)
             # trainer.test(model, dataloader_test)
+            model.eq_summary = {key: 0 for key in eqset}
             prev_optimizer_state_dict = trainer.optimizers[0].state_dict()
             del leon_dataset, train_ds, val_ds, dataloader_train, dataloader_val #, dataset_test, batch_sampler, dataloader_test
             gc.collect()

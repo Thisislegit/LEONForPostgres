@@ -69,6 +69,7 @@ class Experience:
             # self.__eqSet[i] = 2000
             # self.__exp[i] = []
             self.AddEqSet(i)
+            self.GetEqSet()[i].eqset_latency = 2 * TIME_OUT
             self.AppendExp(i, [])
     
     def OnlyGetExp(self):
@@ -140,6 +141,8 @@ class Experience:
 
     def _collectTime(self):
         for eq in self.GetEqSetKeys():
+            if self.GetEqSet()[eq].eqset_latency == 2 * TIME_OUT:
+                continue
             average = 0
             cnt = 0
             if len(self.GetExp(eq)) > 0:
@@ -177,6 +180,7 @@ class Experience:
             opt_time = first_time - tf
             query_ids = self.GetEqSet()[eq].query_ids
             query_dict = self.GetEqSet()[eq].query_dict
+            eqset_latency = self.GetEqSet()[eq].eqset_latency
             if query_id not in query_ids:
                 query_ids.append(query_id)
             if query_id not in query_dict.keys():
@@ -187,7 +191,9 @@ class Experience:
             self.GetEqSet()[eq] = EqSetInfo(first_latency=first_time,
                                             current_latency=tf,
                                             opt_time=mean(query_dict.values()),
-                                            query_ids=query_ids)
+                                            query_ids=query_ids,
+                                            query_dict=query_dict,
+                                            eqset_latency=eqset_latency)
 
     def DeleteEqSet(self, sql_id):
         self._collectTime()
@@ -202,10 +208,10 @@ class Experience:
             """
             Remove sets from all_set if their query_ids contain common elements with sql_id.
             """
-            updated_set = [item for item in all_set if not (any(x in sql_id for x in item[1].query_ids) or item[1].opt_time == 0)]
+            updated_set = [item for item in all_set if not (any(x in sql_id for x in item[1].query_ids) or item[1].eqset_latency == TIME_OUT)]
             return updated_set
         allSet = remove_matching_sets(allSet, sql_id)
-        deletenum = min(int(EqNum * 0.3), len(allSet))
+        deletenum = min(int(EqNum * 0.15), len(allSet))
         if EqNum - deletenum < self.MinEqNum:
             return
         for i in range(deletenum):
@@ -237,7 +243,7 @@ class Experience:
         [[j cost, j latency, j query_vector, j node], [k ...]], ...
         """
         pairs = []
-        for eq in self.__exp.keys():
+        for eq in self.__eqSet.keys():
             # if len(self.GetExp(eq)) < 8: 
             #     continue
             # min_dict = dict()

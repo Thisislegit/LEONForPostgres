@@ -44,7 +44,7 @@ def load_sql(file_list: list, training_query=None):
             f.close()
     return sqls
 
-def PlanToNode(workload, plans):
+def PlanToNode(workload, plans, sql=None):
     """
     input. plans 一个 message 等价类包括多条 plans
     output. nodes
@@ -57,7 +57,10 @@ def PlanToNode(workload, plans):
         if i == 0:
             if node.info['join_cond'] == ['']:
                 return None
-            temp = node.to_sql(node.info['join_cond'], with_select_exprs=True)
+            if sql is None:
+                temp = node.to_sql(node.info['join_cond'], with_select_exprs=True)
+            else:
+                temp = sql
             node.info['sql_str'] = temp
         node.info['sql_str'] = temp
         nodes.append(node)
@@ -484,9 +487,9 @@ def plans_encoding(plans, configs, op_name_to_one_hot, plan_parameters, feature_
 def leon_encoding(model_type, X, require_nodes=False, workload=None,
                   queryFeaturizer=None, nodeFeaturizer=None, 
                   configs=None, op_name_to_one_hot=None, 
-                  plan_parameters=None, feature_statistics=None):
+                  plan_parameters=None, feature_statistics=None, sql=None):
     if model_type == "TreeConv" or require_nodes:
-        nodes = PlanToNode(workload, X)
+        nodes = PlanToNode(workload, X, sql)
         if nodes is None:
             return None, None, None, None
         plans_lib.GatherUnaryFiltersInfo(nodes)

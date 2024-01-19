@@ -338,8 +338,9 @@ class LeonModel:
         # if self.query_dict_flag:
         #     self.query_dict_flag = ray.get(self.query_dict.write_query_id.remote(X[0]['QueryId']))
         out = ','.join(sorted(Relation_IDs.split()))
-        if (out in self.eqset) and (self.Current_Level == self.Levels_Needed):
+        if (out in self.eqset): # and (self.Current_Level == self.Levels_Needed)
             self.current_eq_summary = self.eq_summary.get(out)
+            self.curr_eqset = out
             print(X[0]['QueryId'], out)
             print(self.Current_Level, self.Levels_Needed)
             return '1'
@@ -359,24 +360,28 @@ class LeonModel:
         #         return ','.join(['1.00' for _ in X]
         X = [json.loads(x) if isinstance(x, str) else x for x in X]
         # print(X[0])
-        if self.Current_Level == self.Levels_Needed:
-            if self.Query_Id.startswith("picknode:"):
-                pick_plan = float(self.Query_Id[len("picknode:"):])
-                # change_flag = False
-                # print("Success begin hint leon", self.Query_Id)
-                # for j, i in enumerate(X):
-                #     if i['Plan']['Total Cost'] == pick_plan:
-                #         print(i['Plan']['Total Cost'], pick_plan, j)
-                #         change_flag = True
-                # if change_flag == False:
-                #     print("change_flag",self.Query_Id)
-                #     with open("./error.pkl", 'wb') as f:
-                #         pickle.dump(X, f) 
-                # print("Success exec hint leon", self.Query_Id)
+        for x in X:
+            print(x['Plan']['Total Cost'])
+
+        if self.Query_Id.startswith("picknode:"):
+            temp_id = self.Query_Id[len("picknode:"):]
+            parts = temp_id.split(";")
+            curr_level = parts[0]
+            pick_plan = float(parts[1])
+            if curr_level == self.curr_eqset:
+                change_flag = False
+                print("Success begin hint leon", self.Query_Id)
+                for j, i in enumerate(X):
+                    if i['Plan']['Total Cost'] == pick_plan:
+                        print(i['Plan']['Total Cost'], pick_plan, j)
+                        change_flag = True
+                if change_flag == False:
+                    print("change_flag",self.Query_Id)
+                    with open("./error.pkl", 'wb') as f:
+                        pickle.dump(X, f) 
+                print("Success exec hint leon", self.Query_Id)
                 return ';'.join(['1.00,1,0' if i['Plan']['Total Cost'] != pick_plan else '0.01,0,9' for i in X]) + ';'
-            else:
-                # print("fail",self.Query_Id)
-                pass
+
         try:
             if ray.get(self.task_counter.GetOnline.remote()):
                 self.task_counter.Add_task.remote()
@@ -392,9 +397,9 @@ class LeonModel:
         #     print("out")
         #     return ';'.join(['1.00,1,0' for _ in X])
         # 新添加的等价类，但没有训练    
-        # if self.current_eq_summary is None:
-        #     print("out")
-        #     return ';'.join(['1.00,1,0' for _ in X]) + ';'
+        if self.current_eq_summary is None:
+            print("out")
+            return ';'.join(['1.00,1,0' for _ in X]) + ';'
 
         # 编码
         seqs, attns, QueryFeature = self.encoding(X)
@@ -545,8 +550,9 @@ class SimpleLeonModel:
         # if self.query_dict_flag:
         #     self.query_dict_flag = ray.get(self.query_dict.write_query_id.remote(X[0]['QueryId']))
         out = ','.join(sorted(Relation_IDs.split()))
-        if (out in self.eqset) and (self.Current_Level == self.Levels_Needed):
+        if (out in self.eqset): #  and (self.Current_Level == self.Levels_Needed)
             self.current_eq_summary = self.eq_summary.get(out)
+            self.curr_eqset = out
             print(X[0]['QueryId'], out)
             print(self.Current_Level, self.Levels_Needed)
             return '1'
@@ -566,24 +572,24 @@ class SimpleLeonModel:
         #         return ','.join(['1.00' for _ in X]
         X = [json.loads(x) if isinstance(x, str) else x for x in X]
         # print(X[0])
-        if self.Current_Level == self.Levels_Needed:
-            if self.Query_Id.startswith("picknode:"):
-                pick_plan = float(self.Query_Id[len("picknode:"):])
-                # change_flag = False
-                # print("Success begin hint leon", self.Query_Id)
-                # for j, i in enumerate(X):
-                #     if i['Plan']['Total Cost'] == pick_plan:
-                #         print(i['Plan']['Total Cost'], pick_plan, j)
-                #         change_flag = True
-                # if change_flag == False:
-                #     print("change_flag",self.Query_Id)
-                #     with open("./error.pkl", 'wb') as f:
-                #         pickle.dump(X, f) 
-                # print("Success exec hint leon", self.Query_Id)
+        if self.Query_Id.startswith("picknode:"):
+            temp_id = self.Query_Id[len("picknode:"):]
+            parts = temp_id.split(";")
+            curr_level = parts[0]
+            pick_plan = float(parts[1])
+            if curr_level == self.curr_eqset:
+                change_flag = False
+                print("Success begin hint leon", self.Query_Id)
+                for j, i in enumerate(X):
+                    if i['Plan']['Total Cost'] == pick_plan:
+                        print(i['Plan']['Total Cost'], pick_plan, j)
+                        change_flag = True
+                if change_flag == False:
+                    print("change_flag",self.Query_Id)
+                    with open("./error.pkl", 'wb') as f:
+                        pickle.dump(X, f) 
+                print("Success exec hint leon", self.Query_Id)
                 return ';'.join(['1.00,1,0' if i['Plan']['Total Cost'] != pick_plan else '0.01,0,9' for i in X]) + ';'
-            else:
-                # print("fail",self.Query_Id)
-                pass
 
         # Validation Accuracy
         # TODO: 可能不在Eq Summary里面？确实有可能，有些等价类没有被训练到，因为没有收集message
@@ -592,9 +598,9 @@ class SimpleLeonModel:
         #     print("out")
         #     return ';'.join(['1.00,1,0' for _ in X])
         # 新添加的等价类，但没有训练    
-        # if self.current_eq_summary is None:
-        #     print("out")
-        #     return ';'.join(['1.00,1,0' for _ in X]) + ';'
+        if self.current_eq_summary is None:
+            print("out")
+            return ';'.join(['1.00,1,0' for _ in X]) + ';'
 
         # 编码
         seqs, attns, QueryFeature = self.encoding(X)
