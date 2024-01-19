@@ -265,25 +265,25 @@ class ActorThatQueries:
         s1 = str(explain_str1).rstrip() + '\n' + sql
         s2 = str(explain_str2).rstrip() + '\n' + sql
 
-        with MyCursor(self.port) as cursor:
-            cursor.execute('SET enable_leon=on;')
-            cursor.execute(f"set leon_port={self.our_port};")
-            cursor.execute(f"SET leon_query_name='picknode:{plan[2]};{plan[3]}';") # 第0个plan 0 
-            result = Execute(s2, True, True, timeout, cursor).result
+        # with MyCursor(self.port) as cursor:
+        #     cursor.execute('SET enable_leon=on;')
+        #     cursor.execute(f"set leon_port={self.our_port};")
+        #     cursor.execute(f"SET leon_query_name='picknode:{plan[2]};{plan[3]}';") # 第0个plan 0 
+        #     result = Execute(s2, True, True, timeout, cursor).result
         
-        def explain_cost(n):
-                if 'Total Cost' in n:
-                    if abs(n['Total Cost'] - round(plan[3] * 100) / 100) < 0.02:
-                        return True
-                if 'Plans' in n:
-                    for sub_plan in n['Plans']:
-                        result = explain_cost(sub_plan)
-                        if result:
-                            return True
-                return False
+        # def explain_cost(n):
+        #         if 'Total Cost' in n:
+        #             if abs(n['Total Cost'] - round(plan[3] * 100) / 100) < 0.02:
+        #                 return True
+        #         if 'Plans' in n:
+        #             for sub_plan in n['Plans']:
+        #                 result = explain_cost(sub_plan)
+        #                 if result:
+        #                     return True
+        #         return False
         
-        if not explain_cost(result[0][0][0]['Plan']):
-            return None
+        # if not explain_cost(result[0][0][0]['Plan']):
+        #     return None
 
         with MyCursor(self.port) as cursor:
             cursor.execute('SET enable_leon=on;')

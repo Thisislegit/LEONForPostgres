@@ -360,8 +360,8 @@ class LeonModel:
         #         return ','.join(['1.00' for _ in X]
         X = [json.loads(x) if isinstance(x, str) else x for x in X]
         # print(X[0])
-        for x in X:
-            print(x['Plan']['Total Cost'])
+        # for x in X:
+        #     print(x['Plan']['Total Cost'])
 
         if self.Query_Id.startswith("picknode:"):
             temp_id = self.Query_Id[len("picknode:"):]
@@ -369,17 +369,17 @@ class LeonModel:
             curr_level = parts[0]
             pick_plan = float(parts[1])
             if curr_level == self.curr_eqset:
-                change_flag = False
-                print("Success begin hint leon", self.Query_Id)
-                for j, i in enumerate(X):
-                    if i['Plan']['Total Cost'] == pick_plan:
-                        print(i['Plan']['Total Cost'], pick_plan, j)
-                        change_flag = True
-                if change_flag == False:
-                    print("change_flag",self.Query_Id)
-                    with open("./error.pkl", 'wb') as f:
-                        pickle.dump(X, f) 
-                print("Success exec hint leon", self.Query_Id)
+                # change_flag = False
+                # print("Success begin hint leon", self.Query_Id)
+                # for j, i in enumerate(X):
+                #     if i['Plan']['Total Cost'] == pick_plan:
+                #         print(i['Plan']['Total Cost'], pick_plan, j)
+                #         change_flag = True
+                # if change_flag == False:
+                #     print("change_flag",self.Query_Id)
+                #     with open("./error.pkl", 'wb') as f:
+                #         pickle.dump(X, f) 
+                # print("Success exec hint leon", self.Query_Id)
                 return ';'.join(['1.00,1,0' if i['Plan']['Total Cost'] != pick_plan else '0.01,0,9' for i in X]) + ';'
 
         try:
@@ -578,17 +578,17 @@ class SimpleLeonModel:
             curr_level = parts[0]
             pick_plan = float(parts[1])
             if curr_level == self.curr_eqset:
-                change_flag = False
-                print("Success begin hint leon", self.Query_Id)
-                for j, i in enumerate(X):
-                    if i['Plan']['Total Cost'] == pick_plan:
-                        print(i['Plan']['Total Cost'], pick_plan, j)
-                        change_flag = True
-                if change_flag == False:
-                    print("change_flag",self.Query_Id)
-                    with open("./error.pkl", 'wb') as f:
-                        pickle.dump(X, f) 
-                print("Success exec hint leon", self.Query_Id)
+                # change_flag = False
+                # print("Success begin hint leon", self.Query_Id)
+                # for j, i in enumerate(X):
+                #     if i['Plan']['Total Cost'] == pick_plan:
+                #         print(i['Plan']['Total Cost'], pick_plan, j)
+                #         change_flag = True
+                # if change_flag == False:
+                #     print("change_flag",self.Query_Id)
+                #     with open("./error.pkl", 'wb') as f:
+                #         pickle.dump(X, f) 
+                # print("Success exec hint leon", self.Query_Id)
                 return ';'.join(['1.00,1,0' if i['Plan']['Total Cost'] != pick_plan else '0.01,0,9' for i in X]) + ';'
 
         # Validation Accuracy

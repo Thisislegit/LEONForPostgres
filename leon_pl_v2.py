@@ -295,7 +295,7 @@ if __name__ == '__main__':
     
     train_files, training_query = envs.load_train_files(conf['leon']['workload_type'])
     # ray.get(dict_actor.write_sql_id.remote(train_files))
-    chunk_size = 1 # the # of sqls in a chunk
+    chunk_size = 6 # the # of sqls in a chunk
     min_batch_size = 256
     TIME_OUT_Ratio = 2
     model_path = "./log/model.pth" 
@@ -322,7 +322,7 @@ if __name__ == '__main__':
     retrain_count = 3
     min_leon_time = dict()
     max_query_latency1 = 0
-    logger =  pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs', name="动态等价类 in 202", project=conf['leon']['wandb_project'])
+    logger =  pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs', name="动态等价类 imdb in 202", project=conf['leon']['wandb_project'])
     for key in conf:
         logger.log_hyperparams(conf[key])
     my_step = 0
@@ -330,7 +330,7 @@ if __name__ == '__main__':
     task_counter = ray.get_actor('counter')
     runtime_pg = 0
     runtime_leon = 0
-    min_exec_num = 0
+    min_exec_num = 2
     max_exec_num = 30
     encoding_dict = dict() # 用来存trees和indexes
     index_encoding = 0 # 用来记录索引值
@@ -463,8 +463,8 @@ if __name__ == '__main__':
                         
                         curr_QueryId = message[0]['QueryId']
                     print(f">>> message with {len(message)} plans")
-                    for m in message:
-                        print(m['Plan']['Total Cost'])
+                    # for m in message:
+                    #     print(m['Plan']['Total Cost'])
                     
                     # STEP 1) get node
                     if model_type == "Transformer":
