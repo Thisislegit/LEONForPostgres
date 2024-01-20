@@ -3127,10 +3127,10 @@ standard_join_search(PlannerInfo *root, int levels_needed, List *initial_rels)
 
 				MemoryContext oldcontext = MemoryContextSwitchTo(leon_state->leonContext);
 				double *calibrations = (double *)palloc0(length * sizeof(double));
-				
+				int picknode_index = 0;
 				// Read Response From LEON
-				get_calibrations(calibrations, lev, length, conn_fd);
-
+				get_calibrations(calibrations, lev, length, conn_fd, &picknode_index);
+				
 				shutdown(conn_fd, SHUT_RDWR);
 
 				int32_t curPosition = 0;
@@ -3147,6 +3147,14 @@ standard_join_search(PlannerInfo *root, int levels_needed, List *initial_rels)
 				pfree(calibrations);
 				MemoryContextSwitchTo(oldcontext);
 
+				Path *picknode_savepaths = NULL;
+
+				if (strncmp(leon_query_name, "picknode:", strlen("picknode:")) == 0 && lev == current_picknode_state->node_level)
+				{
+					picknode_savepaths = (Path *)list_nth(rel->savedpaths, picknode_index);
+					list_free(rel->savedpaths);
+					rel->savedpaths = list_make1(picknode_savepaths);
+				}
 
 			}
 			// Add Path At Last

@@ -304,7 +304,7 @@ class ActorThatQueries:
 
             def find_actual_total_time(n):
                 if 'Total Cost' in n and 'Actual Total Time' in n:
-                    if abs(n['Total Cost'] - round(plan[3] * 100) / 100) < 0.02:
+                    if abs(n['Total Cost'] - round(plan[3] * 100) / 100.0) < 0.02:
                         return n['Actual Total Time']
                 
                 if 'Plans' in n:
@@ -316,7 +316,9 @@ class ActorThatQueries:
 
             latency = find_actual_total_time(json_dict)
             if latency is None:
-                print('not found', plan[3])
+                # print('not found', plan[3], plan[2])
+                # print(sql)
+                # print(json_dict)
                 return None
             else:
                 exp[0].info['latency'] = latency

@@ -360,15 +360,19 @@ class LeonModel:
         #         return ','.join(['1.00' for _ in X]
         X = [json.loads(x) if isinstance(x, str) else x for x in X]
         # print(X[0])
-        # for x in X:
-        #     print(x['Plan']['Total Cost'])
 
         if self.Query_Id.startswith("picknode:"):
             temp_id = self.Query_Id[len("picknode:"):]
             parts = temp_id.split(";")
             curr_level = parts[0]
             pick_plan = float(parts[1])
+            # print(curr_level, self.curr_eqset)
             if curr_level == self.curr_eqset:
+                # for x in X:
+                #     if(float(x['Plan']['Total Cost']) == 763602.06796):
+                #         print(postgres.ParsePostgresPlanJson_1(x, self.workload.workload_info.alias_to_names))
+                #         # print(x)
+                #     print(x['Plan']['Total Cost'])
                 # change_flag = False
                 # print("Success begin hint leon", self.Query_Id)
                 # for j, i in enumerate(X):

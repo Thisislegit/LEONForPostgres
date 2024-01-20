@@ -278,6 +278,8 @@ if __name__ == '__main__':
         checkpoint = torch.load("./log/SimModel3.pth", map_location=DEVICE)
         torch.save(checkpoint, "./log/model.pth")
         print("load SimModel success")
+    with open("./log/exp_v5.pkl", "rb") as file:
+        exp_cache = pickle.load(file)
 
     with open ("./conf/namespace.txt", "r") as file:
         namespace = file.read().replace('\n', '')
@@ -322,7 +324,7 @@ if __name__ == '__main__':
     retrain_count = 3
     min_leon_time = dict()
     max_query_latency1 = 0
-    logger =  pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs', name="动态等价类 imdb in 202", project=conf['leon']['wandb_project'])
+    logger =  pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs', name="动态等价类,修复query长度 imdb in 202", project=conf['leon']['wandb_project'])
     for key in conf:
         logger.log_hyperparams(conf[key])
     my_step = 0
@@ -501,7 +503,7 @@ if __name__ == '__main__':
                             temp = node1.info['join_tables'].split(',') # sort
                             temp = ','.join(sorted(temp))
                             if temp == node2.info['join_tables']:
-                                if round(node1.cost * 100) / 100 == node2.cost:
+                                if round(node1.cost * 100) / 100.0 == node2.cost:
                                     Exp.collectRate(node2.info['join_tables'], first_time[curr_file[q_recieved_cnt]], tf_time[q_recieved_cnt], curr_file[q_recieved_cnt])
                                     c_node = node1
                                     
@@ -635,8 +637,22 @@ if __name__ == '__main__':
                     # print("len(Exp.GetExp(eqKey))", len(Exp.GetExp(eqKey)))
         print("Curr_Plan_Len: ", len(exec_plan))
         exec_plan = sorted(exec_plan, key=lambda x: x[0][0].cost, reverse=True)
+        new_exec_plan = []
+        for exec_one_plan in exec_plan:
+            should_add = True
+            cache_list = exp_cache.get(exec_one_plan[2])
+            if cache_list:
+                for one_cache in cache_list:
+                    if one_cache[0].cost == exec_one_plan[0][0].cost and \
+                    one_cache[0].info['sql_str'] == exec_one_plan[0][0].info['sql_str'] and one_cache[0].hint_str() == exec_one_plan[0][0].hint_str():
+                        exec_one_plan[0][0].info['latency'] = one_cache[0].info['latency']
+                        Exp.AppendExp(exec_one_plan[2], exec_one_plan[0])
+                        should_add = False
+                        break
+            if should_add:
+                new_exec_plan.append(exec_one_plan)
         ## 给索引
-        results = pool.map_unordered(actor_call_leon, exec_plan)
+        results = pool.map_unordered(actor_call_leon, new_exec_plan)
         loss_node = 0
         for result in results:
             if result == None:
@@ -728,7 +744,7 @@ if __name__ == '__main__':
         end_time = time.time()
         logger.log_metrics({"Time/train_time": end_time - start_time}, step=my_step)
         my_step += 1
-        with open("./log/exp_v4.pkl", 'wb') as f:
+        with open("./log/exp_v5.pkl", 'wb') as f:
             pickle.dump(Exp.OnlyGetExp(), f) 
         
 

@@ -78,7 +78,7 @@ extern char *deparse_expression_pretty(Node *expr, List *dpcontext,
 									   int prettyFlags, int startIndent);
 
 
-static void get_calibrations(double calibrations[], uint32 queryid, int32_t length, int conn_fd){
+static void get_calibrations(double calibrations[], uint32 queryid, int32_t length, int conn_fd, int* picknode_index){
   		// Read the response from the server and store it in the calibrations array
       // one element is like "1.12," length 5
 	  // one element is like "1.12,0,6;"
@@ -114,6 +114,11 @@ static void get_calibrations(double calibrations[], uint32 queryid, int32_t leng
         token = strtok_r(unit, ",", &restToken);
         if (token == NULL) break;
         double mantissa = atof(token); // Get mantissa
+
+		if (mantissa == 0.01)
+		{
+			*picknode_index = i;
+		}
 
         token = strtok_r(NULL, ",", &restToken);
         if (token == NULL) break;
