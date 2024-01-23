@@ -58,7 +58,9 @@ def load_model(model_path: str, prev_optimizer_state_dict=None):
         elif model_type == "TreeConv":
             print("load treeconv model")
             # model = treeconv.TreeConvolution(666, 50, 1).to(DEVICE)
-            model = treeconv.ResNet(666, 50, 1, treeconv.ResidualBlock, [1, 1, 1, 1]).to(DEVICE)
+            # model = treeconv.ResNet(55, 23, 1, treeconv.ResidualBlock, [1, 1, 1, 1]).to(DEVICE)
+            model = treeconv.ResNet(210, 34, 1, treeconv.ResidualBlock, [1, 1, 1, 1]).to(DEVICE)
+
         torch.save(model, model_path)
     else:
         model = torch.load(model_path, map_location=DEVICE).to(DEVICE)
@@ -278,6 +280,8 @@ if __name__ == '__main__':
         checkpoint = torch.load("./log/SimModel3.pth", map_location=DEVICE)
         torch.save(checkpoint, "./log/model.pth")
         print("load SimModel success")
+    with open("./log/exp_v4.pkl", "rb") as file:
+        exp_cache = pickle.load(file)
 
     with open ("./conf/namespace.txt", "r") as file:
         namespace = file.read().replace('\n', '')
@@ -297,7 +301,7 @@ if __name__ == '__main__':
     # ray.get(dict_actor.write_sql_id.remote(train_files))
     chunk_size = 6 # the # of sqls in a chunk
     min_batch_size = 256
-    TIME_OUT_Ratio = 2
+    TIME_OUT_Ratio = 2.5
     model_path = "./log/model.pth" 
     message_path = "./log/messages.pkl"
     prev_optimizer_state_dict = None
@@ -320,7 +324,7 @@ if __name__ == '__main__':
     retrain_count = 3
     min_leon_time = dict()
     max_query_latency1 = 0
-    logger =  pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs', name="resnet + abs costs, job_training in 202[同pair组队pct0.4,earlystoping 2 epoch]", project=conf['leon']['wandb_project'])
+    logger =  pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs', name="resnet + abs costs, stack_train in 203[同pair组队pct0.4,earlystoping 2 epoch]", project=conf['leon']['wandb_project'])
     for key in conf:
         logger.log_hyperparams(conf[key])
     my_step = 0
@@ -467,11 +471,11 @@ if __name__ == '__main__':
                         encoded_plans, attns, queryfeature, nodes = envs.leon_encoding(model_type, message, 
                                                                                        require_nodes=True, workload=workload, 
                                                                                        configs=configs, op_name_to_one_hot=op_name_to_one_hot,
-                                                                                       plan_parameters=plan_parameters, feature_statistics=feature_statistics)
+                                                                                       plan_parameters=plan_parameters, feature_statistics=feature_statistics, sql=sqls_chunk[q_recieved_cnt])
                     elif model_type == "TreeConv":
                         encoded_plans, attns, queryfeature, nodes = envs.leon_encoding(model_type, message, 
                                                                                        require_nodes=True, workload=workload, 
-                                                                                       queryFeaturizer=queryFeaturizer, nodeFeaturizer=nodeFeaturizer)
+                                                                                       queryFeaturizer=queryFeaturizer, nodeFeaturizer=nodeFeaturizer, sql=sqls_chunk[q_recieved_cnt])
                     # nodes = PlanToNode(workload, message)
                     
                     if nodes is None:
@@ -497,7 +501,7 @@ if __name__ == '__main__':
                             temp = node1.info['join_tables'].split(',') # sort
                             temp = ','.join(sorted(temp))
                             if temp == node2.info['join_tables']:
-                                if round(node1.cost * 100) / 100 == node2.cost:
+                                if round(node1.cost, 0) == round(node2.cost, 0):
                                     Exp.collectRate(node2.info['join_tables'], first_time[curr_file[q_recieved_cnt]], tf_time[q_recieved_cnt], curr_file[q_recieved_cnt])
                                     c_node = node1
                                     
@@ -631,8 +635,22 @@ if __name__ == '__main__':
                     # print("len(Exp.GetExp(eqKey))", len(Exp.GetExp(eqKey)))
         print("Curr_Plan_Len: ", len(exec_plan))
         exec_plan = sorted(exec_plan, key=lambda x: x[0][0].cost, reverse=True)
+        new_exec_plan = []
+        for exec_one_plan in exec_plan:
+            should_add = True
+            cache_list = exp_cache.get(exec_one_plan[2])
+            if cache_list:
+                for one_cache in cache_list:
+                    if one_cache[0].cost == exec_one_plan[0][0].cost and \
+                    one_cache[0].info['sql_str'] == exec_one_plan[0][0].info['sql_str'] and one_cache[0].hint_str() == exec_one_plan[0][0].hint_str():
+                        exec_one_plan[0][0].info['latency'] = one_cache[0].info['latency']
+                        Exp.AppendExp(exec_one_plan[2], exec_one_plan[0])
+                        should_add = False
+                        break
+            if should_add:
+                new_exec_plan.append(exec_one_plan)
         ## 给索引
-        results = pool.map_unordered(actor_call_leon, exec_plan)
+        results = pool.map_unordered(actor_call_leon, new_exec_plan)
         for result in results:
             if result == None:
                 print("*" * 50)
@@ -678,8 +696,8 @@ if __name__ == '__main__':
             train_size = int(0.8 * dataset_size)
             val_size = dataset_size - train_size
             train_ds, val_ds = torch.utils.data.random_split(leon_dataset, [train_size, val_size])
-            dataloader_train = DataLoader(train_ds, batch_size=1536, shuffle=True, num_workers=7)
-            dataloader_val = DataLoader(val_ds, batch_size=1536, shuffle=False, num_workers=7)
+            dataloader_train = DataLoader(train_ds, batch_size=1024, shuffle=True, num_workers=7)
+            dataloader_val = DataLoader(val_ds, batch_size=1024, shuffle=False, num_workers=7)
             # dataset_test = BucketDataset(Exp.OnlyGetExp(), keys=Exp.GetExpKeys(), nodeFeaturizer=nodeFeaturizer, dict=encoding_dict)
             # batch_sampler = BucketBatchSampler(dataset_test.buckets, batch_size=1)
             # dataloader_test = DataLoader(dataset_test, batch_sampler=batch_sampler, num_workers=7)

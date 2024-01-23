@@ -316,7 +316,8 @@ class LeonModel:
                     ).to(DEVICE) # server.py 和 train.py 中的模型初始化也需要相同, 这里还没加上！！！
             elif self.model_type == "TreeConv":
                 print("load treeconv model")
-                model = treeconv.TreeConvolution(666, 50, 1).to(DEVICE)
+                # model = treeconv.TreeConvolution(55, 23, 1).to(DEVICE)
+                model = treeconv.TreeConvolution(210, 34, 1).to(DEVICE)
             torch.save(model, path)
         else:
             model = torch.load(path, map_location=DEVICE)
@@ -398,6 +399,7 @@ class LeonModel:
 
         # 编码
         seqs, attns, QueryFeature = self.encoding(X)
+        # print("seqs", seqs.shape, "attns", attns.shape, "QueryFeature", QueryFeature.shape)
 
         # 推理
         cali_strs = self.inference(seqs, attns, QueryFeature)
@@ -523,7 +525,8 @@ class SimpleLeonModel:
                     ).to(DEVICE) # server.py 和 train.py 中的模型初始化也需要相同, 这里还没加上！！！
             elif self.model_type == "TreeConv":
                 print("load treeconv model")
-                model = treeconv.TreeConvolution(666, 50, 1).to(DEVICE)
+                model = treeconv.TreeConvolution(210, 34, 1).to(DEVICE)
+                # model = treeconv.TreeConvolution(55, 23, 1).to(DEVICE)
             torch.save(model, path)
         else:
             model = torch.load(path, map_location=DEVICE)

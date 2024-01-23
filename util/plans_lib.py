@@ -170,7 +170,9 @@ class Node(object):
         aliases = self.leaf_ids(alias_only=True)
 
         def _KeepRelevantJoins(s):
-            splits = s.split('=')
+            # splits = s.split('=')
+            splits = re.split(r'[=><]', s)
+            splits = list(filter(None, splits))
             l, r = splits[0].strip(), splits[1].strip()
     
             l_alias = l.split('.')[0]

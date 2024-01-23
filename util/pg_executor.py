@@ -274,7 +274,7 @@ class ActorThatQueries:
             json_dict = result[0][0][0]
             latency = float(json_dict['Execution Time'])
             exp[0].info['latency'] = latency
-            if json_dict['Plan']['Total Cost'] != round(plan[3] * 100) / 100:
+            if round(json_dict['Plan']['Total Cost'], 0) != round(plan[3], 0):
                 print(json_dict['Plan']['Total Cost'], plan[3])
                 print(sql)
                 return None

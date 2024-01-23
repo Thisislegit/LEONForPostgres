@@ -10,7 +10,7 @@ if [ ! -d "./logs/" ]; then
     mkdir "./logs/"
 fi
 
-PREFIX_DIR="/data1/wyz/DATA_1120"
+PREFIX_DIR="/data1/wangyuze/DATA_1120"
 
 cd "$PREFIX_DIR"
 
@@ -20,10 +20,10 @@ cd "$PREFIX_DIR"
 ./bin/pg_ctl -D ./data2 restart
 ./bin/pg_ctl -D ./data3 restart
 ./bin/pg_ctl -D ./data4 restart
-./bin/pg_ctl -D ./data5 restart
+# ./bin/pg_ctl -D ./data5 restart
 
-cd "/data1/wyz/online/LEONForPostgres/conf"
-python pre_warm.py
+cd "/data1/wangyuze/LEONForPostgres/conf"
+# python pre_warm.py
 
 cd ..
 

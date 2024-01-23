@@ -58,7 +58,7 @@ def load_model(model_path: str, prev_optimizer_state_dict=None):
                         ).to(DEVICE)
         elif model_type == "TreeConv":
             print("load treeconv model")
-            model = treeconv.TreeConvolution(666, 50, 1).to(DEVICE)
+            model = treeconv.TreeConvolution(55, 22, 1).to(DEVICE)
         torch.save(model, model_path)
     else:
         model = torch.load(model_path, map_location=DEVICE).to(DEVICE)
@@ -175,7 +175,8 @@ def getNodesCost(nodes):
 
 def initEqSet():
     train_file, training_query = envs.load_train_files(conf['leon']['workload_type'])
-    equ_tem = envs.find_alias(training_query)
+    # equ_tem = envs.find_alias(training_query)
+    equ_tem = []
     equ_set = set() # 用集合 方便 eq keys 中去重
     for i in equ_tem:
         e_tem = i.split(',')
@@ -413,12 +414,13 @@ if __name__ == '__main__':
                         os.makedirs(folder_path)
 
                     # Construct file name and file content
-                    file_name = "job_train.txt"
+                    file_name = "tpch_train.txt"
                     file_content = node[0].info['sql_str']
 
                     # Append the content to the file
                     with open(os.path.join(folder_path, file_name), "a") as f:
                         f.write(f"{curr_file[q_send_cnt]}#####" + file_content + "\n")
+                        print(f"Successfully write {curr_file[q_send_cnt]}#####{file_content} to {file_name}")
                     
         ch_start_idx += chunk_size
         if os.path.exists(message_path):
