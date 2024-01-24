@@ -130,13 +130,14 @@ def get_ucb_idx(cali_all, pgcosts):
     cali_mean = cali_all.mean(dim = 1) # 每个 plan 的 cali 均值 [# of plan] | 值为 1 左右
     cali_var = cali_all.var(dim = 1) # [# of plan] | 值为 0 左右
     # costs = pgcosts # [# of plan]
-    # cost_t = torch.mul(cali_mean, costs) # 计算 calibration mean * pg返回的cost [# of plan]
+    cost_t = torch.mul(cali_mean, costs) # 计算 calibration mean * pg返回的cost [# of plan]
 
     # cali_min, _ = cost_t.min(dim = 0) # plan 的 cali 最小值 [# of plan] 【cali_min只有一个值？】
     # print("cost_min.shape(): ", cali_min.shape)
     # print(cali_min)            
     # ucb = cali_var / cali_var.max() - cali_min / cali_min.max()
-    ucb = cali_var / cali_var.max()
+    # ucb = cali_var / cali_var.max()
+    ucb = cost_t
     # ucb = cali_var / cali_var.max() - cost_t / cost_t.max() # [# of plan]
     # print("len(ucb)", len(ucb))
     ucb_sort_idx = torch.argsort(ucb, descending=True) # 张量排序索引 | ucb_sort[0] 是uncertainty高的plan在plan_info中的索引
@@ -324,7 +325,7 @@ if __name__ == '__main__':
     retrain_count = 3
     min_leon_time = dict()
     max_query_latency1 = 0
-    logger =  pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs', name="动态等价类,修复query长度 imdb in 202", project=conf['leon']['wandb_project'])
+    logger =  pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs', name="不收集新的等价类,只把level放开 imdb in 202", project=conf['leon']['wandb_project'])
     for key in conf:
         logger.log_hyperparams(conf[key])
     my_step = 0
@@ -388,15 +389,31 @@ if __name__ == '__main__':
         logger.log_metrics({f"Runtime/all_leon": runtime_leon}, step=my_step)
         
         ###############收集新的等价类##############################  
-        for q_send_cnt in range(chunk_size):
-            if retrain_count >= 3 and curr_file[q_send_cnt] not in sql_id: # 最好情况好于0.8
-            # if retrain_count >= 5:
-                curNode = Nodes[q_send_cnt]
-                if curNode:
-                    collects(curNode, task_counter, Exp, None, tf_time[q_send_cnt], sqls_chunk[q_send_cnt], curr_file[q_send_cnt], model)
+        # for q_send_cnt in range(chunk_size):
+        #     if retrain_count >= 3 and curr_file[q_send_cnt] not in sql_id: # 最好情况好于0.8
+        #     # if retrain_count >= 5:
+        #         curNode = Nodes[q_send_cnt]
+        #         if curNode:
+        #             collects(curNode, task_counter, Exp, None, tf_time[q_send_cnt], sqls_chunk[q_send_cnt], curr_file[q_send_cnt], model)
+        exp_key = Exp.GetExpKeys()
         ray.get(task_counter.WriteOnline.remote(True))
         for q_send_cnt in range(chunk_size):
-            postgres.getPlans(sqls_chunk[q_send_cnt], None, check_hint_used=False, ENABLE_LEON=True, curr_file=curr_file[q_send_cnt])
+            # postgres.getPlans(sqls_chunk[q_send_cnt], None, check_hint_used=False, ENABLE_LEON=True, curr_file=curr_file[q_send_cnt])
+            curNode = Nodes[q_send_cnt]
+            if curNode:
+                curNode.info['sql_str'] = sqls_chunk[q_send_cnt]
+                curNode.GetOrParseSql()
+                allPlans = [curNode]
+                while (allPlans):
+                    currentNode = allPlans.pop(0)
+                    allPlans.extend(currentNode.children)
+                    if currentNode.IsJoin():
+                        cur_join_ids = ','.join(
+                            sorted([i.split(" AS ")[-1] for i in currentNode.leaf_ids()]))
+                        if cur_join_ids in exp_key:
+                            currentNode.info['sql_str'] = currentNode.to_sql(curNode.info['parsed_join_conds'], with_select_exprs=True)
+                            postgres.getPlans(currentNode.info['sql_str'], None, check_hint_used=False, ENABLE_LEON=True, curr_file=curr_file[q_send_cnt])
+
         ray.get(task_counter.WriteOnline.remote(False))
         ##########################################################
         leon_node = []
@@ -477,7 +494,7 @@ if __name__ == '__main__':
                     elif model_type == "TreeConv":
                         encoded_plans, attns, queryfeature, nodes = envs.leon_encoding(model_type, message, 
                                                                                        require_nodes=True, workload=workload, 
-                                                                                       queryFeaturizer=queryFeaturizer, nodeFeaturizer=nodeFeaturizer, sql=sqls_chunk[q_recieved_cnt])
+                                                                                       queryFeaturizer=queryFeaturizer, nodeFeaturizer=nodeFeaturizer, sql=None)
                     # nodes = PlanToNode(workload, message)
                     
                     if nodes is None:

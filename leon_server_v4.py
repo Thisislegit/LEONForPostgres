@@ -387,7 +387,7 @@ class LeonModel:
                 return ';'.join(['1.00,1,0' if i['Plan']['Total Cost'] != pick_plan else '0.01,0,9' for i in X]) + ';'
 
         try:
-            if ray.get(self.task_counter.GetOnline.remote()):
+            if ray.get(self.task_counter.GetOnline.remote()) and self.Current_Level == self.Levels_Needed:
                 self.task_counter.Add_task.remote()
                 # self.writer_hander.recieved_task += 1 需要试一下能不能直接成员变量 +1?
                 self.writer_hander.write_file.remote(X)

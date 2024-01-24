@@ -264,7 +264,7 @@ class Experience:
                     if (j[0].info['sql_str'] != k[0].info['sql_str']):
                         continue
                     # if (j[0].info['latency'] == k[0].info['latency']): # latency 相同 1s之内不把他train_pair
-                    if max(j[0].info['latency'],k[0].info['latency']) / min(j[0].info['latency'],k[0].info['latency']) < 1.05:
+                    if max(j[0].info['latency'],k[0].info['latency']) / (min(j[0].info['latency'],k[0].info['latency']) + 0.001) < 1.05:
                         continue
                     tem = [j, k]
                     # tem.append(j)

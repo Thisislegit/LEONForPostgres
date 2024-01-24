@@ -23,6 +23,8 @@ cd "$PREFIX_DIR"
 ./bin/pg_ctl -D ./data5 restart
 ./bin/pg_ctl -D ./data6 restart
 ./bin/pg_ctl -D ./data7 restart
+./bin/pg_ctl -D ./data8 restart
+./bin/pg_ctl -D ./data9 restart
 cd "/data1/wyz/online/LEONForPostgres/conf"
 python pre_warm.py
 

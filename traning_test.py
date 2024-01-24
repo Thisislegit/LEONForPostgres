@@ -584,10 +584,10 @@ class ResNet(nn.Module):
 
 if __name__ == '__main__':
 
-    with open('./log/exp_cx202.pkl', 'rb') as f:
+    with open('./log/exp_v5_copy.pkl', 'rb') as f:
         exp1 = pickle.load(f)
 
-    with open('./log/exp_wyz203.pkl', 'rb') as f:
+    with open('./log/exp_v5_copy.pkl', 'rb') as f:
         exp2 = pickle.load(f)
 
     dict_1 = dict()
@@ -595,77 +595,78 @@ if __name__ == '__main__':
     exp2_new = dict()
     key = None
     prev_optimizer_state_dict = None
-    model = ResNet(820, 54, 1, ResidualBlock, [1, 1, 1, 1])
+    model = ResNet(666, 50, 1, ResidualBlock, [1, 1, 1, 1])
     model = Test_Leon(model)
     
-    workload = envs.wordload_init('job')
+    workload = envs.wordload_init('job_training')
     nodeFeaturizer = plans_lib.TreeNodeFeaturizer_V2(workload.workload_info)
     queryFeaturizer = plans_lib.QueryFeaturizer(workload.workload_info)
     i = 0
-    for key in exp1.keys():
-        grouped_data = {}
-        for item in exp1[key]:
-            sql_str_value = item[0].info['sql_str']
-            if sql_str_value not in grouped_data:
-                grouped_data[sql_str_value] = []
-            grouped_data[sql_str_value].append(item)
-        for key, group in grouped_data.items():
-            group.sort(key=lambda x: x[0].cost, reverse=False)
-            to_remove = len(group) // 2
-            group = group[:-to_remove]
-            grouped_data[key] = group
-        exp1_new[key] = []
-        for values in grouped_data.values():
-            exp1_new[key].extend(values)
-        for j, plan in enumerate(exp1_new[key]):
-            null_nodes = plans_lib.Binarize(plan[0])
-            tree, index = encoding.PreTreeConvFeaturize(nodeFeaturizer, [null_nodes]) 
-            exp1_new[key][j][0].info['index'] = i
-            exp1_new[key][j][0].info['query_feature'] = torch.from_numpy(queryFeaturizer(plan[0]))
-            dict_1[i] = (tree, index)
-            i += 1
-    for key in exp2.keys():
-        grouped_data = {}
-        for item in exp2[key]:
-            sql_str_value = item[0].info['sql_str']
-            if sql_str_value not in grouped_data:
-                grouped_data[sql_str_value] = []
-            grouped_data[sql_str_value].append(item)
-        for key, group in grouped_data.items():
-            group.sort(key=lambda x: x[0].cost, reverse=False)
-            to_remove = len(group) // 2
-            group = group[:-to_remove]
-            grouped_data[key] = group
-        exp2_new[key] = []
-        for values in grouped_data.values():
-            exp2_new[key].extend(values)
-        for j, plan in enumerate(exp2_new[key]):
-            null_nodes = plans_lib.Binarize(plan[0])
-            tree, index = encoding.PreTreeConvFeaturize(nodeFeaturizer, [null_nodes]) 
-            exp2_new[key][j][0].info['index'] = i
-            exp2_new[key][j][0].info['query_feature'] = torch.from_numpy(queryFeaturizer(plan[0]))
-            dict_1[i] = (tree, index)
-            i += 1
     # for key in exp1.keys():
-    #     for j, plan in enumerate(exp1[key]):
+    #     grouped_data = {}
+    #     for item in exp1[key]:
+    #         sql_str_value = item[0].info['sql_str']
+    #         if sql_str_value not in grouped_data:
+    #             grouped_data[sql_str_value] = []
+    #         grouped_data[sql_str_value].append(item)
+    #     for key, group in grouped_data.items():
+    #         group.sort(key=lambda x: x[0].cost, reverse=False)
+    #         to_remove = len(group) // 2
+    #         group = group[:-to_remove]
+    #         grouped_data[key] = group
+    #     exp1_new[key] = []
+    #     for values in grouped_data.values():
+    #         exp1_new[key].extend(values)
+    #     for j, plan in enumerate(exp1_new[key]):
     #         null_nodes = plans_lib.Binarize(plan[0])
     #         tree, index = encoding.PreTreeConvFeaturize(nodeFeaturizer, [null_nodes]) 
-    #         exp1[key][j][0].info['index'] = i
-    #         exp1[key][j][0].info['query_feature'] = torch.from_numpy(queryFeaturizer(plan[0]))
+    #         exp1_new[key][j][0].info['index'] = i
+    #         exp1_new[key][j][0].info['query_feature'] = torch.from_numpy(queryFeaturizer(plan[0]))
     #         dict_1[i] = (tree, index)
     #         i += 1
     # for key in exp2.keys():
-    #     for j, plan in enumerate(exp2[key]):
+    #     grouped_data = {}
+    #     for item in exp2[key]:
+    #         sql_str_value = item[0].info['sql_str']
+    #         if sql_str_value not in grouped_data:
+    #             grouped_data[sql_str_value] = []
+    #         grouped_data[sql_str_value].append(item)
+    #     for key, group in grouped_data.items():
+    #         group.sort(key=lambda x: x[0].cost, reverse=False)
+    #         to_remove = len(group) // 2
+    #         group = group[:-to_remove]
+    #         grouped_data[key] = group
+    #     exp2_new[key] = []
+    #     for values in grouped_data.values():
+    #         exp2_new[key].extend(values)
+    #     for j, plan in enumerate(exp2_new[key]):
     #         null_nodes = plans_lib.Binarize(plan[0])
     #         tree, index = encoding.PreTreeConvFeaturize(nodeFeaturizer, [null_nodes]) 
-    #         exp2[key][j][0].info['index'] = i
-    #         exp2[key][j][0].info['query_feature'] = torch.from_numpy(queryFeaturizer(plan[0]))
+    #         exp2_new[key][j][0].info['index'] = i
+    #         exp2_new[key][j][0].info['query_feature'] = torch.from_numpy(queryFeaturizer(plan[0]))
     #         dict_1[i] = (tree, index)
     #         i += 1
-
-    train_pairs1 = Getpair(exp1_new, key=None)
+    for key in exp1.keys():
+        for j, plan in enumerate(exp1[key]):
+            null_nodes = plans_lib.Binarize(plan[0])
+            tree, index = encoding.PreTreeConvFeaturize(nodeFeaturizer, [null_nodes]) 
+            exp1[key][j][0].info['index'] = i
+            exp1[key][j][0].info['query_feature'] = torch.from_numpy(queryFeaturizer(plan[0]))
+            dict_1[i] = (tree, index)
+            i += 1
+    for key in exp2.keys():
+        for j, plan in enumerate(exp2[key]):
+            null_nodes = plans_lib.Binarize(plan[0])
+            tree, index = encoding.PreTreeConvFeaturize(nodeFeaturizer, [null_nodes]) 
+            exp2[key][j][0].info['index'] = i
+            exp2[key][j][0].info['query_feature'] = torch.from_numpy(queryFeaturizer(plan[0]))
+            dict_1[i] = (tree, index)
+            i += 1
+    exp1['an,chn,ci,cn,mc,n,rt,t'] = exp1['an,chn,ci,cn,mc,n,rt,t'][:544]
+    exp2['an,chn,ci,cn,mc,n,rt,t'] = exp2['an,chn,ci,cn,mc,n,rt,t'][544:]
+    train_pairs1 = Getpair(exp1, key='an,chn,ci,cn,mc,n,rt,t')
     leon_dataset1 = prepare_dataset(train_pairs1, True, nodeFeaturizer, queryFeaturizer, dict=dict_1)
-    train_pairs2 = Getpair(exp2_new, key=None)
+    train_pairs2 = Getpair(exp2, key='an,chn,ci,cn,mc,n,rt,t')
     leon_dataset2 = prepare_dataset(train_pairs2, True, nodeFeaturizer, queryFeaturizer, dict=dict_1)
 
     def collate_fn(batch):
@@ -697,12 +698,12 @@ if __name__ == '__main__':
 
     # model = load_model(model_path, prev_optimizer_state_dict).to(DEVICE)
     model.optimizer_state_dict = prev_optimizer_state_dict
-    logger = pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs', name="同sql,resnet_torchabs", project='leon3')
+    logger = pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs', name="一个模型", project='leon3')
 
     trainer = pl.Trainer(accelerator="gpu",
                          strategy="ddp",
                          sync_batchnorm=True,
-                         devices=[0, 3],
+                         devices=[0],
                         # devices=[3],
                         max_epochs=100,
                         logger=logger,
