@@ -26,8 +26,8 @@ from config import read_config
 from util import treeconv
 import torch.nn.functional as F
 conf = read_config()
-from traning_test import *
-from joblib import dump, load
+from training_test import *
+
 
 @ray.remote
 class TaskCounter:
@@ -192,13 +192,12 @@ class LeonModel:
         self.Levels_Needed = None
         self.Query_Id = None
 
-        # checkpoint = torch.load("./logs/wandb/run-20240129_014209-je86ob6p/files/best-epoch=18-val_acc=0.726.ckpt", map_location=DEVICE)
-        # checkpoint['state_dict'] = \
-        # {key.replace('model.', ''): value for key, value in checkpoint['state_dict'].items()}
+        checkpoint = torch.load("./logs/wandb/run-20240128_114924-iaxzmqgu/files/best-epoch=18-val_acc=0.726.ckpt", map_location=DEVICE)
+        checkpoint['state_dict'] = \
+        {key.replace('model.', ''): value for key, value in checkpoint['state_dict'].items()}
         # Load the transformed state_dict into your model
-        # self.dnn_model = DNN(77, [512, 256, 128], 2)
-        # self.dnn_model.load_state_dict(checkpoint['state_dict'])
-        self.xgbod = load('log/clf.joblib')
+        self.dnn_model = DNN(77, [512, 256, 128], 2)
+        self.dnn_model.load_state_dict(checkpoint['state_dict'])
         print("finish init")
             
 
@@ -302,10 +301,8 @@ class LeonModel:
             return trees, indexes, queryfeature, nodes
     
     def inference(self, seqs, attns, QueryFeature=None, nodes=None):
-        cali_all = self.get_calibrations(seqs, attns, QueryFeature)
-        # cali_all = 1000 * torch.rand(cali_all.shape[0])
-        # print(cali_all)
-        # cali_str = ['{:.2f}'.format(i) for i in cali_all.tolist()] # 最后一次 cali
+        # cali_all = self.get_calibrations(seqs, attns, QueryFeature)
+        cali_all = torch.ones(len(nodes))
         def diff_normalized(p1, p2):
             norm = torch.sum(p1, dim=1)
             pair = (p1 - p2) / norm.unsqueeze(1)
@@ -313,15 +310,27 @@ class LeonModel:
         cost_node = nodes[0]
         # for i, node in enumerate(nodes):
         #     self.dnn_model.eval()
+        #     print(self.dnn_model(diff_normalized(node.info['needed'], cost_node.info['needed']).to(torch.float32)).squeeze(0))
         #     if self.dnn_model(diff_normalized(node.info['needed'], cost_node.info['needed']).to(torch.float32)).squeeze(0)[0] > 0.65:
         #         if i != 0:
         #             cali_all[i] = 1000000
-        for i, node in enumerate(nodes):
-            # print(self.xgbod.predict(diff_normalized(node.info['needed'], cost_node.info['needed']).numpy())[0])
-            if self.xgbod.predict(diff_normalized(node.info['needed'], cost_node.info['needed']).numpy())[0] == 0:
-                if i != 0:
-                    cali_all[i] = 1000000
-
+        self.__model.eval()
+        
+        with torch.no_grad():
+            for i in range(len(nodes)):
+                for j in range(i + 1, len(nodes)):
+                    if cali_all[i] == 1000000 or cali_all[j] == 1000000:
+                        continue
+                    if torch.argmax(self.__model(QueryFeature[i].unsqueeze(0), seqs[i].unsqueeze(0), attns[i].unsqueeze(0), QueryFeature[j].unsqueeze(0), seqs[j].unsqueeze(0), attns[j].unsqueeze(0)).squeeze(0)) == 0:
+                        cali_all[i] += 1
+                    else:
+                        cali_all[j] += 1
+        
+        # cali_all = 1000 * torch.rand(cali_all.shape[0])
+        # print(cali_all)
+        # cali_str = ['{:.2f}'.format(i) for i in cali_all.tolist()] # 最后一次 cali
+        
+        print(cali_all)
         def format_scientific_notation(number):
             str_number = "{:e}".format(number)
             mantissa, exponent = str_number.split('e')

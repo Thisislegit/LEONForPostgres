@@ -55,3 +55,4 @@ wandb/
 conf/ray_address.txt
 *.ipynb
 conf/ray_address.txt
+lightning_logs/

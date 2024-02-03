@@ -17,13 +17,11 @@ from leon_experience import TIME_OUT
 from lightning.pytorch.strategies import DDPStrategy
 import pytorch_lightning.callbacks as plc
 import wandb
-from pyod.models.xgbod import XGBOD
-channels = ['EstNodeCost', 'EstRows', 'EstBytes', 'EstRowsProcessed', 'EstBytesProcessed',
-                'LeafWeightEstRowsWeightedSum', 'LeafWeightEstBytesWeightedSum']
 conf = read_config()
 
 pl.seed_everything(42)
-
+channels = ['EstNodeCost', 'EstRows', 'EstBytes', 'EstRowsProcessed', 'EstBytesProcessed',
+                'LeafWeightEstRowsWeightedSum', 'LeafWeightEstBytesWeightedSum']
 def Getpair(exp, key=None):
     pairs = []
     if key:
@@ -48,6 +46,8 @@ def Getpair(exp, key=None):
                 #     continue
                 tem = [j, k]
                 pairs.append(tem)
+                tem = [k, j]
+                pairs.append(tem)
     else:          
         for eq in exp.keys():
             for j in exp[eq]:
@@ -68,6 +68,8 @@ def Getpair(exp, key=None):
                     # if j[0].info['latency'] == 90000 or k[0].info['latency'] == 90000:
                     #     continue
                     tem = [j, k]
+                    pairs.append(tem)
+                    tem = [k, j]
                     pairs.append(tem)
     return pairs
 
@@ -120,8 +122,6 @@ def Getpair2(exp, key=None):
                     # if j[0].info['latency'] == 90000 or k[0].info['latency'] == 90000:
                     #     continue
                     tem = [j, k]
-                    pairs.append(tem)
-                    tem = [k, j]
                     pairs.append(tem)
     return pairs
 
@@ -186,8 +186,7 @@ class TestDataset(LeonDataset):
         # trees2, indexes2 = encoding.TreeConvFeaturize(self.nodeFeaturizer, [null_nodes2])
         query_feats1 = self.nodes1[idx].info['query_feature']
         query_feats2 = self.nodes2[idx].info['query_feature']
-        vecs1 = self.dict[self.nodes1[idx].info['index']][2].squeeze(0)
-        vecs2 = self.dict[self.nodes2[idx].info['index']][2].squeeze(0)
+
         return {
             'labels': self.labels[idx],
             'costs1': self.costs1[idx],
@@ -197,9 +196,7 @@ class TestDataset(LeonDataset):
             'attns1': indexes1,
             'attns2': indexes2,
             'queryfeature1': query_feats1,
-            'queryfeature2': query_feats2,
-            'vecs1': vecs1,
-            'vecs2': vecs2
+            'queryfeature2': query_feats2
         }
     
     # def __getitem__(self, idx):
@@ -407,13 +404,8 @@ class Test_Leon(PL_Leon):
     def __init__(self, model, optimizer_state_dict=None, learning_rate=0.001):
         super().__init__(model, optimizer_state_dict, learning_rate)
     
-    def forward(self, plans, attns, queryfeature=None):
-        if self.model.model_type == 'Transformer':
-            if queryfeature is None:
-                return self.model(plans, attns)[:, 0]
-            return self.model(plans, attns, queryfeature)[:, 0]
-        elif self.model.model_type == 'TreeConv':
-            return torch.tanh(self.model(queryfeature, plans, attns)).add(1).squeeze(1)
+    def forward(self, plans1, attns1, queryfeature1, plans2, attns2, queryfeature2):
+        return self.model(queryfeature1, plans1, attns1, queryfeature2, plans2, attns2)
 
     def getBatchPairsLoss(self, batch):
         """
@@ -429,41 +421,19 @@ class Test_Leon(PL_Leon):
         attns2 = batch['attns2']
         queryfeature1 = batch['queryfeature1']
         queryfeature2 = batch['queryfeature2']
-
-        loss_fn = nn.BCELoss()
+        one_hot_labels = torch.nn.functional.one_hot(labels).to(torch.float32)
+        loss_fn = nn.CrossEntropyLoss()
         # step 1. retrieve encoded_plans and attns from pairs
 
 
-        # step 2. calculate batch_cali and calied_cost
-        # 0是前比后大 1是后比前大
-        batsize = costs1.shape[0]
-        encoded_plans = torch.cat((encoded_plans1, encoded_plans2), dim=0)
-        attns = torch.cat((attns1, attns2), dim=0)
-        if queryfeature1 is not None and queryfeature2 is not None:
-            queryfeature = torch.cat((queryfeature1, queryfeature2), dim=0)
-        else:
-            queryfeature = None
-        if queryfeature is None:
-            cali = self(encoded_plans, attns)
-        else:
-            cali = self(encoded_plans, attns, queryfeature) # cali.shape [# of plan, pad_length] cali 是归一化后的基数估计
-        costs = torch.cat((costs1, costs2), dim=0)
-        # print(costs1)
-        # print(costs2)
-        # print(labels)
-        # print(cali)
-        calied_cost = torch.log(costs) * cali 
+ 
+        cali = self(encoded_plans1, attns1, queryfeature1, encoded_plans2, attns2, queryfeature2) # cali.shape [# of plan, pad_length] cali 是归一化后的基数估计
+
         # calied_cost = cali
-        try:
-            sigmoid = F.sigmoid(-(calied_cost[:batsize] - calied_cost[batsize:]))
-            loss = loss_fn(sigmoid, labels.to(sigmoid.dtype)) + 0.2 * torch.abs(calied_cost - torch.log(costs)).mean()
-        except:
-            print(calied_cost, sigmoid)
+        loss = loss_fn(cali, one_hot_labels)
         # print(loss)
         with torch.no_grad():
-            prediction = torch.round(sigmoid)
-            # print(prediction)
-            accuracy = torch.sum(prediction == labels).item() / len(labels)
+            accuracy = torch.sum(torch.argmax(cali, dim=1) == labels).item() / len(labels)
         # print(softm[:, 1].shape, labels.shape)
         
         
@@ -517,17 +487,18 @@ class ResNet(nn.Module):
 
         self.conv1 = TreeConv1d(self.in_channels, 64)
         self.bn1 = nn.BatchNorm1d(64)
-
         self.in_channels = 64
-        self.layer1 = self._make_layer(block, 64, num_blocks[0])
-        self.layer2 = self._make_layer(block, 128, num_blocks[1])
-        self.layer3 = self._make_layer(block, 256, num_blocks[2])
-        self.layer4 = self._make_layer(block, 512, num_blocks[3])
+        self.layer1 = nn.Sequential(
+            self._make_layer(block, 64, num_blocks[0]),
+            self._make_layer(block, 128, num_blocks[1]),
+            self._make_layer(block, 256, num_blocks[2]),
+            self._make_layer(block, 512, num_blocks[3]),
+        )
         # self.linear = nn.Linear(512, num_classes)
         # self.max_pool = TreeMaxPool_With_Kernel_Stride()
 
         self.query_p = 0.3
-        self.query_mlp = nn.Sequential(
+        self.query_mlp1 = nn.Sequential(
             nn.Linear(feature_size, 128),
             nn.Dropout(p=self.query_p),
             nn.LayerNorm(128),
@@ -541,13 +512,15 @@ class ResNet(nn.Module):
 
         # self.plan_p = 0.2
         self.out_mlp = nn.Sequential(
-            nn.Linear(512, 32),
-            # nn.Dropout(p=self.plan_p),
+            nn.Linear(1024, 512),
             nn.LeakyReLU(),
-            nn.Linear(32, label_size),
+            nn.Linear(512, 256),
+            nn.LeakyReLU(),
+            nn.Linear(256, label_size),
+            nn.Softmax(dim=1)
         )
 
-        self.tree_pool = TreeMaxPool()
+        self.tree_pool1 = TreeMaxPool()
 
         self.apply(self._init_weights)
         self.model_type = "TreeConv"
@@ -568,29 +541,37 @@ class ResNet(nn.Module):
             self.in_channels = out_channels
         return nn.Sequential(*layers)
 
-    def forward(self, query_feats, trees, indexes):
-        query_embs = nn.functional.dropout(query_feats, p=0.5)
-        query_embs = self.query_mlp(query_feats.unsqueeze(1))
-        query_embs = query_embs.transpose(1, 2)
-        max_subtrees = trees.shape[-1]
-        #    print(query_embs.shape)
-        query_embs = query_embs.expand(query_embs.shape[0], query_embs.shape[1],
-                                       max_subtrees)
-        concat = torch.cat((query_embs, trees), axis=1)
+    def forward(self, query_feats1, trees1, indexes1, query_feats2, trees2, indexes2):
+        query_embs1 = nn.functional.dropout(query_feats1, p=0.5)
+        query_embs1 = self.query_mlp1(query_feats1.unsqueeze(1))
+        query_embs1 = query_embs1.transpose(1, 2)
+        max_subtrees1 = trees1.shape[-1]
+        query_embs1 = query_embs1.expand(query_embs1.shape[0], query_embs1.shape[1],
+                                       max_subtrees1)
+        concat1 = torch.cat((query_embs1, trees1), axis=1)
+        out1, indexes1 = self.conv1((concat1, indexes1))
+        out1 = self.bn1(out1)
+        out1 = F.relu(out1)
+        out1, indexes1 = self.layer1((out1, indexes1))
+        out1 = self.tree_pool1((out1, indexes1))
 
+        query_embs2 = nn.functional.dropout(query_feats2, p=0.5)
+        query_embs2 = self.query_mlp1(query_feats2.unsqueeze(1))
+        query_embs2 = query_embs2.transpose(1, 2)
+        max_subtrees2 = trees2.shape[-1]
+        query_embs2 = query_embs2.expand(query_embs2.shape[0], query_embs2.shape[1],
+                                        max_subtrees2)
+        concat2 = torch.cat((query_embs2, trees2), axis=1)
+        out2, indexes2 = self.conv1((concat2, indexes2))
+        out2 = self.bn1(out2)
+        out2 = F.relu(out2)
+        out2, indexes2 = self.layer1((out2, indexes2))
+        out2 = self.tree_pool1((out2, indexes2))
 
-        out, indexes = self.conv1((concat, indexes))
-        out = self.bn1(out)
-        out = F.relu(out)
-        # out, indexes = self.max_pool((out, indexes))
-        out, indexes = self.layer1((out, indexes))
-        out, indexes = self.layer2((out, indexes))
-        out, indexes = self.layer3((out, indexes))
-        out, indexes = self.layer4((out, indexes))
-        out = self.tree_pool((out, indexes))
-        # out = out.view(out.size(0), -1)
+        out = torch.cat((out1, out2), dim=1)
         out = self.out_mlp(out)
         return out
+
 
 def cal_by_dfs(root, key, ans):
     if key == 'Plan Rows':
@@ -650,13 +631,10 @@ class DNN(nn.Module):
         # input_size:[batch_size, input_size]
         x = self.linear1(input)
         x = self.dropout(x)
-        x = F.relu(x)
         x = self.linear2(x)
         x = self.dropout(x)
-        x = F.relu(x)
         x = self.linear3(x)
         x = self.dropout(x)
-        x = F.relu(x)
         x = self.linear4(x)
         x = self.softmax(x)
         return x
@@ -665,8 +643,8 @@ class PL_DNN(pl.LightningModule):
     def __init__(self, model, optimizer_state_dict=None, learning_rate=0.0001):
         super(PL_DNN, self).__init__()
         self.model = model
-        self.learning_rate = 0.0001
         self.optimizer_state_dict = optimizer_state_dict
+        self.learning_rate = 0.001
 
     def forward(self, input):
         return self.model(input)
@@ -704,24 +682,10 @@ class PL_DNN(pl.LightningModule):
     
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.model.parameters(), lr=0.0001)
-        if self.optimizer_state_dict is not None:
-            # Checks the params are the same.
-            # 'params': [139581476513104, ...]
-            curr = optimizer.state_dict()['param_groups'][0]['params']
-            prev = self.optimizer_state_dict['param_groups'][0]['params']
-            assert curr == prev, (curr, prev)
-            # print('Loading last iter\'s optimizer state.')
-            # Prev optimizer state's LR may be stale.
-            optimizer.load_state_dict(self.optimizer_state_dict)
-            for param_group in optimizer.param_groups:
-                param_group['lr'] = self.learning_rate
-            assert optimizer.state_dict(
-            )['param_groups'][0]['lr'] == self.learning_rate
-            # print('LR', self.learning_rate)
         return optimizer
 
 if __name__ == '__main__':
-    
+
     with open('./log/exp_cx202.pkl', 'rb') as f:
         exp1 = pickle.load(f)
 
@@ -733,7 +697,7 @@ if __name__ == '__main__':
     exp2_new = dict()
     key = None
     prev_optimizer_state_dict = None
-    model = ResNet(820, 54, 1, ResidualBlock, [1, 1, 1, 1])
+    model = ResNet(820, 54, 2, ResidualBlock, [1, 1, 1, 1])
     # model = torch.load("./log/SimModel0124.pth", map_location='cpu')
     model = Test_Leon(model)
     
@@ -761,18 +725,7 @@ if __name__ == '__main__':
             tree, index = encoding.PreTreeConvFeaturize(nodeFeaturizer, [null_nodes]) 
             exp1_new[key][j][0].info['index'] = i
             exp1_new[key][j][0].info['query_feature'] = torch.from_numpy(queryFeaturizer(plan[0]))
-            plan_channels = dict()
-            ops = workload.workload_info.all_ops
-            ops = np.array([entry.replace(' ', '') for entry in ops])
-            ops = np.where(ops == 'NestedLoop', 'NestLoop', ops)
-            ops = np.where(ops == 'Materialize', 'Material', ops)
-            for c in channels:
-                plan_channels[c] = dict()
-                for node_type in ops:
-                    plan_channels[c][node_type] = 0
-            get_channels_dfs(plan[0], plan_channels)
-            needed = torch.from_numpy(get_vecs([plan_channels]))
-            dict_1[i] = (tree, index, needed)
+            dict_1[i] = (tree, index)
             i += 1
     for key in exp2.keys():
         grouped_data = {}
@@ -794,18 +747,7 @@ if __name__ == '__main__':
             tree, index = encoding.PreTreeConvFeaturize(nodeFeaturizer, [null_nodes]) 
             exp2_new[key][j][0].info['index'] = i
             exp2_new[key][j][0].info['query_feature'] = torch.from_numpy(queryFeaturizer(plan[0]))
-            plan_channels = dict()
-            ops = workload.workload_info.all_ops
-            ops = np.array([entry.replace(' ', '') for entry in ops])
-            ops = np.where(ops == 'NestedLoop', 'NestLoop', ops)
-            ops = np.where(ops == 'Materialize', 'Material', ops)
-            for c in channels:
-                plan_channels[c] = dict()
-                for node_type in ops:
-                    plan_channels[c][node_type] = 0
-            get_channels_dfs(plan[0], plan_channels)
-            needed = torch.from_numpy(get_vecs([plan_channels]))
-            dict_1[i] = (tree, index, needed)
+            dict_1[i] = (tree, index)
             i += 1
     # for key in exp1.keys():
     #     for j, plan in enumerate(exp1[key]):
@@ -824,44 +766,18 @@ if __name__ == '__main__':
     #         dict_1[i] = (tree, index)
     #         i += 1
 
-    # train_pairs1 = Getpair(exp1_new, key=None)
-    # leon_dataset1 = prepare_dataset(train_pairs1, True, nodeFeaturizer, queryFeaturizer, dict=dict_1)
-    # train_pairs2 = Getpair(exp2_new, key=None)
-    # leon_dataset2 = prepare_dataset(train_pairs2, True, nodeFeaturizer, queryFeaturizer, dict=dict_1)
-    train_pairs3 = Getpair2(exp1_new, key=None)
-    leon_dataset3 = prepare_dataset(train_pairs3, True, nodeFeaturizer, queryFeaturizer, dict=dict_1)
-    train_pairs4 = Getpair2(exp2_new, key=None)
-    leon_dataset4 = prepare_dataset(train_pairs4, True, nodeFeaturizer, queryFeaturizer, dict=dict_1)
-    # def collate_fn(batch):
-    #     # 获取每个batch中的最大长度
-    #     max_len1 = max(item['encoded_plans1'].shape[1] for item in batch)
-    #     max_len2 = max(item['encoded_plans2'].shape[1] for item in batch)
-    #     max_len3 = max(max_len1, max_len2)
-    #     max_len4 = max(item['attns1'].shape[0] for item in batch)
-    #     max_len5 = max(item['attns2'].shape[0] for item in batch)
-    #     max_len6 = max(max_len4, max_len5)
-    #     # 在collate_fn中对每个batch进行padding
-    #     padded_batch = {}
-    #     for key in batch[0].keys():
-    #         if key.startswith('encoded_plans'):
-    #             # 处理树结构等需要padding的数据
-    #             padded_batch[key] = torch.stack([F.pad(item[key], pad=(0, max_len3 - item[key].shape[1])) for item in batch])
-    #         elif key.startswith('attns'):
-    #             # 处理attention等需要padding的数据
-    #             padded_batch[key] = torch.stack([F.pad(item[key], pad=(0, 0, 0, max_len6 - item[key].shape[0])) for item in batch])
-    #         else:
-    #             padded_batch[key] = torch.stack([item[key] for item in batch])
-
-    #     return padded_batch
+    train_pairs1 = Getpair(exp1_new, key=None)
+    leon_dataset1 = prepare_dataset(train_pairs1, True, nodeFeaturizer, queryFeaturizer, dict=dict_1)
+    train_pairs2 = Getpair(exp2_new, key=None)
+    leon_dataset2 = prepare_dataset(train_pairs2, True, nodeFeaturizer, queryFeaturizer, dict=dict_1)
     def collate_fn(batch):
-        batch_size = len(batch)
-        # max_len1 = max(item['encoded_plans1'].shape[1] for item in batch)
-        # max_len2 = max(item['encoded_plans2'].shape[1] for item in batch)
-        # max_len3 = max(max_len1, max_len2)
-        # max_len4 = max(item['attns1'].shape[0] for item in batch)
-        # max_len5 = max(item['attns2'].shape[0] for item in batch)
-        # max_len6 = max(max_len4, max_len5)
-        max_len3 = max_len6 = 200
+        # 获取每个batch中的最大长度
+        max_len1 = max(item['encoded_plans1'].shape[1] for item in batch)
+        max_len2 = max(item['encoded_plans2'].shape[1] for item in batch)
+        max_len3 = max(max_len1, max_len2)
+        max_len4 = max(item['attns1'].shape[0] for item in batch)
+        max_len5 = max(item['attns2'].shape[0] for item in batch)
+        max_len6 = max(max_len4, max_len5)
         # 在collate_fn中对每个batch进行padding
         padded_batch = {}
         for key in batch[0].keys():
@@ -873,105 +789,35 @@ if __name__ == '__main__':
                 padded_batch[key] = torch.stack([F.pad(item[key], pad=(0, 0, 0, max_len6 - item[key].shape[0])) for item in batch])
             else:
                 padded_batch[key] = torch.stack([item[key] for item in batch])
-        # labels = padded_batch['labels'].reshape(batch_size, -1).numpy()
-        # costs1 = padded_batch['costs1'].reshape(batch_size, -1).numpy()
-        # costs2 = padded_batch['costs2'].reshape(batch_size, -1).numpy()
-        # trees1 = padded_batch['encoded_plans1'].reshape(batch_size, -1).numpy()
-        # trees2 = padded_batch['encoded_plans2'].reshape(batch_size, -1).numpy()
-        # indexes1 = padded_batch['attns1'].reshape(batch_size, -1).numpy()
-        # indexes2 = padded_batch['attns2'].reshape(batch_size, -1).numpy()
-        # query_feats1 = padded_batch['queryfeature1'].reshape(batch_size, -1).numpy()
-        # query_feats2 = padded_batch['queryfeature2'].reshape(batch_size, -1).numpy()
-        def diff_normalized(p1, p2):
-            norm = torch.sum(p1, dim=1)
-            pair = (p1 - p2) / norm.unsqueeze(1)
-            return pair
-        vecs1 = padded_batch['vecs1'].reshape(batch_size, -1)
-        vecs2 = padded_batch['vecs2'].reshape(batch_size, -1)
-        diff = diff_normalized(vecs1, vecs2).numpy()
-        # Stack arrays horizontally
-        X = np.column_stack([diff])
 
-        return X
-    def collate_fn2(batch):
-        batch_size = len(batch)
-        max_len3 = max_len6 = 200
-        # 在collate_fn中对每个batch进行padding
-        padded_batch = {}
-        for key in batch[0].keys():
-            if key.startswith('encoded_plans'):
-                # 处理树结构等需要padding的数据
-                padded_batch[key] = torch.stack([F.pad(item[key], pad=(0, max_len3 - item[key].shape[1])) for item in batch])
-            elif key.startswith('attns'):
-                # 处理attention等需要padding的数据
-                padded_batch[key] = torch.stack([F.pad(item[key], pad=(0, 0, 0, max_len6 - item[key].shape[0])) for item in batch])
-            else:
-                padded_batch[key] = torch.stack([item[key] for item in batch])
-        labels = padded_batch['labels'].reshape(batch_size, -1).numpy()
-        # Stack arrays horizontally
-        X = np.column_stack([labels])
-        return X
-    # dataloader_train1 = DataLoader(leon_dataset3, batch_size=1024, shuffle=True, num_workers=7, collate_fn=collate_fn)
-    # dataloader_val1 = DataLoader(leon_dataset4, batch_size=1024, shuffle=False, num_workers=7, collate_fn=collate_fn)
-    # train_data = next(iter(dataloader_train1))
-    # dnn_model = DNN(train_data['vecs1'].shape[1], [512, 256, 128], 2)
-    # dnn_model = PL_DNN(dnn_model)
-    # logger = pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs', name="dnn", project='leon3')
-    # trainer = pl.Trainer(accelerator="gpu",
-    #                     #  strategy="ddp",
-    #                     #  sync_batchnorm=True,
-    #                      devices=[3],
-    #                     # devices=[3],
-    #                     max_epochs=20,
-    #                     logger=logger,
-    #                     callbacks=[plc.ModelCheckpoint(
-    #                     dirpath= logger.experiment.dir,
-    #                     monitor='val_acc',
-    #                     filename='best-{epoch:02d}-{val_acc:.3f}',
-    #                     save_top_k=1,
-    #                     mode='max',
-    #                     save_last=True
-    #                     )])
-    # trainer.fit(dnn_model, dataloader_train1, dataloader_val1)
-    # dataloader_train = DataLoader(leon_dataset1, batch_size=1024, shuffle=True, num_workers=7, collate_fn=collate_fn)
-    # dataloader_val = DataLoader(leon_dataset2, batch_size=1024, shuffle=False, num_workers=7, collate_fn=collate_fn)
-    dataloader_train = DataLoader(leon_dataset3, batch_size=1024, shuffle=False, num_workers=7, collate_fn=collate_fn)
-    dataloader_train_y = DataLoader(leon_dataset3, batch_size=1024, shuffle=False, num_workers=7, collate_fn=collate_fn2)
-    dataloader_val = DataLoader(leon_dataset4, batch_size=1024, shuffle=False, num_workers=7, collate_fn=collate_fn)
-    dataloader_val_y = DataLoader(leon_dataset4, batch_size=1024, shuffle=False, num_workers=7, collate_fn=collate_fn2)
-    X_train = np.concatenate([batch_data for batch_data in dataloader_train], axis=0)
-    y_train = np.concatenate([batch_data for batch_data in dataloader_train_y], axis=0)
-    X_test = np.concatenate([batch_data for batch_data in dataloader_val], axis=0)
-    y_test = np.concatenate([batch_data for batch_data in dataloader_val_y], axis=0)
-    model = XGBOD(n_estimators=5)
-    model.fit(X_train, y_train[:,0])
-    y_train_pred = model.predict(X_test)
-    acc = np.sum(y_train_pred == y_test[:,0]) / len(y_test)
-    print(acc)
-    # # dataset_val = BucketDataset(exp1, keys=key)
-    # # batch_sampler = BucketBatchSampler(dataset_val.buckets, batch_size=1)
-    # # dataloader_val = DataLoader(dataset_val, batch_sampler=batch_sampler)
+        return padded_batch
+    dataloader_train = DataLoader(leon_dataset1, batch_size=1024, shuffle=True, num_workers=7, collate_fn=collate_fn)
+    dataloader_val = DataLoader(leon_dataset2, batch_size=1024, shuffle=False, num_workers=7, collate_fn=collate_fn)
+    # dataset_val = BucketDataset(exp1, keys=key)
+    # batch_sampler = BucketBatchSampler(dataset_val.buckets, batch_size=1)
+    # dataloader_val = DataLoader(dataset_val, batch_sampler=batch_sampler)
 
-    # # model = load_model(model_path, prev_optimizer_state_dict).to(DEVICE)
-    # model.optimizer_state_dict = prev_optimizer_state_dict
-    # wandb.finish()
-    # logger1 = pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs', name="margin loss", project='leon3')
+    # model = load_model(model_path, prev_optimizer_state_dict).to(DEVICE)
+    model.optimizer_state_dict = prev_optimizer_state_dict
+    logger1 = pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs', name="margin loss", project='leon3')
 
-    # trainer = pl.Trainer(accelerator="gpu",
-    #                     #  strategy="ddp",
-    #                     #  sync_batchnorm=True,
-    #                      devices=[3],
-    #                     # devices=[3],
-    #                     max_epochs=20,
-    #                     logger=logger1,
-    #                     callbacks=[plc.ModelCheckpoint(
-    #                     dirpath= logger1.experiment.dir,
-    #                     monitor='val_acc',
-    #                     filename='best-{epoch:02d}-{val_acc:.3f}',
-    #                     save_top_k=1,
-    #                     mode='max',
-    #                     save_last=True
-    #                     )])
-    # trainer.fit(model, dataloader_train, dataloader_val)
+    trainer = pl.Trainer(accelerator="gpu",
+                        #  strategy="ddp",
+                        #  sync_batchnorm=True,
+                         devices=[3],
+                        # devices=[3],
+                        max_epochs=20,
+                        logger=logger1,
+                        callbacks=[plc.ModelCheckpoint(
+                        dirpath= logger1.experiment.dir,
+                        monitor='val_acc',
+                        filename='best-{epoch:02d}-{val_acc:.3f}',
+                        save_top_k=1,
+                        mode='max',
+                        save_last=True
+                        )],
+                        # fast_dev_run=True
+                        )
+    trainer.fit(model, dataloader_train, dataloader_val)
 
-    # prev_optimizer_state_dict = trainer.optimizers[0].state_dict()
+    prev_optimizer_state_dict = trainer.optimizers[0].state_dict()

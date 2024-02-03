@@ -25,9 +25,10 @@ import uuid
 from config import read_config
 from util import treeconv
 import torch.nn.functional as F
-conf = read_config()
 from traning_test import *
-from joblib import dump, load
+conf = read_config()
+
+
 
 @ray.remote
 class TaskCounter:
@@ -191,14 +192,6 @@ class LeonModel:
         self.Current_Level = None
         self.Levels_Needed = None
         self.Query_Id = None
-
-        # checkpoint = torch.load("./logs/wandb/run-20240129_014209-je86ob6p/files/best-epoch=18-val_acc=0.726.ckpt", map_location=DEVICE)
-        # checkpoint['state_dict'] = \
-        # {key.replace('model.', ''): value for key, value in checkpoint['state_dict'].items()}
-        # Load the transformed state_dict into your model
-        # self.dnn_model = DNN(77, [512, 256, 128], 2)
-        # self.dnn_model.load_state_dict(checkpoint['state_dict'])
-        self.xgbod = load('log/clf.joblib')
         print("finish init")
             
 
@@ -303,25 +296,19 @@ class LeonModel:
     
     def inference(self, seqs, attns, QueryFeature=None, nodes=None):
         cali_all = self.get_calibrations(seqs, attns, QueryFeature)
-        # cali_all = 1000 * torch.rand(cali_all.shape[0])
-        # print(cali_all)
-        # cali_str = ['{:.2f}'.format(i) for i in cali_all.tolist()] # 最后一次 cali
         def diff_normalized(p1, p2):
             norm = torch.sum(p1, dim=1)
             pair = (p1 - p2) / norm.unsqueeze(1)
             return pair
         cost_node = nodes[0]
-        # for i, node in enumerate(nodes):
-        #     self.dnn_model.eval()
-        #     if self.dnn_model(diff_normalized(node.info['needed'], cost_node.info['needed']).to(torch.float32)).squeeze(0)[0] > 0.65:
-        #         if i != 0:
-        #             cali_all[i] = 1000000
         for i, node in enumerate(nodes):
-            # print(self.xgbod.predict(diff_normalized(node.info['needed'], cost_node.info['needed']).numpy())[0])
-            if self.xgbod.predict(diff_normalized(node.info['needed'], cost_node.info['needed']).numpy())[0] == 0:
+            self.__dnn_model.eval()
+            if self.__dnn_model(diff_normalized(node.info['needed'], cost_node.info['needed']).to(torch.float32)).squeeze(0)[0] > 0.65:
                 if i != 0:
                     cali_all[i] = 1000000
-
+        # cali_all = 1000 * torch.rand(cali_all.shape[0])
+        # print(cali_all)
+        # cali_str = ['{:.2f}'.format(i) for i in cali_all.tolist()] # 最后一次 cali
         def format_scientific_notation(number):
             str_number = "{:e}".format(number)
             mantissa, exponent = str_number.split('e')
@@ -358,14 +345,15 @@ class LeonModel:
             torch.save(model, path)
         else:
             model = torch.load(path, map_location=DEVICE)
+            dnn_model = torch.load("./log/dnn_model.pth", map_location=DEVICE)
             print(f"load checkpoint {path} Successfully!")
-        return model
+        return model, dnn_model
     
     def infer_equ(self, messages):
         temp, self.eqset, self.eq_summary = ray.get(self.task_counter.load_model.remote())
         if temp:
             print(self.eqset)
-            self.__model = self.load_model("./log/model.pth")
+            self.__model, self.__dnn_model = self.load_model("./log/model.pth")
         X = messages
         if not isinstance(X, list):
             X = [X]
@@ -376,7 +364,7 @@ class LeonModel:
         # if self.query_dict_flag:
         #     self.query_dict_flag = ray.get(self.query_dict.write_query_id.remote(X[0]['QueryId']))
         out = ','.join(sorted(Relation_IDs.split()))
-        if (out in self.eqset): # and (self.Current_Level == self.Levels_Needed)
+        if out in self.eqset and self.Levels_Needed - self.Current_Level <= 1: # and (self.Current_Level == self.Levels_Needed)
             self.current_eq_summary = self.eq_summary.get(out)
             self.curr_eqset = out
             print(X[0]['QueryId'], out)
@@ -438,10 +426,237 @@ class LeonModel:
         #     self.current_eq_summary[0] < 0.9:
         #     print("out")
         #     return ';'.join(['1.00,1,0' for _ in X])
-        # # 新添加的等价类，但没有训练    
-        # if self.current_eq_summary is None:
+        # 新添加的等价类，但没有训练    
+        if self.current_eq_summary is None:
+            print("out")
+            return ';'.join(['1.00,1,0' for _ in X]) + ';'
+
+        # 编码
+        seqs, attns, QueryFeature, nodes = self.encoding(X)
+
+        # 推理
+        cali_strs = self.inference(seqs, attns, QueryFeature, nodes)
+        # del seqs, attns, QueryFeature
+        # gc.collect()
+        # torch.cuda.empty_cache()
+        print("out")
+        return cali_strs + ';'
+    
+
+class SimpleLeonModel:
+
+    def __init__(self, model_port):
+        # 初始化
+        self.__model = None
+        with open ("./conf/namespace.txt", "r") as file:
+            namespace = file.read().replace('\n', '')
+        with open ("./conf/ray_address.txt", "r") as file:
+            ray_address = file.read().replace('\n', '')
+        context = ray.init(address=ray_address, namespace=namespace, _temp_dir=conf['leon']['ray_path'] + "/log/ray") # init only once
+        print(context.address_info)
+        
+        self.eqset = None
+        self.channels = ['EstNodeCost', 'EstRows', 'EstBytes', 'EstRowsProcessed', 'EstBytesProcessed',
+                'LeafWeightEstRowsWeightedSum', 'LeafWeightEstBytesWeightedSum']
+        self.workload = envs.wordload_init(conf['leon']['workload_type'])
+        self.queryFeaturizer = plans_lib.QueryFeaturizer(self.workload.workload_info)
+        self.model_type = conf['leon']['model_type']
+        if self.model_type == "TreeConv":
+            self.nodeFeaturizer = plans_lib.TreeNodeFeaturizer_V2(self.workload.workload_info)
+        elif self.model_type == "Transformer":
+            statistics_file_path = "./statistics.json"
+            self.feature_statistics = load_json(statistics_file_path)
+            add_numerical_scalers(self.feature_statistics)
+            self.op_name_to_one_hot = get_op_name_to_one_hot(self.feature_statistics)
+        self.task_counter = ray.get_actor('counter')
+        self.eq_summary = dict()
+        self.current_eq_summary = None
+        self.Current_Level = None
+        self.Levels_Needed = None
+        self.Query_Id = None
+        self.model_port = model_port
+        print("finish init")
+            
+
+    def plans_encoding(self, plans):
+        '''
+        input. a list of plans in type of json
+        output. (seq_encoding, run_times, attention_mask, loss_mask)
+            - run_times 是归一化之后的
+        '''
+        seqs = []
+        attns = []
+        for x in plans:
+            seq_encoding, run_times, attention_mask, loss_mask, database_id = get_plan_encoding(
+                x, configs, self.op_name_to_one_hot, plan_parameters, self.feature_statistics)
+            seqs.append(seq_encoding) 
+            attns.append(attention_mask)
+        seqs = torch.stack(seqs, dim=0)
+        attns = torch.stack(attns, dim=0)
+
+        return seqs, None, attns, None, None
+    
+    def get_calibrations(self, seqs, attns, 
+                         QueryFeature):
+        with torch.no_grad():
+            # cost_iter
+            self.__model.eval() # 关闭 drop out，否则模型波动大    
+            QueryFeature = QueryFeature.to(DEVICE)
+            seqs = seqs.to(DEVICE)
+            attns = attns.to(DEVICE)
+            if self.model_type == "TreeConv":
+                cali_all = torch.tanh(self.__model(QueryFeature, seqs, attns)).add(1).squeeze(1)
+            elif self.model_type == "Transformer":
+                cali = self.__model(seqs, attns, QueryFeature) # cali.shape [# of plan, pad_length] cali 是归一化后的基数估计
+                cali_all = cali[:, 0] # [# of plan] -> [# of plan, 1] cali_all plan （cost_iter次）基数估计（归一化后）结果
+        
+        return cali_all
+    
+    def encoding(self, X): 
+        if self.model_type == "Transformer":
+            encoded_plans, attns, queryfeature, _ = envs.leon_encoding(self.model_type, X, 
+                                                                           require_nodes=False, workload=self.workload, 
+                                                                           configs=configs, op_name_to_one_hot=self.op_name_to_one_hot,
+                                                                           plan_parameters=plan_parameters, feature_statistics=self.feature_statistics)
+            return encoded_plans, attns, queryfeature
+
+        elif self.model_type == "TreeConv":
+            trees, indexes, queryfeature, nodes = envs.leon_encoding(self.model_type, X, 
+                                                                           require_nodes=True, workload=self.workload, 
+                                                                           queryFeaturizer=self.queryFeaturizer, nodeFeaturizer=self.nodeFeaturizer)
+            if isinstance(trees, list):
+                trees, indexes, = _batch(trees, indexes)
+            for node in nodes:
+                plan_channels = dict()
+                ops = self.workload.workload_info.all_ops
+                ops = np.array([entry.replace(' ', '') for entry in ops])
+                ops = np.where(ops == 'NestedLoop', 'NestLoop', ops)
+                ops = np.where(ops == 'Materialize', 'Material', ops)
+                for c in self.channels:
+                    plan_channels[c] = dict()
+                    for node_type in ops:
+                        plan_channels[c][node_type] = 0
+                get_channels_dfs(node, plan_channels)
+                needed = torch.from_numpy(get_vecs([plan_channels]))
+                node.info['needed'] = needed
+            return trees, indexes, queryfeature, nodes
+    
+    def inference(self, seqs, attns, QueryFeature=None, nodes=None):
+        cali_all = self.get_calibrations(seqs, attns, QueryFeature)
+        def diff_normalized(p1, p2):
+            norm = torch.sum(p1, dim=1)
+            pair = (p1 - p2) / norm.unsqueeze(1)
+            return pair
+        cost_node = nodes[0]
+        for i, node in enumerate(nodes):
+            self.__dnn_model.eval()
+            if self.__dnn_model(diff_normalized(node.info['needed'], cost_node.info['needed']).to(torch.float32)).squeeze(0)[0] > 0.65:
+                if i != 0:
+                    cali_all[i] = 1000000
+        def format_scientific_notation(number):
+            str_number = "{:e}".format(number)
+            mantissa, exponent = str_number.split('e')
+            mantissa = 9.994 if float(mantissa) >= 9.995 else float(mantissa)
+            mantissa = format(mantissa, '.2f')
+            exponent = int(exponent)
+            exponent = max(-9, min(9, exponent))
+            result = "{},{},{:d}".format(mantissa, '1' if exponent >= 0 else '0', abs(exponent))
+            return result
+        cali_str = [format_scientific_notation(i) for i in cali_all.tolist()] # 最后一次 cali
+        cali_strs = ';'.join(cali_str)
+        return cali_strs
+    
+    def load_model(self, path):
+        if not os.path.exists(path):
+            if self.model_type == "Transformer":
+                print("load transformer model")
+                model = SeqFormer(
+                    input_dim=configs['node_length'],
+                    hidden_dim=256,
+                    output_dim=1,
+                    mlp_activation="ReLU",
+                    transformer_activation="gelu",
+                    mlp_dropout=0.1,
+                    transformer_dropout=0.1,
+                    query_dim=configs['query_dim'],
+                    padding_size=configs['pad_length']
+                    ).to(DEVICE) # server.py 和 train.py 中的模型初始化也需要相同, 这里还没加上！！！
+            elif self.model_type == "TreeConv":
+                print("load treeconv model")
+                model = treeconv.TreeConvolution(666, 50, 1).to(DEVICE)
+            torch.save(model, path)
+        else:
+            model = torch.load(path, map_location=DEVICE)
+            dnn_model = torch.load("./log/dnn_model.pth", map_location=DEVICE)
+            print(f"load checkpoint {path} Successfully!")
+        return model, dnn_model
+    
+    def infer_equ(self, messages):
+        temp, self.eqset, self.eq_summary = ray.get(self.task_counter.load_port.remote(self.model_port))
+        if temp:
+            print(self.eqset)
+            self.__model, self.__dnn_model = self.load_model("./log/model.pth")
+        X = messages
+        if not isinstance(X, list):
+            X = [X]
+        Relation_IDs = X[0]['Relation IDs']
+        self.Current_Level = X[0]['Current Level']
+        self.Levels_Needed = X[0]['Levels Needed']
+        self.Query_Id = X[0]['QueryId']
+        # if self.query_dict_flag:
+        #     self.query_dict_flag = ray.get(self.query_dict.write_query_id.remote(X[0]['QueryId']))
+        out = ','.join(sorted(Relation_IDs.split()))
+        if out in self.eqset and self.Levels_Needed - self.Current_Level <= 1: #  and (self.Current_Level == self.Levels_Needed)
+            self.current_eq_summary = self.eq_summary.get(out)
+            self.curr_eqset = out
+            print(X[0]['QueryId'], out)
+            print(self.Current_Level, self.Levels_Needed)
+            return '1'
+        else:
+            return '0'
+
+
+    def predict_plan(self, messages):
+        
+        # json解析
+        print("Predicting plan for ", len(messages), self.model_port)
+        X = messages
+        if not isinstance(X, list):
+            X = [X]
+        # for x in X:
+        #     if not x:
+        #         return ','.join(['1.00' for _ in X]
+        X = [json.loads(x) if isinstance(x, str) else x for x in X]
+        # print(X[0])
+        if self.Query_Id.startswith("picknode:"):
+            temp_id = self.Query_Id[len("picknode:"):]
+            parts = temp_id.split(";")
+            curr_level = parts[0]
+            pick_plan = float(parts[1])
+            if curr_level == self.curr_eqset:
+                # change_flag = False
+                # print("Success begin hint leon", self.Query_Id)
+                # for j, i in enumerate(X):
+                #     if i['Plan']['Total Cost'] == pick_plan:
+                #         print(i['Plan']['Total Cost'], pick_plan, j)
+                #         change_flag = True
+                # if change_flag == False:
+                #     print("change_flag",self.Query_Id)
+                #     with open("./error.pkl", 'wb') as f:
+                #         pickle.dump(X, f) 
+                # print("Success exec hint leon", self.Query_Id)
+                return ';'.join(['1.00,1,0' if i['Plan']['Total Cost'] != pick_plan else '0.01,0,9' for i in X]) + ';'
+
+        # Validation Accuracy
+        # TODO: 可能不在Eq Summary里面？确实有可能，有些等价类没有被训练到，因为没有收集message
+        # if self.current_eq_summary is None or \
+        #     self.current_eq_summary[0] < 0.9:
         #     print("out")
-        #     return ';'.join(['1.00,1,0' for _ in X]) + ';'
+        #     return ';'.join(['1.00,1,0' for _ in X])
+        # 新添加的等价类，但没有训练    
+        if self.current_eq_summary is None:
+            print("out")
+            return ';'.join(['1.00,1,0' for _ in X]) + ';'
 
         # 编码
         seqs, attns, QueryFeature, nodes = self.encoding(X)
@@ -563,6 +778,6 @@ if __name__ == "__main__":
 
     print("Spawning server process...")
     server.start()
-    # time.sleep(10)
-    # for otherserver in othersevers:
-    #     otherserver.start()
+    time.sleep(10)
+    for otherserver in othersevers:
+        otherserver.start()

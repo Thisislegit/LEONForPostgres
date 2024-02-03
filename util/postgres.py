@@ -191,6 +191,7 @@ def GetLatencyFromPg(sql, hint, ENABLE_LEON, verbose=False, check_hint_used=Fals
         
         if ENABLE_LEON:
             cursor.execute('SET enable_leon=on;')
+            # cursor.execute('SET not_cali=on;')
             if curr_file:
                 cursor.execute(f"SET leon_query_name='{curr_file}';")
         else:

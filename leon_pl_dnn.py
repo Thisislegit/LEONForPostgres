@@ -36,10 +36,11 @@ from util import treeconv
 from util import encoding
 from utils import *
 import gc
-from training_test import *
+from traning_test import get_vecs, get_channels_dfs, DNN, PL_DNN
+
 conf = read_config()
 model_type = conf['leon']['model_type']
-pl.seed_everything(42)
+
 def load_model(model_path: str, prev_optimizer_state_dict=None):
     if not os.path.exists(model_path):
         if model_type == "Transformer":
@@ -57,13 +58,17 @@ def load_model(model_path: str, prev_optimizer_state_dict=None):
                         ).to(DEVICE)
         elif model_type == "TreeConv":
             print("load treeconv model")
-            model = treeconv.TreeConvolution(666, 50, 1).to(DEVICE)
+            # model = treeconv.TreeConvolution(666, 50, 1).to(DEVICE)
+            model = treeconv.ResNet(666, 50, 1, treeconv.ResidualBlock, [1, 1, 1, 1]).to(DEVICE)
+        dnn_model = DNN(77, [512, 256, 128], 2)
+        torch.save(dnn_model, "./log/dnn_model.pth")
+        dnn_model = PL_DNN(dnn_model)
         torch.save(model, model_path)
     else:
         model = torch.load(model_path, map_location=DEVICE).to(DEVICE)
     model = PL_Leon(model, prev_optimizer_state_dict)
     
-    return model
+    return model, dnn_model
 
 def getPG_latency(query, hint=None, ENABLE_LEON=False, timeout_limit=None, curr_file=None):
     """
@@ -129,13 +134,14 @@ def get_ucb_idx(cali_all, pgcosts):
     cali_mean = cali_all.mean(dim = 1) # 每个 plan 的 cali 均值 [# of plan] | 值为 1 左右
     cali_var = cali_all.var(dim = 1) # [# of plan] | 值为 0 左右
     # costs = pgcosts # [# of plan]
-    # cost_t = torch.mul(cali_mean, costs) # 计算 calibration mean * pg返回的cost [# of plan]
+    cost_t = torch.mul(cali_mean, costs) # 计算 calibration mean * pg返回的cost [# of plan]
 
     # cali_min, _ = cost_t.min(dim = 0) # plan 的 cali 最小值 [# of plan] 【cali_min只有一个值？】
     # print("cost_min.shape(): ", cali_min.shape)
     # print(cali_min)            
     # ucb = cali_var / cali_var.max() - cali_min / cali_min.max()
-    ucb = cali_var / cali_var.max()
+    # ucb = cali_var / cali_var.max()
+    ucb = cost_t
     # ucb = cali_var / cali_var.max() - cost_t / cost_t.max() # [# of plan]
     # print("len(ucb)", len(ucb))
     ucb_sort_idx = torch.argsort(ucb, descending=True) # 张量排序索引 | ucb_sort[0] 是uncertainty高的plan在plan_info中的索引
@@ -193,7 +199,7 @@ def collects(finnode: plans_lib.Node, actor, exp: Experience, timeout, currTotal
             cur_join_ids = ','.join(
                 sorted([i.split(" AS ")[-1] for i in currentNode.leaf_ids()]))
             join_ids_to_append.append(cur_join_ids)
-    join_ids_to_append = join_ids_to_append[:1]
+    # join_ids_to_append = join_ids_to_append[:1]
     for join_id in join_ids_to_append:
         exp_key = Exp.GetExpKeys()
         temp = join_id.split(',') # sort
@@ -212,7 +218,7 @@ def load_callbacks(logger):
     callbacks.append(plc.EarlyStopping(
         monitor='val_acc',
         mode='max',
-        patience=3,
+        patience=2,
         min_delta=0.001,
         check_on_train_epoch_end=False
     ))
@@ -261,32 +267,24 @@ def _batch(trees, indexes, padding_size=200):
 
 if __name__ == '__main__':
 
-    file_path1 = "./log/messages.pkl"
-
-    # 检查文件是否存在
-    if os.path.exists(file_path1):
-        # 删除文件
-        os.remove(file_path1)
-        print(f"File {file_path1} has been successfully deleted.")
-    else:
-        print(f"File {file_path1} does not exist.")
+    file_path = ["./log/messages.pkl", './log/model.pth', './log/dnn_model.pth']
+    for file_path1 in file_path:
+        # 检查文件是否存在
+        if os.path.exists(file_path1):
+            # 删除文件
+            os.remove(file_path1)
+            print(f"File {file_path1} has been successfully deleted.")
+        else:
+            print(f"File {file_path1} does not exist.")
     
-    from traning_test import TreeConvolution
-    pretrain = True
+    
+    pretrain = False
     if pretrain:
-        # checkpoint = torch.load("./logs/wandb/run-20240130_050318-dxl9va6z/files/best-epoch=11-val_acc=0.718.ckpt", map_location=DEVICE)
-        # checkpoint['state_dict'] = \
-        # {key.replace('model.', ''): value for key, value in checkpoint['state_dict'].items()}
-        # # Load the transformed state_dict into your model
-        # pre_model = ResNet(820, 54, 2, ResidualBlock, [1, 1, 1, 1])
-        checkpoint = torch.load("./logs/wandb/run-20240126_135449-f3kdv8wx/files/best-epoch=14-val_acc=0.762.ckpt", map_location=DEVICE)
-        checkpoint['state_dict'] = \
-        {key.replace('model.', ''): value for key, value in checkpoint['state_dict'].items()}
-        # Load the transformed state_dict into your model
-        pre_model = treeconv.ResNet(820, 54, 1, treeconv.ResidualBlock, [1, 1, 1, 1])
-        pre_model.load_state_dict(checkpoint['state_dict'])
-        torch.save(pre_model, "./log/model.pth")
+        checkpoint = torch.load("./log/SimModel3.pth", map_location=DEVICE)
+        torch.save(checkpoint, "./log/model.pth")
         print("load SimModel success")
+    with open("./log/exp_v5.pkl", "rb") as file:
+        exp_cache = pickle.load(file)
 
     with open ("./conf/namespace.txt", "r") as file:
         namespace = file.read().replace('\n', '')
@@ -310,12 +308,25 @@ if __name__ == '__main__':
     model_path = "./log/model.pth" 
     message_path = "./log/messages.pkl"
     prev_optimizer_state_dict = None
-    model = load_model(model_path)
+    dnn_prev_optimizer_state_dict = None
+    model, dnn_model = load_model(model_path)
     
     Exp = Experience(eq_set=initEqSet())
+    eqset = Exp.GetEqSet()
+    model.eq_summary = {key: 0 for key in eqset}
     print("Init workload and equal set keys")
-    
+    channels = ['EstNodeCost', 'EstRows', 'EstBytes', 'EstRowsProcessed', 'EstBytesProcessed',
+                'LeafWeightEstRowsWeightedSum', 'LeafWeightEstBytesWeightedSum']
     workload = envs.wordload_init(conf['leon']['workload_type'])
+    plan_channels_init = dict()
+    ops = workload.workload_info.all_ops
+    ops = np.array([entry.replace(' ', '') for entry in ops])
+    ops = np.where(ops == 'NestedLoop', 'NestLoop', ops)
+    ops = np.where(ops == 'Materialize', 'Material', ops)
+    for c in channels:
+        plan_channels_init[c] = dict()
+        for node_type in ops:
+            plan_channels_init[c][node_type] = 0
     queryFeaturizer = plans_lib.QueryFeaturizer(workload.workload_info)
     if model_type == "Transformer":
         statistics_file_path = "./statistics.json"
@@ -329,7 +340,7 @@ if __name__ == '__main__':
     retrain_count = 3
     min_leon_time = dict()
     max_query_latency1 = 0
-    logger =  pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs', name="no ai meets ai 改leon", project=conf['leon']['wandb_project'])
+    logger =  pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs', name="dnn + leon 最后两层等价类 imdb in 202", project=conf['leon']['wandb_project'])
     for key in conf:
         logger.log_hyperparams(conf[key])
     my_step = 0
@@ -337,16 +348,16 @@ if __name__ == '__main__':
     task_counter = ray.get_actor('counter')
     runtime_pg = 0
     runtime_leon = 0
-    min_exec_num = 0
+    min_exec_num = 2
     max_exec_num = 30
     encoding_dict = dict() # 用来存trees和indexes
     index_encoding = 0 # 用来记录索引值
     train_gpu = int(conf['leon']['train_gpu'])
-    # random_tensor = torch.rand((90000, 1000, 27)).to(f'cuda:{train_gpu}')
+    random_tensor = torch.rand((90000, 1000, 27)).to(f'cuda:{train_gpu}')
     
     remote = bool(conf['leon']['remote'])
     pct = float(conf['leon']['pct']) # 执行 percent 比例的 plan
-    planning_time = 15000 # pg timout会考虑planning时间
+    planning_time = 10000 # pg timout会考虑planning时间
     sql_id = [] # 达到局部最优解的query集合
     # ===== ITERATION OF CHUNKS ====
     ch_start_idx = 0 # the start idx of the current chunk in train_files
@@ -383,7 +394,7 @@ if __name__ == '__main__':
                 min_leon_time[curr_file[q_send_cnt]] = query_latency2
             else:
                 min_leon_time[curr_file[q_send_cnt]] = min(min_leon_time[curr_file[q_send_cnt]], query_latency2)
-            if min_leon_time[curr_file[q_send_cnt]] / first_time[curr_file[q_send_cnt]] < 0.75 and curr_file[q_send_cnt] not in sql_id:
+            if min_leon_time[curr_file[q_send_cnt]] / first_time[curr_file[q_send_cnt]] < 0.8 and curr_file[q_send_cnt] not in sql_id:
                 sql_id.append(curr_file[q_send_cnt])
         logger.log_metrics({f"Runtime/pg_latency": sum(pg_time1)}, step=my_step)
         logger.log_metrics({f"Runtime/leon_latency": sum(tf_time)}, step=my_step)
@@ -391,20 +402,33 @@ if __name__ == '__main__':
         runtime_leon += sum(tf_time)
         logger.log_metrics({f"Runtime/all_pg": runtime_pg}, step=my_step)
         logger.log_metrics({f"Runtime/all_leon": runtime_leon}, step=my_step)
-        my_step += 1
-        ch_start_idx = ch_start_idx + chunk_size
-        continue
         
-        ###############收集新的等价类##############################
+        ###############收集新的等价类##############################  
+        # for q_send_cnt in range(chunk_size):
+        #     if retrain_count >= 3 and curr_file[q_send_cnt] not in sql_id: # 最好情况好于0.8
+        #     # if retrain_count >= 5:
+        #         curNode = Nodes[q_send_cnt]
+        #         if curNode:
+        #             collects(curNode, task_counter, Exp, None, tf_time[q_send_cnt], sqls_chunk[q_send_cnt], curr_file[q_send_cnt], model)
+        exp_key = Exp.GetExpKeys()
         ray.get(task_counter.WriteOnline.remote(True))
         for q_send_cnt in range(chunk_size):
-            if retrain_count >= 3 and curr_file[q_send_cnt] not in sql_id: # 最好情况好于0.75
-            # if retrain_count >= 5:
-                curNode = Nodes[q_send_cnt]
-                # if curNode:
-                #     collects(curNode, task_counter, Exp, None, tf_time[q_send_cnt], sqls_chunk[q_send_cnt], curr_file[q_send_cnt], model)
-        for q_send_cnt in range(chunk_size):
-            postgres.getPlans(sqls_chunk[q_send_cnt], None, check_hint_used=False, ENABLE_LEON=True, curr_file=curr_file[q_send_cnt])
+            # postgres.getPlans(sqls_chunk[q_send_cnt], None, check_hint_used=False, ENABLE_LEON=True, curr_file=curr_file[q_send_cnt])
+            curNode = Nodes[q_send_cnt]
+            if curNode:
+                curNode.info['sql_str'] = sqls_chunk[q_send_cnt]
+                curNode.GetOrParseSql()
+                allPlans = [curNode]
+                while (allPlans):
+                    currentNode = allPlans.pop(0)
+                    allPlans.extend(currentNode.children)
+                    if currentNode.IsJoin():
+                        cur_join_ids = ','.join(
+                            sorted([i.split(" AS ")[-1] for i in currentNode.leaf_ids()]))
+                        if cur_join_ids in exp_key:
+                            currentNode.info['sql_str'] = currentNode.to_sql(curNode.info['parsed_join_conds'], with_select_exprs=True)
+                            postgres.getPlans(currentNode.info['sql_str'], None, check_hint_used=False, ENABLE_LEON=True, curr_file=curr_file[q_send_cnt])
+
         ray.get(task_counter.WriteOnline.remote(False))
         ##########################################################
         leon_node = []
@@ -473,17 +497,19 @@ if __name__ == '__main__':
                         
                         curr_QueryId = message[0]['QueryId']
                     print(f">>> message with {len(message)} plans")
+                    # for m in message:
+                    #     print(m['Plan']['Total Cost'])
                     
                     # STEP 1) get node
                     if model_type == "Transformer":
                         encoded_plans, attns, queryfeature, nodes = envs.leon_encoding(model_type, message, 
                                                                                        require_nodes=True, workload=workload, 
                                                                                        configs=configs, op_name_to_one_hot=op_name_to_one_hot,
-                                                                                       plan_parameters=plan_parameters, feature_statistics=feature_statistics)
+                                                                                       plan_parameters=plan_parameters, feature_statistics=feature_statistics, sql=sqls_chunk[q_recieved_cnt])
                     elif model_type == "TreeConv":
                         encoded_plans, attns, queryfeature, nodes = envs.leon_encoding(model_type, message, 
                                                                                        require_nodes=True, workload=workload, 
-                                                                                       queryFeaturizer=queryFeaturizer, nodeFeaturizer=nodeFeaturizer)
+                                                                                       queryFeaturizer=queryFeaturizer, nodeFeaturizer=nodeFeaturizer, sql=None)
                     # nodes = PlanToNode(workload, message)
                     
                     if nodes is None:
@@ -509,7 +535,7 @@ if __name__ == '__main__':
                             temp = node1.info['join_tables'].split(',') # sort
                             temp = ','.join(sorted(temp))
                             if temp == node2.info['join_tables']:
-                                if round(node1.cost * 100) / 100 == node2.cost:
+                                if round(node1.cost * 100) / 100.0 == node2.cost:
                                     Exp.collectRate(node2.info['join_tables'], first_time[curr_file[q_recieved_cnt]], tf_time[q_recieved_cnt], curr_file[q_recieved_cnt])
                                     c_node = node1
                                     
@@ -525,7 +551,10 @@ if __name__ == '__main__':
                                         if c_plan[0].info.get('latency') is None:
                                             if not Exp.isCache(c_node.info['join_tables'], c_plan) and not envs.CurrCache(exec_plan, c_plan):
                                                 c_plan[0].info['index'] = index_encoding
-                                                encoding_dict[index_encoding] = (encoded_plans[i], attns[i])
+                                                plan_channels = copy.deepcopy(plan_channels_init)
+                                                get_channels_dfs(c_plan[0], plan_channels)
+                                                needed = torch.from_numpy(get_vecs([plan_channels]))
+                                                encoding_dict[index_encoding] = (encoded_plans[i], attns[i], needed)
                                                 index_encoding += 1
                                                 exec_plan.append((c_plan,(pg_time1[q_recieved_cnt] * TIME_OUT_Ratio + planning_time), temp, c_node.cost))
                                                 
@@ -534,7 +563,10 @@ if __name__ == '__main__':
                                             # c_plan[0].info['latency'], _ = getPG_latency(hint_node.info['sql_str'], hint_node.hint_str(), ENABLE_LEON=False, timeout_limit=(pg_time1[q_recieved_cnt] * 3 + planning_time)) # timeout 10s
                                     if not Exp.isCache(c_node.info['join_tables'], c_plan):
                                         c_plan[0].info['index'] = index_encoding
-                                        encoding_dict[index_encoding] = (encoded_plans[i], attns[i])
+                                        plan_channels = copy.deepcopy(plan_channels_init)
+                                        get_channels_dfs(c_plan[0], plan_channels)
+                                        needed = torch.from_numpy(get_vecs([plan_channels]))
+                                        encoding_dict[index_encoding] = (encoded_plans[i], attns[i], needed)
                                         index_encoding += 1
                                         Exp.AppendExp(c_node.info['join_tables'], c_plan)
                                     else:
@@ -619,14 +651,20 @@ if __name__ == '__main__':
                         # print(i)
                         if not Exp.isCache(eqKey, a_plan) and not envs.CurrCache(exec_plan, a_plan):
                             a_plan[0].info['index'] = index_encoding
-                            encoding_dict[index_encoding] = (encoded_plans[node_idx], attns[node_idx])
+                            plan_channels = copy.deepcopy(plan_channels_init)
+                            get_channels_dfs(a_plan[0], plan_channels)
+                            needed = torch.from_numpy(get_vecs([plan_channels]))
+                            encoding_dict[index_encoding] = (encoded_plans[node_idx], attns[node_idx], needed)
                             index_encoding += 1
                             exec_plan.append((a_plan, (pg_time1[q_recieved_cnt] * TIME_OUT_Ratio + planning_time), eqKey, a_node.cost))
                             
 
                         if not Exp.isCache(eqKey, b_plan) and not envs.CurrCache(exec_plan, b_plan):
                             b_plan[0].info['index'] = index_encoding
-                            encoding_dict[index_encoding] = (encoded_plans[cost_index], attns[cost_index])
+                            plan_channels = copy.deepcopy(plan_channels_init)
+                            get_channels_dfs(b_plan[0], plan_channels)
+                            needed = torch.from_numpy(get_vecs([plan_channels]))
+                            encoding_dict[index_encoding] = (encoded_plans[cost_index], attns[cost_index], needed)
                             index_encoding += 1
                             exec_plan.append((b_plan, (pg_time1[q_recieved_cnt] * TIME_OUT_Ratio + planning_time), eqKey, b_node.cost))
                             
@@ -643,21 +681,39 @@ if __name__ == '__main__':
                     # print("len(Exp.GetExp(eqKey))", len(Exp.GetExp(eqKey)))
         print("Curr_Plan_Len: ", len(exec_plan))
         exec_plan = sorted(exec_plan, key=lambda x: x[0][0].cost, reverse=True)
+        new_exec_plan = []
+        for exec_one_plan in exec_plan:
+            should_add = True
+            cache_list = exp_cache.get(exec_one_plan[2])
+            if cache_list:
+                for one_cache in cache_list:
+                    if one_cache[0].cost == exec_one_plan[0][0].cost and \
+                    one_cache[0].info['sql_str'] == exec_one_plan[0][0].info['sql_str'] and one_cache[0].hint_str() == exec_one_plan[0][0].hint_str():
+                        exec_one_plan[0][0].info['latency'] = one_cache[0].info['latency']
+                        Exp.AppendExp(exec_one_plan[2], exec_one_plan[0])
+                        should_add = False
+                        break
+            if should_add:
+                new_exec_plan.append(exec_one_plan)
         ## 给索引
-        results = pool.map_unordered(actor_call_leon, exec_plan)
+        results = pool.map_unordered(actor_call_leon, new_exec_plan)
+        loss_node = 0
         for result in results:
             if result == None:
-                print("*" * 50)
-                print("result is None")
+                loss_node += 1
+                # print("*" * 50)
+                # print("result is None")
                 continue
             Exp.AppendExp(result[1], result[0])
+        if loss_node > 0:
+            print("loss_node", loss_node)
 
         del queryfeature, encoded_plans, attns
         gc.collect()
         torch.cuda.empty_cache()
 
         ##########删除等价类#############
-        # Exp.DeleteEqSet(sql_id)
+        Exp.DeleteEqSet(sql_id)
         eqset = Exp.GetEqSet()
         print("len_eqset", Exp._getEqNum())
         logger.log_metrics({"len_eqset": Exp._getEqNum()}, step=my_step)
@@ -670,11 +726,12 @@ if __name__ == '__main__':
         # ++++ PHASE 3. ++++ model training
         # PHASE 3 还有小问题
         train_pairs = Exp.Getpair()
+        dnn_pairs = Exp.PreGetpair()
         # TODO: 每个batch只用一个等价类，等价类中的每个plan只推理一次
 
         logger.log_metrics({"train_pairs": len(train_pairs)}, step=my_step)
         print("len(train_pairs)" ,len(train_pairs))
-
+        print("len(dnn_pairs)" ,len(dnn_pairs))
         # if len(train_pairs) > 0 and last_train_pair > 0:
         #     if max(len(train_pairs), last_train_pair) / min(len(train_pairs), last_train_pair) < 1.1:
         #         retrain_count += 1
@@ -682,6 +739,36 @@ if __name__ == '__main__':
         #         retrain_count = 0
         # last_train_pair = len(train_pairs)
         # print(retrain_count)
+        if len(dnn_pairs) > min_batch_size:
+            leon_dataset = prepare_dataset(dnn_pairs, True, nodeFeaturizer, encoding_dict)
+            del dnn_pairs
+            gc.collect()
+            dataset_size = len(leon_dataset)
+            train_size = int(0.8 * dataset_size)
+            val_size = dataset_size - train_size
+            train_ds, val_ds = torch.utils.data.random_split(leon_dataset, [train_size, val_size])
+            dataloader_train = DataLoader(train_ds, batch_size=1024, shuffle=True, num_workers=7)
+            dataloader_val = DataLoader(val_ds, batch_size=1024, shuffle=False, num_workers=7)
+            dnn_model.optimizer_state_dict = dnn_prev_optimizer_state_dict
+
+            del random_tensor
+            torch.cuda.empty_cache()
+            trainer = pl.Trainer(accelerator="gpu",
+                                devices=[train_gpu],
+                                enable_progress_bar=True,
+                                max_epochs=100,
+                                callbacks=[plc.EarlyStopping(
+                                            monitor='val_acc',
+                                            mode='max',
+                                            patience=2,
+                                            min_delta=0.001,
+                                            check_on_train_epoch_end=False,
+                                            verbose=True
+                                        )],
+                                logger=None)
+            trainer.fit(dnn_model, dataloader_train, dataloader_val)
+            del leon_dataset, train_ds, val_ds, dataloader_train, dataloader_val
+
         if len(train_pairs) > min_batch_size:
             leon_dataset = prepare_dataset(train_pairs, True, nodeFeaturizer, encoding_dict)
             del train_pairs
@@ -690,15 +777,15 @@ if __name__ == '__main__':
             train_size = int(0.8 * dataset_size)
             val_size = dataset_size - train_size
             train_ds, val_ds = torch.utils.data.random_split(leon_dataset, [train_size, val_size])
-            dataloader_train = DataLoader(train_ds, batch_size=512, shuffle=True, num_workers=5)
-            dataloader_val = DataLoader(val_ds, batch_size=512, shuffle=False, num_workers=5)
-            dataset_test = BucketDataset(Exp.OnlyGetExp(), keys=Exp.GetExpKeys(), nodeFeaturizer=nodeFeaturizer, dict=encoding_dict)
-            batch_sampler = BucketBatchSampler(dataset_test.buckets, batch_size=1)
-            dataloader_test = DataLoader(dataset_test, batch_sampler=batch_sampler, num_workers=7)
+            dataloader_train = DataLoader(train_ds, batch_size=1024, shuffle=True, num_workers=7)
+            dataloader_val = DataLoader(val_ds, batch_size=1024, shuffle=False, num_workers=7)
+            # dataset_test = BucketDataset(Exp.OnlyGetExp(), keys=Exp.GetExpKeys(), nodeFeaturizer=nodeFeaturizer, dict=encoding_dict)
+            # batch_sampler = BucketBatchSampler(dataset_test.buckets, batch_size=1)
+            # dataloader_test = DataLoader(dataset_test, batch_sampler=batch_sampler, num_workers=7)
             # model = load_model(model_path, prev_optimizer_state_dict).to(DEVICE)
             model.optimizer_state_dict = prev_optimizer_state_dict
             callbacks = load_callbacks(logger=None)
-            del random_tensor
+            # del random_tensor
             torch.cuda.empty_cache()
             trainer = pl.Trainer(accelerator="gpu",
                                 devices=[train_gpu],
@@ -707,9 +794,10 @@ if __name__ == '__main__':
                                 callbacks=callbacks,
                                 logger=logger)
             trainer.fit(model, dataloader_train, dataloader_val)
-            trainer.test(model, dataloader_test)
+            # trainer.test(model, dataloader_test)
+            model.eq_summary = {key: 0 for key in eqset}
             prev_optimizer_state_dict = trainer.optimizers[0].state_dict()
-            del leon_dataset, train_ds, val_ds, dataloader_train, dataloader_val, dataset_test, batch_sampler, dataloader_test
+            del leon_dataset, train_ds, val_ds, dataloader_train, dataloader_val #, dataset_test, batch_sampler, dataloader_test
             gc.collect()
             torch.cuda.empty_cache()
             random_tensor = torch.rand((90000, 1000, 27)).to(f'cuda:{train_gpu}')
@@ -719,6 +807,7 @@ if __name__ == '__main__':
         print("*"*20)
         ch_start_idx = ch_start_idx + chunk_size
         # save model
+        torch.save(dnn_model.model, "./log/dnn_model.pth")
         torch.save(model.model, model_path)
         ray.get(task_counter.reload_model.remote(eqset.keys(), model.eq_summary))
         # 模型更新需要通知到server.py
@@ -731,7 +820,7 @@ if __name__ == '__main__':
         end_time = time.time()
         logger.log_metrics({"Time/train_time": end_time - start_time}, step=my_step)
         my_step += 1
-        with open("./log/exp_v4.pkl", 'wb') as f:
+        with open("./log/exp_v5.pkl", 'wb') as f:
             pickle.dump(Exp.OnlyGetExp(), f) 
         
 

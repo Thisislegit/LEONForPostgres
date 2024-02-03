@@ -325,7 +325,7 @@ if __name__ == '__main__':
     retrain_count = 3
     min_leon_time = dict()
     max_query_latency1 = 0
-    logger =  pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs', name="不收集新的等价类,只把level放开 imdb in 202", project=conf['leon']['wandb_project'])
+    logger =  pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs', name="plan 30 imdb in 202", project=conf['leon']['wandb_project'])
     for key in conf:
         logger.log_hyperparams(conf[key])
     my_step = 0

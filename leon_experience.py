@@ -297,12 +297,12 @@ class Experience:
                 # for k_index in range(i + 1, len(self.GetExp(eq))): 
                 #     k = self.GetExp(eq)[k_index]   
                 for k in min_dict.values():
-                    
-
+                    if(j[0].cost == k[0].cost):
+                        continue
                     if (j[0].info['sql_str'] != k[0].info['sql_str']):
                         continue
                     # if (j[0].info['latency'] == k[0].info['latency']): # latency 相同 1s之内不把他train_pair
-                    if max(j[0].info['latency'],k[0].info['latency']) / min(j[0].info['latency'],k[0].info['latency']) < 1.05:
+                    if max(j[0].info['latency'],k[0].info['latency']) / (min(j[0].info['latency'],k[0].info['latency']) + 0.001) < 1.05:
                         continue
                     tem = [j, k]
                     # tem.append(j)
@@ -310,6 +310,8 @@ class Experience:
                     # tem.append(j[1]+j[2])
                     # tem.append(k[1]+k[2])
                     # 初始pairloss
+                    pairs.append(tem)
+                    tem = [k, j]
                     pairs.append(tem)
         return pairs
 

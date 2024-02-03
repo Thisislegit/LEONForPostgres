@@ -29,7 +29,7 @@ port = conf['PostgreSQL']['port']
 LOCAL_DSN = ""
 REMOTE_DSN = ""
 leon_port = conf['leon']['Port']
-
+free_size = conf['leon']['free_size']
 # TPC-H.
 # LOCAL_DSN = "postgres://psycopg:psycopg@localhost/tpch-sf10"
 # REMOTE_DSN = "postgres://psycopg:psycopg@localhost/tpch-sf10"
@@ -87,6 +87,7 @@ def Cursor():
         with conn.cursor() as cursor:
             cursor.execute("SET client_encoding TO 'UTF8';")
             cursor.execute(f"set leon_port={leon_port};")
+            cursor.execute(f"set free_size={free_size};")
             cursor.execute("load 'pg_hint_plan';")
 
             yield cursor
@@ -188,6 +189,7 @@ def MyCursor(database_port):
         with conn.cursor() as cursor:
             cursor.execute("SET client_encoding TO 'UTF8';")
             cursor.execute("load 'pg_hint_plan';")
+            cursor.execute(f"set free_size={free_size};")
 
             yield cursor
     finally:
