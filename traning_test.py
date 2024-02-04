@@ -678,26 +678,24 @@ class PL_DNN(pl.LightningModule):
 
     def training_step(self, batch):
         labels = batch['labels']
-        one_hot_labels = torch.nn.functional.one_hot(labels)
         vecs1 = batch['vecs1']
         vecs2 = batch['vecs2']
         diff_normalized = self.diff_normalized(vecs1, vecs2).to(torch.float32)
         output = self(diff_normalized)
         loss_fn = nn.CrossEntropyLoss()
-        loss = loss_fn(output, one_hot_labels.to(torch.float32))
+        loss = loss_fn(output, labels.to(torch.long))
         acc = torch.sum(torch.argmax(output, dim=1) == labels).item() / len(labels)
         self.log_dict({'train_loss': loss, 'train_acc': acc}, on_epoch=True)
         return loss
 
     def validation_step(self, batch):
         labels = batch['labels']
-        one_hot_labels = torch.nn.functional.one_hot(labels)
         vecs1 = batch['vecs1']
         vecs2 = batch['vecs2']
         diff_normalized = self.diff_normalized(vecs1, vecs2).to(torch.float32)
         output = self(diff_normalized)
         loss_fn = nn.CrossEntropyLoss()
-        loss = loss_fn(output, one_hot_labels.to(torch.float32))
+        loss = loss_fn(output, labels.to(torch.long))
         acc = torch.sum(torch.argmax(output, dim=1) == labels).item() / len(labels)
         self.log_dict({'val_loss': loss, 'val_acc': acc}, on_epoch=True)
         return loss
@@ -832,14 +830,36 @@ if __name__ == '__main__':
     leon_dataset3 = prepare_dataset(train_pairs3, True, nodeFeaturizer, queryFeaturizer, dict=dict_1)
     train_pairs4 = Getpair2(exp2_new, key=None)
     leon_dataset4 = prepare_dataset(train_pairs4, True, nodeFeaturizer, queryFeaturizer, dict=dict_1)
+    def collate_fn(batch):
+        # 获取每个batch中的最大长度
+        max_len1 = max(item['encoded_plans1'].shape[1] for item in batch)
+        max_len2 = max(item['encoded_plans2'].shape[1] for item in batch)
+        max_len3 = max(max_len1, max_len2)
+        max_len4 = max(item['attns1'].shape[0] for item in batch)
+        max_len5 = max(item['attns2'].shape[0] for item in batch)
+        max_len6 = max(max_len4, max_len5)
+        # 在collate_fn中对每个batch进行padding
+        padded_batch = {}
+        for key in batch[0].keys():
+            if key.startswith('encoded_plans'):
+                # 处理树结构等需要padding的数据
+                padded_batch[key] = torch.stack([F.pad(item[key], pad=(0, max_len3 - item[key].shape[1])) for item in batch])
+            elif key.startswith('attns'):
+                # 处理attention等需要padding的数据
+                padded_batch[key] = torch.stack([F.pad(item[key], pad=(0, 0, 0, max_len6 - item[key].shape[0])) for item in batch])
+            else:
+                padded_batch[key] = torch.stack([item[key] for item in batch])
+
+        return padded_batch
     # def collate_fn(batch):
-    #     # 获取每个batch中的最大长度
-    #     max_len1 = max(item['encoded_plans1'].shape[1] for item in batch)
-    #     max_len2 = max(item['encoded_plans2'].shape[1] for item in batch)
-    #     max_len3 = max(max_len1, max_len2)
-    #     max_len4 = max(item['attns1'].shape[0] for item in batch)
-    #     max_len5 = max(item['attns2'].shape[0] for item in batch)
-    #     max_len6 = max(max_len4, max_len5)
+    #     batch_size = len(batch)
+    #     # max_len1 = max(item['encoded_plans1'].shape[1] for item in batch)
+    #     # max_len2 = max(item['encoded_plans2'].shape[1] for item in batch)
+    #     # max_len3 = max(max_len1, max_len2)
+    #     # max_len4 = max(item['attns1'].shape[0] for item in batch)
+    #     # max_len5 = max(item['attns2'].shape[0] for item in batch)
+    #     # max_len6 = max(max_len4, max_len5)
+    #     max_len3 = max_len6 = 200
     #     # 在collate_fn中对每个batch进行padding
     #     padded_batch = {}
     #     for key in batch[0].keys():
@@ -851,28 +871,6 @@ if __name__ == '__main__':
     #             padded_batch[key] = torch.stack([F.pad(item[key], pad=(0, 0, 0, max_len6 - item[key].shape[0])) for item in batch])
     #         else:
     #             padded_batch[key] = torch.stack([item[key] for item in batch])
-
-    #     return padded_batch
-    def collate_fn(batch):
-        batch_size = len(batch)
-        # max_len1 = max(item['encoded_plans1'].shape[1] for item in batch)
-        # max_len2 = max(item['encoded_plans2'].shape[1] for item in batch)
-        # max_len3 = max(max_len1, max_len2)
-        # max_len4 = max(item['attns1'].shape[0] for item in batch)
-        # max_len5 = max(item['attns2'].shape[0] for item in batch)
-        # max_len6 = max(max_len4, max_len5)
-        max_len3 = max_len6 = 200
-        # 在collate_fn中对每个batch进行padding
-        padded_batch = {}
-        for key in batch[0].keys():
-            if key.startswith('encoded_plans'):
-                # 处理树结构等需要padding的数据
-                padded_batch[key] = torch.stack([F.pad(item[key], pad=(0, max_len3 - item[key].shape[1])) for item in batch])
-            elif key.startswith('attns'):
-                # 处理attention等需要padding的数据
-                padded_batch[key] = torch.stack([F.pad(item[key], pad=(0, 0, 0, max_len6 - item[key].shape[0])) for item in batch])
-            else:
-                padded_batch[key] = torch.stack([item[key] for item in batch])
         # labels = padded_batch['labels'].reshape(batch_size, -1).numpy()
         # costs1 = padded_batch['costs1'].reshape(batch_size, -1).numpy()
         # costs2 = padded_batch['costs2'].reshape(batch_size, -1).numpy()
@@ -882,72 +880,72 @@ if __name__ == '__main__':
         # indexes2 = padded_batch['attns2'].reshape(batch_size, -1).numpy()
         # query_feats1 = padded_batch['queryfeature1'].reshape(batch_size, -1).numpy()
         # query_feats2 = padded_batch['queryfeature2'].reshape(batch_size, -1).numpy()
-        def diff_normalized(p1, p2):
-            norm = torch.sum(p1, dim=1)
-            pair = (p1 - p2) / norm.unsqueeze(1)
-            return pair
-        vecs1 = padded_batch['vecs1'].reshape(batch_size, -1)
-        vecs2 = padded_batch['vecs2'].reshape(batch_size, -1)
-        diff = diff_normalized(vecs1, vecs2).numpy()
-        # Stack arrays horizontally
-        X = np.column_stack([diff])
+        # def diff_normalized(p1, p2):
+        #     norm = torch.sum(p1, dim=1)
+        #     pair = (p1 - p2) / norm.unsqueeze(1)
+        #     return pair
+        # vecs1 = padded_batch['vecs1'].reshape(batch_size, -1)
+        # vecs2 = padded_batch['vecs2'].reshape(batch_size, -1)
+        # diff = diff_normalized(vecs1, vecs2).numpy()
+        # # Stack arrays horizontally
+        # X = np.column_stack([diff])
 
-        return X
-    def collate_fn2(batch):
-        batch_size = len(batch)
-        max_len3 = max_len6 = 200
-        # 在collate_fn中对每个batch进行padding
-        padded_batch = {}
-        for key in batch[0].keys():
-            if key.startswith('encoded_plans'):
-                # 处理树结构等需要padding的数据
-                padded_batch[key] = torch.stack([F.pad(item[key], pad=(0, max_len3 - item[key].shape[1])) for item in batch])
-            elif key.startswith('attns'):
-                # 处理attention等需要padding的数据
-                padded_batch[key] = torch.stack([F.pad(item[key], pad=(0, 0, 0, max_len6 - item[key].shape[0])) for item in batch])
-            else:
-                padded_batch[key] = torch.stack([item[key] for item in batch])
-        labels = padded_batch['labels'].reshape(batch_size, -1).numpy()
-        # Stack arrays horizontally
-        X = np.column_stack([labels])
-        return X
-    # dataloader_train1 = DataLoader(leon_dataset3, batch_size=1024, shuffle=True, num_workers=7, collate_fn=collate_fn)
-    # dataloader_val1 = DataLoader(leon_dataset4, batch_size=1024, shuffle=False, num_workers=7, collate_fn=collate_fn)
-    # train_data = next(iter(dataloader_train1))
-    # dnn_model = DNN(train_data['vecs1'].shape[1], [512, 256, 128], 2)
-    # dnn_model = PL_DNN(dnn_model)
-    # logger = pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs', name="dnn", project='leon3')
-    # trainer = pl.Trainer(accelerator="gpu",
-    #                     #  strategy="ddp",
-    #                     #  sync_batchnorm=True,
-    #                      devices=[3],
-    #                     # devices=[3],
-    #                     max_epochs=20,
-    #                     logger=logger,
-    #                     callbacks=[plc.ModelCheckpoint(
-    #                     dirpath= logger.experiment.dir,
-    #                     monitor='val_acc',
-    #                     filename='best-{epoch:02d}-{val_acc:.3f}',
-    #                     save_top_k=1,
-    #                     mode='max',
-    #                     save_last=True
-    #                     )])
-    # trainer.fit(dnn_model, dataloader_train1, dataloader_val1)
+        # return X
+    # def collate_fn2(batch):
+    #     batch_size = len(batch)
+    #     max_len3 = max_len6 = 200
+    #     # 在collate_fn中对每个batch进行padding
+    #     padded_batch = {}
+    #     for key in batch[0].keys():
+    #         if key.startswith('encoded_plans'):
+    #             # 处理树结构等需要padding的数据
+    #             padded_batch[key] = torch.stack([F.pad(item[key], pad=(0, max_len3 - item[key].shape[1])) for item in batch])
+    #         elif key.startswith('attns'):
+    #             # 处理attention等需要padding的数据
+    #             padded_batch[key] = torch.stack([F.pad(item[key], pad=(0, 0, 0, max_len6 - item[key].shape[0])) for item in batch])
+    #         else:
+    #             padded_batch[key] = torch.stack([item[key] for item in batch])
+    #     labels = padded_batch['labels'].reshape(batch_size, -1).numpy()
+    #     # Stack arrays horizontally
+    #     X = np.column_stack([labels])
+    #     return X
+    dataloader_train1 = DataLoader(leon_dataset3, batch_size=1024, shuffle=True, num_workers=7, collate_fn=collate_fn)
+    dataloader_val1 = DataLoader(leon_dataset4, batch_size=1024, shuffle=False, num_workers=7, collate_fn=collate_fn)
+    train_data = next(iter(dataloader_train1))
+    dnn_model = DNN(train_data['vecs1'].shape[1], [512, 256, 128], 2)
+    dnn_model = PL_DNN(dnn_model)
+    logger = pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs', name="dnn", project='leon3')
+    trainer = pl.Trainer(accelerator="gpu",
+                        #  strategy="ddp",
+                        #  sync_batchnorm=True,
+                         devices=[3],
+                        # devices=[3],
+                        max_epochs=20,
+                        logger=logger,
+                        callbacks=[plc.ModelCheckpoint(
+                        dirpath= logger.experiment.dir,
+                        monitor='val_acc',
+                        filename='best-{epoch:02d}-{val_acc:.3f}',
+                        save_top_k=1,
+                        mode='max',
+                        save_last=True
+                        )])
+    trainer.fit(dnn_model, dataloader_train1, dataloader_val1)
     # dataloader_train = DataLoader(leon_dataset1, batch_size=1024, shuffle=True, num_workers=7, collate_fn=collate_fn)
     # dataloader_val = DataLoader(leon_dataset2, batch_size=1024, shuffle=False, num_workers=7, collate_fn=collate_fn)
-    dataloader_train = DataLoader(leon_dataset3, batch_size=1024, shuffle=False, num_workers=7, collate_fn=collate_fn)
-    dataloader_train_y = DataLoader(leon_dataset3, batch_size=1024, shuffle=False, num_workers=7, collate_fn=collate_fn2)
-    dataloader_val = DataLoader(leon_dataset4, batch_size=1024, shuffle=False, num_workers=7, collate_fn=collate_fn)
-    dataloader_val_y = DataLoader(leon_dataset4, batch_size=1024, shuffle=False, num_workers=7, collate_fn=collate_fn2)
-    X_train = np.concatenate([batch_data for batch_data in dataloader_train], axis=0)
-    y_train = np.concatenate([batch_data for batch_data in dataloader_train_y], axis=0)
-    X_test = np.concatenate([batch_data for batch_data in dataloader_val], axis=0)
-    y_test = np.concatenate([batch_data for batch_data in dataloader_val_y], axis=0)
-    model = XGBOD(n_estimators=5)
-    model.fit(X_train, y_train[:,0])
-    y_train_pred = model.predict(X_test)
-    acc = np.sum(y_train_pred == y_test[:,0]) / len(y_test)
-    print(acc)
+    # dataloader_train = DataLoader(leon_dataset3, batch_size=1024, shuffle=False, num_workers=7, collate_fn=collate_fn)
+    # dataloader_train_y = DataLoader(leon_dataset3, batch_size=1024, shuffle=False, num_workers=7, collate_fn=collate_fn2)
+    # dataloader_val = DataLoader(leon_dataset4, batch_size=1024, shuffle=False, num_workers=7, collate_fn=collate_fn)
+    # dataloader_val_y = DataLoader(leon_dataset4, batch_size=1024, shuffle=False, num_workers=7, collate_fn=collate_fn2)
+    # X_train = np.concatenate([batch_data for batch_data in dataloader_train], axis=0)
+    # y_train = np.concatenate([batch_data for batch_data in dataloader_train_y], axis=0)
+    # X_test = np.concatenate([batch_data for batch_data in dataloader_val], axis=0)
+    # y_test = np.concatenate([batch_data for batch_data in dataloader_val_y], axis=0)
+    # model = XGBOD(n_estimators=5)
+    # model.fit(X_train, y_train[:,0])
+    # y_train_pred = model.predict(X_test)
+    # acc = np.sum(y_train_pred == y_test[:,0]) / len(y_test)
+    # print(acc)
     # # dataset_val = BucketDataset(exp1, keys=key)
     # # batch_sampler = BucketBatchSampler(dataset_val.buckets, batch_size=1)
     # # dataloader_val = DataLoader(dataset_val, batch_sampler=batch_sampler)
