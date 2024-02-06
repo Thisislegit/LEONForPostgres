@@ -340,7 +340,7 @@ if __name__ == '__main__':
     retrain_count = 3
     min_leon_time = dict()
     max_query_latency1 = 0
-    logger =  pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs', name="dnn + leon 最后两层等价类 imdb in 202", project=conf['leon']['wandb_project'])
+    logger =  pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs', name="dnn + leon 连续等价类 imdb in 203", project=conf['leon']['wandb_project'])
     for key in conf:
         logger.log_hyperparams(conf[key])
     my_step = 0
@@ -377,6 +377,7 @@ if __name__ == '__main__':
             print(f"------------- sending query {q_send_cnt} starting from idx {ch_start_idx} ------------")
             query_latency1, _ = getPG_latency(sqls_chunk[q_send_cnt], ENABLE_LEON=False, timeout_limit=0)
             print("latency pg ", query_latency1)
+            postgres.getPlans(sqls_chunk[q_send_cnt], None, check_hint_used=False, ENABLE_LEON=True, curr_file=curr_file[q_send_cnt])
             query_latency2, json_dict = getPG_latency(sqls_chunk[q_send_cnt], ENABLE_LEON=True, timeout_limit=int(conf['leon']['leon_timeout']), curr_file=curr_file[q_send_cnt])
             print("latency leon ", query_latency2)
             node = postgres.ParsePostgresPlanJson(json_dict)
@@ -411,7 +412,7 @@ if __name__ == '__main__':
         #         if curNode:
         #             collects(curNode, task_counter, Exp, None, tf_time[q_send_cnt], sqls_chunk[q_send_cnt], curr_file[q_send_cnt], model)
         exp_key = Exp.GetExpKeys()
-        ray.get(task_counter.WriteOnline.remote(True))
+        
         for q_send_cnt in range(chunk_size):
             # postgres.getPlans(sqls_chunk[q_send_cnt], None, check_hint_used=False, ENABLE_LEON=True, curr_file=curr_file[q_send_cnt])
             curNode = Nodes[q_send_cnt]
@@ -428,8 +429,11 @@ if __name__ == '__main__':
                         if cur_join_ids in exp_key:
                             currentNode.info['sql_str'] = currentNode.to_sql(curNode.info['parsed_join_conds'], with_select_exprs=True)
                             postgres.getPlans(currentNode.info['sql_str'], None, check_hint_used=False, ENABLE_LEON=True, curr_file=curr_file[q_send_cnt])
+                            ray.get(task_counter.WriteOnline.remote(True))
+                            postgres.getPlans(currentNode.info['sql_str'], None, check_hint_used=False, ENABLE_LEON=True, curr_file=curr_file[q_send_cnt])
+                            ray.get(task_counter.WriteOnline.remote(False))
 
-        ray.get(task_counter.WriteOnline.remote(False))
+        
         ##########################################################
         leon_node = []
         for node in Nodes:
