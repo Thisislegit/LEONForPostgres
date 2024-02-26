@@ -151,7 +151,7 @@ class Experience:
                         cnt += 1
                         average += plan[0].info['latency']
                 if cnt == 0:
-                    self.GetEqSet()[eq].eqset_latency = TIME_OUT
+                    self.GetEqSet()[eq].eqset_latency = 0
                 else:
                     self.GetEqSet()[eq].eqset_latency = average / cnt
 
@@ -315,3 +315,42 @@ class Experience:
                     pairs.append(tem)
         return pairs
 
+# def PreGetpair(self):
+#         """
+#         a train pair
+#         [[j cost, j latency, j query_vector, j node], [k ...]], ...
+#         """
+#         pairs = []
+#         for eq in self.__exp.keys():
+#             # if len(self.GetExp(eq)) < 8: 
+#             #     continue
+#             # min_dict = dict()
+#             # for j in self.GetExp(eq):
+#                 # if j[0].info['sql_str'] not in min_dict:
+#                 #     min_dict[j[0].info['sql_str']] = j
+#                 # else:
+#                 #     if j[0].cost < min_dict[j[0].info['sql_str']][0].cost:
+#                 #         min_dict[j[0].info['sql_str']] = j
+#             for i, j in enumerate(self.GetExp(eq)):
+#                 all_elements = list(range(i + 1, len(self.GetExp(eq))))
+#                 for k_index in random.sample(all_elements, min(20, len(all_elements))):
+#                 # for k_index in range(i + 1, len(self.GetExp(eq))): 
+#                     k = self.GetExp(eq)[k_index]   
+#                 # for k in min_dict.values():
+#                     if(j[0].cost == k[0].cost):
+#                         continue
+#                     if (j[0].info['sql_str'] != k[0].info['sql_str']):
+#                         continue
+#                     # if (j[0].info['latency'] == k[0].info['latency']): # latency 相同 1s之内不把他train_pair
+#                     if max(j[0].info['latency'],k[0].info['latency']) / (min(j[0].info['latency'],k[0].info['latency']) + 0.001) < 1.05:
+#                         continue
+#                     tem = [j, k]
+#                     # tem.append(j)
+#                     # tem.append(k)
+#                     # tem.append(j[1]+j[2])
+#                     # tem.append(k[1]+k[2])
+#                     # 初始pairloss
+#                     pairs.append(tem)
+#                     tem = [k, j]
+#                     pairs.append(tem)
+#         return pairs

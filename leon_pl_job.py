@@ -189,8 +189,8 @@ def initEqSet():
         equ_set.add(e_tem)
 
     return equ_set
-
 def collects(finnode: plans_lib.Node, actor, exp: Experience, timeout, currTotalLatency, sql, query_id, model):
+
     join_ids_to_append = []
     allPlans = [finnode]
     while (allPlans):
@@ -306,9 +306,9 @@ if __name__ == '__main__':
     actors = [ActorThatQueries.options(name=f"actor{port}").remote(port, our_port) for port, our_port in zip(ports, our_ports)]
     pool = ActorPool(actors)
     
-    train_files, training_query = envs.load_train_files(conf['leon']['workload_type'])
+    train_files, training_query, test_files, test_query = envs.load_train_files1(conf['leon']['workload_type'])
     # ray.get(dict_actor.write_sql_id.remote(train_files))
-    chunk_size = 6 # the # of sqls in a chunk
+    chunk_size = 4 # the # of sqls in a chunk
     min_batch_size = 256
     TIME_OUT_Ratio = 2
     model_path = "./log/model.pth" 
@@ -342,11 +342,11 @@ if __name__ == '__main__':
     elif model_type == "TreeConv":
         nodeFeaturizer = plans_lib.TreeNodeFeaturizer_V2(workload.workload_info)
     first_time = dict()
+    all_train_time = 0
     last_train_pair = 0
     retrain_count = 3
     min_leon_time = dict()
-    max_query_latency1 = 0
-    logger =  pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs', name="dnn + leon 连续等价类+pretrain imdb in 202", project=conf['leon']['wandb_project'])
+    logger =  pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs', name="dnn + leon 连续等价类+pretrain job in 202", project=conf['leon']['wandb_project'])
     for key in conf:
         logger.log_hyperparams(conf[key])
     my_step = 0
@@ -365,6 +365,16 @@ if __name__ == '__main__':
     pct = float(conf['leon']['pct']) # 执行 percent 比例的 plan
     planning_time = 10000 # pg timout会考虑planning时间
     sql_id = [] # 达到局部最优解的query集合
+    pg_time = []
+    leon_time_list = []
+    for pg_i in range(len(test_files)):
+        print(f"------------- sending query {pg_i} ------------")
+        query_latency, _ = getPG_latency(test_query[pg_i], ENABLE_LEON=False, timeout_limit=0)
+        print("latency pg ", query_latency)
+        pg_time.append(query_latency)
+    print("pg_time", pg_time)
+    print("pg_time sum", sum(pg_time))
+    logger.log_metrics({f"Runtime/PG_Time": sum(pg_time)}, step=my_step)
     # ===== ITERATION OF CHUNKS ====
     ch_start_idx = 0 # the start idx of the current chunk in train_files
     while ch_start_idx + chunk_size <= len(train_files):
@@ -372,8 +382,7 @@ if __name__ == '__main__':
         sqls_chunk = load_sql(list(range(ch_start_idx, ch_start_idx + chunk_size)), training_query=training_query)
         curr_file = train_files[ch_start_idx : ch_start_idx + chunk_size]
         print(train_files[ch_start_idx : ch_start_idx + chunk_size])
-        time_ratio = []
-        tf_time = []
+        # tf_time = []
         pg_time1 = []
         Nodes = []
         # ++++ PHASE 1. ++++ send a chunk of queries with ENABLE_LEON=True
@@ -384,39 +393,38 @@ if __name__ == '__main__':
             query_latency1, _ = getPG_latency(sqls_chunk[q_send_cnt], ENABLE_LEON=False, timeout_limit=0)
             print("latency pg ", query_latency1)
             postgres.getPlans(sqls_chunk[q_send_cnt], None, check_hint_used=False, ENABLE_LEON=True, curr_file=curr_file[q_send_cnt])
-            query_latency2, json_dict = getPG_latency(sqls_chunk[q_send_cnt], ENABLE_LEON=True, timeout_limit=int(conf['leon']['leon_timeout']), curr_file=curr_file[q_send_cnt])
-            print("latency leon ", query_latency2)
+            # query_latency2, json_dict = getPG_latency(sqls_chunk[q_send_cnt], ENABLE_LEON=True, timeout_limit=int(conf['leon']['leon_timeout']), curr_file=curr_file[q_send_cnt])
+            json_dict = postgres.getPlans(sqls_chunk[q_send_cnt], None, check_hint_used=False, ENABLE_LEON=True, curr_file=curr_file[q_send_cnt])[0][0][0]
+            # print("latency leon ", query_latency2)
             node = postgres.ParsePostgresPlanJson(json_dict)
-            max_query_latency1 = max(max_query_latency1, query_latency1)
             Nodes.append(node)
-            time_ratio.append(query_latency2 / query_latency1)
-            tf_time.append(query_latency2)
+            # tf_time.append(query_latency2)
             pg_time1.append(query_latency1)
-            logger.log_metrics({f"Query/{curr_file[q_send_cnt]}pg_latency": query_latency1}, step=my_step)
-            logger.log_metrics({f"Query/{curr_file[q_send_cnt]}leon_latency": query_latency2}, step=my_step)
-            if curr_file[q_send_cnt] not in first_time:
-                # first_time[curr_file[q_send_cnt]] = query_latency2 # 第一次leontime
-                first_time[curr_file[q_send_cnt]] = query_latency1 # 第一次pgtime
-            if curr_file[q_send_cnt] not in min_leon_time:
-                min_leon_time[curr_file[q_send_cnt]] = query_latency2
-            else:
-                min_leon_time[curr_file[q_send_cnt]] = min(min_leon_time[curr_file[q_send_cnt]], query_latency2)
-            if min_leon_time[curr_file[q_send_cnt]] / first_time[curr_file[q_send_cnt]] < 0.8 and curr_file[q_send_cnt] not in sql_id:
-                sql_id.append(curr_file[q_send_cnt])
-        logger.log_metrics({f"Runtime/pg_latency": sum(pg_time1)}, step=my_step)
-        logger.log_metrics({f"Runtime/leon_latency": sum(tf_time)}, step=my_step)
-        runtime_pg += sum(pg_time1)
-        runtime_leon += sum(tf_time)
-        logger.log_metrics({f"Runtime/all_pg": runtime_pg}, step=my_step)
-        logger.log_metrics({f"Runtime/all_leon": runtime_leon}, step=my_step)
+            # logger.log_metrics({f"Query/{curr_file[q_send_cnt]}pg_latency": query_latency1}, step=my_step)
+            # logger.log_metrics({f"Query/{curr_file[q_send_cnt]}leon_latency": query_latency2}, step=my_step)
+            # if curr_file[q_send_cnt] not in first_time:
+            #     # first_time[curr_file[q_send_cnt]] = query_latency2 # 第一次leontime
+            #     first_time[curr_file[q_send_cnt]] = query_latency1 # 第一次pgtime
+            # if curr_file[q_send_cnt] not in min_leon_time:
+            #     min_leon_time[curr_file[q_send_cnt]] = query_latency2
+            # else:
+            #     min_leon_time[curr_file[q_send_cnt]] = min(min_leon_time[curr_file[q_send_cnt]], query_latency2)
+            # if min_leon_time[curr_file[q_send_cnt]] / first_time[curr_file[q_send_cnt]] < 0.8 and curr_file[q_send_cnt] not in sql_id:
+            #     sql_id.append(curr_file[q_send_cnt])
+        # logger.log_metrics({f"Runtime/pg_latency": sum(pg_time1)}, step=my_step)
+        # logger.log_metrics({f"Runtime/leon_latency": sum(tf_time)}, step=my_step)
+        # runtime_pg += sum(pg_time1)
+        # runtime_leon += sum(tf_time)
+        # logger.log_metrics({f"Runtime/all_pg": runtime_pg}, step=my_step)
+        # logger.log_metrics({f"Runtime/all_leon": runtime_leon}, step=my_step)
         
         ###############收集新的等价类##############################  
-        # for q_send_cnt in range(chunk_size):
-        #     if retrain_count >= 3 and curr_file[q_send_cnt] not in sql_id: # 最好情况好于0.8
-        #     # if retrain_count >= 5:
-        #         curNode = Nodes[q_send_cnt]
-        #         if curNode:
-        #             collects(curNode, task_counter, Exp, None, tf_time[q_send_cnt], sqls_chunk[q_send_cnt], curr_file[q_send_cnt], model)
+        for q_send_cnt in range(chunk_size):
+            if retrain_count >= 3 and curr_file[q_send_cnt] not in sql_id: # 最好情况好于0.8
+            # if retrain_count >= 5:
+                curNode = Nodes[q_send_cnt]
+                if curNode:
+                    collects(curNode, task_counter, Exp, None, None, sqls_chunk[q_send_cnt], curr_file[q_send_cnt], model)
         exp_key = Exp.GetExpKeys()
         
         for q_send_cnt in range(chunk_size):
@@ -546,7 +554,7 @@ if __name__ == '__main__':
                             temp = ','.join(sorted(temp))
                             if temp == node2.info['join_tables']:
                                 if round(node1.cost * 100) / 100.0 == node2.cost:
-                                    Exp.collectRate(node2.info['join_tables'], first_time[curr_file[q_recieved_cnt]], tf_time[q_recieved_cnt], curr_file[q_recieved_cnt])
+                                    # Exp.collectRate(node2.info['join_tables'], first_time[curr_file[q_recieved_cnt]], tf_time[q_recieved_cnt], curr_file[q_recieved_cnt])
                                     c_node = node1
                                     
                                     # c_plan = [c_node,
@@ -720,7 +728,9 @@ if __name__ == '__main__':
             Exp.AppendExp(result[1], result[0])
         if loss_node > 0:
             print("loss_node", loss_node)
-
+        end_time = time.time()
+        logger.log_metrics({"Time/pick_nodes_time": end_time - start_time}, step=my_step)
+        # Pick Node 结束
         del queryfeature, encoded_plans, attns
         gc.collect()
         torch.cuda.empty_cache()
@@ -733,11 +743,11 @@ if __name__ == '__main__':
         for eq in eqset:
             print(f"{Exp.GetQueryId(eq)}Eq:{eq},len:{len(Exp.GetExp(eq))},opt_time:{round(Exp.GetEqSet()[eq].opt_time, 2)},eqset_latency:{round(Exp.GetEqSet()[eq].eqset_latency, 2)}")
         # print(eqset)
-        end_time = time.time()
-        logger.log_metrics({"Time/pick_nodes_time": end_time - start_time}, step=my_step)
-        start_time = time.time()
+        
+        
         # ++++ PHASE 3. ++++ model training
         # PHASE 3 还有小问题
+        
         train_pairs = Exp.Getpair()
         dnn_pairs = Exp.PreGetpair()
         # TODO: 每个batch只用一个等价类，等价类中的每个plan只推理一次
@@ -752,6 +762,8 @@ if __name__ == '__main__':
         #         retrain_count = 0
         # last_train_pair = len(train_pairs)
         # print(retrain_count)
+        del random_tensor
+        torch.cuda.empty_cache()
         if len(dnn_pairs) > min_batch_size:
             leon_dataset = prepare_dataset(dnn_pairs, True, nodeFeaturizer, encoding_dict)
             del dnn_pairs
@@ -764,8 +776,6 @@ if __name__ == '__main__':
             dataloader_val = DataLoader(val_ds, batch_size=1024, shuffle=False, num_workers=7)
             dnn_model.optimizer_state_dict = dnn_prev_optimizer_state_dict
 
-            del random_tensor
-            torch.cuda.empty_cache()
             trainer = pl.Trainer(accelerator="gpu",
                                 devices=[train_gpu],
                                 enable_progress_bar=True,
@@ -779,7 +789,10 @@ if __name__ == '__main__':
                                             verbose=True
                                         )],
                                 logger=None)
+            start_time = time.time()
             trainer.fit(dnn_model, dataloader_train, dataloader_val)
+            end_time = time.time()
+            dnn_train_time = end_time - start_time
             del leon_dataset, train_ds, val_ds, dataloader_train, dataloader_val
 
         if len(train_pairs) > min_batch_size:
@@ -806,14 +819,17 @@ if __name__ == '__main__':
                                 max_epochs=100,
                                 callbacks=callbacks,
                                 logger=logger)
+            start_time = time.time()
             trainer.fit(model, dataloader_train, dataloader_val)
+            end_time = time.time()
+            leon_train_time = end_time - start_time
             # trainer.test(model, dataloader_test)
             model.eq_summary = {key: 0 for key in eqset}
             prev_optimizer_state_dict = trainer.optimizers[0].state_dict()
             del leon_dataset, train_ds, val_ds, dataloader_train, dataloader_val #, dataset_test, batch_sampler, dataloader_test
-            gc.collect()
-            torch.cuda.empty_cache()
-            random_tensor = torch.rand((90000, 1000, 27)).to(f'cuda:{train_gpu}')
+        gc.collect()
+        torch.cuda.empty_cache()
+        random_tensor = torch.rand((90000, 1000, 27)).to(f'cuda:{train_gpu}')
 
         print("*"*20)
         print("Current Accuracy For Each EqSet: ", model.eq_summary)
@@ -830,11 +846,42 @@ if __name__ == '__main__':
             print(f"Successfully remove {message_path}")
         else:
             print(f"Fail to remove {message_path}")
-        end_time = time.time()
-        logger.log_metrics({"Time/train_time": end_time - start_time}, step=my_step)
+
+        try:
+            train_time = dnn_train_time + leon_train_time
+        except:
+            train_time = 0
+        all_train_time = all_train_time + train_time
+        logger.log_metrics({"Time/train_time": train_time}, step=my_step)
+        logger.log_metrics({"Time/all_train_time": all_train_time}, step=my_step)
+        leon_time = []
+        for pg_i in range(len(test_files)):
+            print(f"------------- sending query {pg_i} ------------")
+            postgres.getPlans(test_query[pg_i], None, check_hint_used=False, ENABLE_LEON=True, curr_file=test_files[pg_i])
+            query_latency, _ = getPG_latency(test_query[pg_i], ENABLE_LEON=True, timeout_limit=int(conf['leon']['leon_timeout']), curr_file=test_files[pg_i])
+            print("latency pg ", query_latency)
+            leon_time.append(query_latency)
+        leon_time_list.append(leon_time)
+        print("leon_time", sum(leon_time))
+        logger.log_metrics({f"Time/Leon_Time": sum(leon_time)}, step=my_step)
         my_step += 1
-        with open("./log/exp_v5.pkl", 'wb') as f:
-            pickle.dump(Exp.OnlyGetExp(), f) 
+        # with open("./log/exp_v5.pkl", 'wb') as f:
+        #     pickle.dump(Exp.OnlyGetExp(), f) 
+    min_time = 900000
+    min_gmrl = 900000
+    min_leon_time = []
+    for leon_time in leon_time_list:
+        if sum(leon_time) < min_time:
+            min_time = sum(leon_time)
+            min_leon_time = leon_time
+        temp = np.power(np.prod(np.array(pg_time) / np.array(leon_time)), 1/len(leon_time))
+        if temp < min_gmrl:
+            min_gmrl = temp
+    print("min_gmrl", min_gmrl)
+    print("min_leon_time", min_leon_time)
+    min_values = np.min(leon_time_list, axis=0)
+    print("min_time", min_time)
+        
         
 
 

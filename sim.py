@@ -448,7 +448,7 @@ class Sim(object):
         p.Define('infer_search_until_n_complete_plans', 1,
                  'Search until how many complete plans?')
         # Workload.
-        p.Define('workload', envs.JoinOrderBenchmark.Params(),
+        p.Define('workload', envs.JoinOrderBenchmark_Train.Params(),
                  'Params of the Workload, i.e., a set of queries.')
         # Data collection.
         p.Define('skip_data_collection_geq_num_rels', None,
@@ -1062,13 +1062,13 @@ class Sim(object):
                     logger=[
                         pl_loggers.WandbLogger(
                             save_dir=os.getcwd() + '/logs',
-                            name="202401241930",
+                            name="202402061327",
                             project="wyz的pretrain"
                         )
                     ]
                 )
         trainer.fit(model, dataloader_train, dataloader_val)
-        model_path = "./log/SimModel0124.pth"
+        model_path = "./log/SimModel0206.pth"
         torch.save(model.model, model_path)
         return None
 

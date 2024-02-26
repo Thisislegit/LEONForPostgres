@@ -449,7 +449,7 @@ class Sim(object):
         p.Define('infer_search_until_n_complete_plans', 1,
                  'Search until how many complete plans?')
         # Workload.
-        p.Define('workload', envs.JoinOrderBenchmark_Train.Params(),
+        p.Define('workload', envs.JoinOrderBenchmark.Params(),
                  'Params of the Workload, i.e., a set of queries.')
         # Data collection.
         p.Define('skip_data_collection_geq_num_rels', None,
@@ -1015,8 +1015,8 @@ class Sim(object):
         train_ds, val_ds = torch.utils.data.random_split(leon_dataset, [train_size, val_size])
         del data
         gc.collect()
-        dataloader_train = DataLoader(train_ds, batch_size=1024, shuffle=True, num_workers=6)
-        dataloader_val = DataLoader(val_ds, batch_size=1024, shuffle=False, num_workers=6)
+        dataloader_train = DataLoader(train_ds, batch_size=32768, shuffle=True, num_workers=0)
+        dataloader_val = DataLoader(val_ds, batch_size=32768, shuffle=False, num_workers=0)
         batch = next(iter(dataloader_train))
         # batch = next(iter(self.train_loader))
         # logging.info(
@@ -1082,13 +1082,13 @@ class Sim(object):
                     logger=[
                         pl_loggers.WandbLogger(
                             save_dir=os.getcwd() + '/logs',
-                            name="202401241930",
+                            name="202402231400",
                             project="wyz的pretrain"
                         )
                     ]
                 )
         trainer.fit(model, dataloader_train, dataloader_val)
-        model_path = "./log/DnnModel0201.pth"
+        model_path = "./log/DnnModel0223_job.pth"
         torch.save(model.model, model_path)
         # end
         return None
