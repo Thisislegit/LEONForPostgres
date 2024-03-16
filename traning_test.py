@@ -685,7 +685,7 @@ class PL_DNN(pl.LightningModule):
         loss_fn = nn.CrossEntropyLoss()
         loss = loss_fn(output, labels.to(torch.long))
         acc = torch.sum(torch.argmax(output, dim=1) == labels).item() / len(labels)
-        self.log_dict({'train_loss': loss, 'train_acc': acc}, on_epoch=True)
+        self.log_dict({'dnn_train_loss': loss, 'dnn_train_acc': acc}, on_epoch=True)
         return loss
 
     def validation_step(self, batch):
@@ -697,7 +697,7 @@ class PL_DNN(pl.LightningModule):
         loss_fn = nn.CrossEntropyLoss()
         loss = loss_fn(output, labels.to(torch.long))
         acc = torch.sum(torch.argmax(output, dim=1) == labels).item() / len(labels)
-        self.log_dict({'val_loss': loss, 'val_acc': acc}, on_epoch=True)
+        self.log_dict({'dnn_val_loss': loss, 'dnn_val_acc': acc}, on_epoch=True)
         return loss
     
     def configure_optimizers(self):

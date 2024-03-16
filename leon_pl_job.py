@@ -219,7 +219,7 @@ def load_callbacks(logger):
     callbacks.append(plc.EarlyStopping(
         monitor='val_acc',
         mode='max',
-        patience=2,
+        patience=3,
         min_delta=0.001,
         check_on_train_epoch_end=False
     ))
@@ -308,7 +308,7 @@ if __name__ == '__main__':
     
     train_files, training_query, test_files, test_query = envs.load_train_files1(conf['leon']['workload_type'])
     # ray.get(dict_actor.write_sql_id.remote(train_files))
-    chunk_size = 4 # the # of sqls in a chunk
+    chunk_size = 3 # the # of sqls in a chunk
     min_batch_size = 256
     TIME_OUT_Ratio = 2
     model_path = "./log/model.pth" 
@@ -346,7 +346,7 @@ if __name__ == '__main__':
     last_train_pair = 0
     retrain_count = 3
     min_leon_time = dict()
-    logger =  pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs', name="dnn + leon 连续等价类+pretrain job in 202", project=conf['leon']['wandb_project'])
+    logger =  pl_loggers.WandbLogger(save_dir=os.getcwd() + '/logs', name="测试4 每次重训leon in 202", project=conf['leon']['wandb_project'])
     for key in conf:
         logger.log_hyperparams(conf[key])
     my_step = 0
@@ -419,12 +419,12 @@ if __name__ == '__main__':
         # logger.log_metrics({f"Runtime/all_leon": runtime_leon}, step=my_step)
         
         ###############收集新的等价类##############################  
-        for q_send_cnt in range(chunk_size):
-            if retrain_count >= 3 and curr_file[q_send_cnt] not in sql_id: # 最好情况好于0.8
-            # if retrain_count >= 5:
-                curNode = Nodes[q_send_cnt]
-                if curNode:
-                    collects(curNode, task_counter, Exp, None, None, sqls_chunk[q_send_cnt], curr_file[q_send_cnt], model)
+        # for q_send_cnt in range(chunk_size):
+        #     if retrain_count >= 3 and curr_file[q_send_cnt] not in sql_id: # 最好情况好于0.8
+        #     # if retrain_count >= 5:
+        #         curNode = Nodes[q_send_cnt]
+        #         if curNode:
+        #             collects(curNode, task_counter, Exp, None, None, sqls_chunk[q_send_cnt], curr_file[q_send_cnt], model)
         exp_key = Exp.GetExpKeys()
         
         for q_send_cnt in range(chunk_size):
@@ -764,36 +764,36 @@ if __name__ == '__main__':
         # print(retrain_count)
         del random_tensor
         torch.cuda.empty_cache()
-        if len(dnn_pairs) > min_batch_size:
-            leon_dataset = prepare_dataset(dnn_pairs, True, nodeFeaturizer, encoding_dict)
-            del dnn_pairs
-            gc.collect()
-            dataset_size = len(leon_dataset)
-            train_size = int(0.8 * dataset_size)
-            val_size = dataset_size - train_size
-            train_ds, val_ds = torch.utils.data.random_split(leon_dataset, [train_size, val_size])
-            dataloader_train = DataLoader(train_ds, batch_size=1024, shuffle=True, num_workers=7)
-            dataloader_val = DataLoader(val_ds, batch_size=1024, shuffle=False, num_workers=7)
-            dnn_model.optimizer_state_dict = dnn_prev_optimizer_state_dict
+        # if len(dnn_pairs) > min_batch_size:
+        #     leon_dataset = prepare_dataset(dnn_pairs, True, nodeFeaturizer, encoding_dict)
+        #     del dnn_pairs
+        #     gc.collect()
+        #     dataset_size = len(leon_dataset)
+        #     train_size = int(0.8 * dataset_size)
+        #     val_size = dataset_size - train_size
+        #     train_ds, val_ds = torch.utils.data.random_split(leon_dataset, [train_size, val_size])
+        #     dataloader_train = DataLoader(train_ds, batch_size=1024, shuffle=True, num_workers=7)
+        #     dataloader_val = DataLoader(val_ds, batch_size=1024, shuffle=False, num_workers=7)
+        #     dnn_model.optimizer_state_dict = dnn_prev_optimizer_state_dict
 
-            trainer = pl.Trainer(accelerator="gpu",
-                                devices=[train_gpu],
-                                enable_progress_bar=True,
-                                max_epochs=100,
-                                callbacks=[plc.EarlyStopping(
-                                            monitor='val_acc',
-                                            mode='max',
-                                            patience=2,
-                                            min_delta=0.001,
-                                            check_on_train_epoch_end=False,
-                                            verbose=True
-                                        )],
-                                logger=None)
-            start_time = time.time()
-            trainer.fit(dnn_model, dataloader_train, dataloader_val)
-            end_time = time.time()
-            dnn_train_time = end_time - start_time
-            del leon_dataset, train_ds, val_ds, dataloader_train, dataloader_val
+        #     trainer = pl.Trainer(accelerator="gpu",
+        #                         devices=[train_gpu],
+        #                         enable_progress_bar=True,
+        #                         max_epochs=100,
+        #                         callbacks=[plc.EarlyStopping(
+        #                                     monitor='val_acc',
+        #                                     mode='max',
+        #                                     patience=2,
+        #                                     min_delta=0.001,
+        #                                     check_on_train_epoch_end=False,
+        #                                     verbose=True
+        #                                 )],
+        #                         logger=None)
+        #     start_time = time.time()
+        #     trainer.fit(dnn_model, dataloader_train, dataloader_val)
+        #     end_time = time.time()
+        #     dnn_train_time = end_time - start_time
+        #     del leon_dataset, train_ds, val_ds, dataloader_train, dataloader_val
 
         if len(train_pairs) > min_batch_size:
             leon_dataset = prepare_dataset(train_pairs, True, nodeFeaturizer, encoding_dict)
@@ -809,7 +809,9 @@ if __name__ == '__main__':
             # batch_sampler = BucketBatchSampler(dataset_test.buckets, batch_size=1)
             # dataloader_test = DataLoader(dataset_test, batch_sampler=batch_sampler, num_workers=7)
             # model = load_model(model_path, prev_optimizer_state_dict).to(DEVICE)
-            model.optimizer_state_dict = prev_optimizer_state_dict
+            model = treeconv.ResNet(820, 50, 1, treeconv.ResidualBlock, [1, 1, 1, 1]).to(DEVICE)
+            model = PL_Leon(model)
+            # model.optimizer_state_dict = prev_optimizer_state_dict
             callbacks = load_callbacks(logger=None)
             # del random_tensor
             torch.cuda.empty_cache()
@@ -848,7 +850,8 @@ if __name__ == '__main__':
             print(f"Fail to remove {message_path}")
 
         try:
-            train_time = dnn_train_time + leon_train_time
+            # train_time = dnn_train_time + leon_train_time
+            train_time = leon_train_time
         except:
             train_time = 0
         all_train_time = all_train_time + train_time
@@ -858,6 +861,7 @@ if __name__ == '__main__':
         for pg_i in range(len(test_files)):
             print(f"------------- sending query {pg_i} ------------")
             postgres.getPlans(test_query[pg_i], None, check_hint_used=False, ENABLE_LEON=True, curr_file=test_files[pg_i])
+            time.sleep(0.5)
             query_latency, _ = getPG_latency(test_query[pg_i], ENABLE_LEON=True, timeout_limit=int(conf['leon']['leon_timeout']), curr_file=test_files[pg_i])
             print("latency pg ", query_latency)
             leon_time.append(query_latency)
@@ -874,7 +878,7 @@ if __name__ == '__main__':
         if sum(leon_time) < min_time:
             min_time = sum(leon_time)
             min_leon_time = leon_time
-        temp = np.power(np.prod(np.array(pg_time) / np.array(leon_time)), 1/len(leon_time))
+        temp = np.power(np.prod(np.array(leon_time) / np.array(pg_time)), 1/len(leon_time))
         if temp < min_gmrl:
             min_gmrl = temp
     print("min_gmrl", min_gmrl)

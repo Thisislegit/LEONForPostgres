@@ -56,3 +56,5 @@ conf/ray_address.txt
 *.ipynb
 conf/ray_address.txt
 lightning_logs/
+my_job_ext/
+tpch/

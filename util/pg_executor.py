@@ -88,7 +88,27 @@ def Cursor():
             cursor.execute("SET client_encoding TO 'UTF8';")
             cursor.execute(f"set leon_port={leon_port};")
             cursor.execute(f"set free_size={free_size};")
-            cursor.execute("load 'pg_hint_plan';")
+            # cursor.execute("load 'pg_hint_plan';")
+
+            yield cursor
+    finally:
+        conn.close()
+
+@contextlib.contextmanager
+def Cursor1(port1):
+    """Get a cursor to local Postgres database."""
+    # TODO: create the cursor once per worker node.
+    conn = psycopg2.connect(database=database, user=user,
+                            password=password, host=host, port=port1)
+    conn.set_client_encoding('UTF8')
+
+    conn.set_session(autocommit=True)
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("SET client_encoding TO 'UTF8';")
+            cursor.execute(f"set leon_port={leon_port};")
+            cursor.execute(f"set free_size={free_size};")
+            # cursor.execute("load 'pg_hint_plan';")
 
             yield cursor
     finally:
@@ -188,7 +208,7 @@ def MyCursor(database_port):
     try:
         with conn.cursor() as cursor:
             cursor.execute("SET client_encoding TO 'UTF8';")
-            cursor.execute("load 'pg_hint_plan';")
+            # cursor.execute("load 'pg_hint_plan';")
             cursor.execute(f"set free_size={free_size};")
 
             yield cursor

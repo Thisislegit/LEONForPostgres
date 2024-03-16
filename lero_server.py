@@ -26,6 +26,8 @@ from config import read_config
 from util import treeconv
 import torch.nn.functional as F
 from traning_test import *
+from lero_feature import *
+from lero_model import LeroModel, LeroModelPairWise, LeroNet, PL_Lero
 conf = read_config()
 
 def is_subset(s1, s2):
@@ -192,7 +194,17 @@ class LeonModel:
             self.feature_statistics = load_json(statistics_file_path)
             add_numerical_scalers(self.feature_statistics)
             self.op_name_to_one_hot = get_op_name_to_one_hot(self.feature_statistics)
-
+        ops = self.workload.workload_info.all_ops
+        ops = np.array([entry.replace(' ', '') for entry in ops])
+        ops = np.where(ops == 'NestedLoop', 'NestLoop', ops)
+        ops = np.where(ops == 'Materialize', 'Material', ops)
+        self.feature_generator = FeatureGenerator()
+        self.feature_generator.normalizer = Normalizer(
+                    {"Startup Cost": self.workload.workload_info.mins['cost'],
+                    "Total Cost": self.workload.workload_info.mins['cost'], "Plan Rows": min(self.workload.workload_info.table_num_rows.values())},
+                    {"Startup Cost": self.workload.workload_info.maxs['cost'],
+                    "Total Cost": self.workload.workload_info.maxs['cost'], "Plan Rows": max(self.workload.workload_info.table_num_rows.values())})
+        self.feature_generator.feature_parser = AnalyzeJsonParser(self.feature_generator.normalizer, list(ops))
         self.eq_summary = dict()
         self.current_eq_summary = None
         self.Current_Level = None
@@ -240,82 +252,32 @@ class LeonModel:
         return cali_all
     
     def encoding(self, X): 
-        # if self.model_type == "Transformer":
-        #     seqs, _, attns, _, _ = self.plans_encoding(X)
-        #     OneNode = PlanToNode(self.workload, [X[0]])[0]
-        #     plans_lib.GatherUnaryFiltersInfo(OneNode)
-        #     postgres.EstimateFilterRows(OneNode)  
-        #     OneQueryFeature = self.queryFeaturizer(OneNode)
-        #     OneQueryFeature = torch.from_numpy(OneQueryFeature).unsqueeze(0)
-        #     queryfeature = OneQueryFeature.repeat(seqs.shape[0], 1)
-        #     return seqs, attns, queryfeature
-        # elif self.model_type == "TreeConv":
-        #     nodes = []
-        #     null_nodes = []
-        #     queryencoding = []
-        #     for i in range(0, len(X)):
-        #         node = postgres.ParsePostgresPlanJson_1(X[i], self.workload.workload_info.alias_to_names)
-        #         if node.info['join_cond'] == ['']: # return 1.00
-        #             return None, None, None
-                
-        #         plans_lib.GatherUnaryFiltersInfo(node)
-        #         postgres.EstimateFilterRows(node)   
-        #         null_node = plans_lib.Binarize(node)
-        #         if i == 0:
-        #             temp = node.to_sql(node.info['join_cond'], with_select_exprs=True)
-        #             node.info['sql_str'] = temp
-        #             query_vecs = torch.from_numpy(self.queryFeaturizer(node)).unsqueeze(0)
-        #         node.info['sql_str'] = temp
-        #         queryencoding.append(query_vecs)
-        #         nodes.append(node)
-        #         null_nodes.append(null_node)
-        #     if nodes:
-        #         tensor_query_encoding = (torch.cat(queryencoding, dim=0))
-        #         trees, indexes = encoding.TreeConvFeaturize(self.nodeFeaturizer, null_nodes)
-        #         # print("tensor_query_encoding", tensor_query_encoding.shape,
-        #         #     "trees", trees.shape,
-        #         #     "indexes", indexes.shape)
-        #     return tensor_query_encoding, trees, indexes
         if self.model_type == "Transformer":
             encoded_plans, attns, queryfeature, _ = envs.leon_encoding(self.model_type, X, 
                                                                            require_nodes=False, workload=self.workload, 
                                                                            configs=configs, op_name_to_one_hot=self.op_name_to_one_hot,
                                                                            plan_parameters=plan_parameters, feature_statistics=self.feature_statistics)
             return encoded_plans, attns, queryfeature
-
+        
         elif self.model_type == "TreeConv":
-            trees, indexes, queryfeature, nodes = envs.leon_encoding(self.model_type, X, 
-                                                                           require_nodes=True, workload=self.workload, 
-                                                                           queryFeaturizer=self.queryFeaturizer, nodeFeaturizer=self.nodeFeaturizer)
-            if isinstance(trees, list):
-                trees, indexes, = _batch(trees, indexes)
-            for node in nodes:
-                plan_channels = dict()
-                ops = self.workload.workload_info.all_ops
-                ops = np.array([entry.replace(' ', '') for entry in ops])
-                ops = np.where(ops == 'NestedLoop', 'NestLoop', ops)
-                ops = np.where(ops == 'Materialize', 'Material', ops)
-                for c in self.channels:
-                    plan_channels[c] = dict()
-                    for node_type in ops:
-                        plan_channels[c][node_type] = 0
-                get_channels_dfs(node, plan_channels)
-                needed = torch.from_numpy(get_vecs([plan_channels]))
-                node.info['needed'] = needed
-            return trees, indexes, queryfeature, nodes
+            lero_feature, _ = self.feature_generator.transform(X)
+            return lero_feature
     
-    def inference(self, seqs, attns, QueryFeature=None, nodes=None):
-        cali_all = self.get_calibrations(seqs, attns, QueryFeature)
-        def diff_normalized(p1, p2):
-            norm = torch.sum(p1, dim=1)
-            pair = (p1 - p2) / norm.unsqueeze(1)
-            return pair
-        cost_node = nodes[0]
-        for i, node in enumerate(nodes):
-            self.__dnn_model.eval()
-            if self.__dnn_model(diff_normalized(node.info['needed'], cost_node.info['needed']).to(torch.float32)).squeeze(0)[0] > 0.65:
-                if i != 0:
-                    cali_all[i] = 1000000
+    def inference(self, lero_feature):
+        lero_feature = self.__model.build_trees(lero_feature)
+        cali_all = self.__model(lero_feature).squeeze(1)
+        cali_all = cali_all - min(cali_all) + 1
+        cali_all = cali_all / max(cali_all)
+        # def diff_normalized(p1, p2):
+        #     norm = torch.sum(p1, dim=1)
+        #     pair = (p1 - p2) / norm.unsqueeze(1)
+        #     return pair
+        # cost_node = nodes[0]
+        # for i, node in enumerate(nodes):
+        #     self.__dnn_model.eval()
+        #     if self.__dnn_model(diff_normalized(node.info['needed'], cost_node.info['needed']).to(torch.float32)).squeeze(0)[0] > 0.65:
+        #         if i != 0:
+        #             cali_all[i] = 1000000
         # cali_all = 1000 * torch.rand(cali_all.shape[0])
         # print(cali_all)
         # cali_str = ['{:.2f}'.format(i) for i in cali_all.tolist()] # 最后一次 cali
@@ -363,7 +325,7 @@ class LeonModel:
         temp, self.eqset, self.eq_summary = ray.get(self.task_counter.load_model.remote())
         if temp:
             print(self.eqset)
-            self.__model, self.__dnn_model = self.load_model("./log/model.pth")
+            self.__model, self.__dnn_model = self.load_model("./log/lero_model.pth")
         X = messages
         if not isinstance(X, list):
             X = [X]
@@ -457,8 +419,7 @@ class LeonModel:
                 return ';'.join(['1.00,1,0' if i['Plan']['Total Cost'] != pick_plan else '0.01,0,9' for i in X]) + ';'
 
         try:
-            # if ray.get(self.task_counter.GetOnline.remote()) and self.Current_Level == self.Levels_Needed:
-            if ray.get(self.task_counter.GetOnline.remote()):
+            if ray.get(self.task_counter.GetOnline.remote()) and self.Current_Level == self.Levels_Needed:
                 self.task_counter.Add_task.remote()
                 # self.writer_hander.recieved_task += 1 需要试一下能不能直接成员变量 +1?
                 self.writer_hander.write_file.remote(X)
@@ -477,10 +438,10 @@ class LeonModel:
             return ';'.join(['1.00,1,0' for _ in X]) + ';'
 
         # 编码
-        seqs, attns, QueryFeature, nodes = self.encoding(X)
+        lero_feature = self.encoding(X)
 
         # 推理
-        cali_strs = self.inference(seqs, attns, QueryFeature, nodes)
+        cali_strs = self.inference(lero_feature)
         # del seqs, attns, QueryFeature
         # gc.collect()
         # torch.cuda.empty_cache()
@@ -514,6 +475,17 @@ class SimpleLeonModel:
             add_numerical_scalers(self.feature_statistics)
             self.op_name_to_one_hot = get_op_name_to_one_hot(self.feature_statistics)
         self.task_counter = ray.get_actor('counter')
+        ops = self.workload.workload_info.all_ops
+        ops = np.array([entry.replace(' ', '') for entry in ops])
+        ops = np.where(ops == 'NestedLoop', 'NestLoop', ops)
+        ops = np.where(ops == 'Materialize', 'Material', ops)
+        self.feature_generator = FeatureGenerator()
+        self.feature_generator.normalizer = Normalizer(
+                    {"Startup Cost": self.workload.workload_info.mins['cost'],
+                    "Total Cost": self.workload.workload_info.mins['cost'], "Plan Rows": min(self.workload.workload_info.table_num_rows.values())},
+                    {"Startup Cost": self.workload.workload_info.maxs['cost'],
+                    "Total Cost": self.workload.workload_info.maxs['cost'], "Plan Rows": max(self.workload.workload_info.table_num_rows.values())})
+        self.feature_generator.feature_parser = AnalyzeJsonParser(self.feature_generator.normalizer, list(ops))
         self.eq_summary = dict()
         self.current_eq_summary = None
         self.Current_Level = None
@@ -568,40 +540,29 @@ class SimpleLeonModel:
                                                                            configs=configs, op_name_to_one_hot=self.op_name_to_one_hot,
                                                                            plan_parameters=plan_parameters, feature_statistics=self.feature_statistics)
             return encoded_plans, attns, queryfeature
-
+        
         elif self.model_type == "TreeConv":
-            trees, indexes, queryfeature, nodes = envs.leon_encoding(self.model_type, X, 
-                                                                           require_nodes=True, workload=self.workload, 
-                                                                           queryFeaturizer=self.queryFeaturizer, nodeFeaturizer=self.nodeFeaturizer)
-            if isinstance(trees, list):
-                trees, indexes, = _batch(trees, indexes)
-            for node in nodes:
-                plan_channels = dict()
-                ops = self.workload.workload_info.all_ops
-                ops = np.array([entry.replace(' ', '') for entry in ops])
-                ops = np.where(ops == 'NestedLoop', 'NestLoop', ops)
-                ops = np.where(ops == 'Materialize', 'Material', ops)
-                for c in self.channels:
-                    plan_channels[c] = dict()
-                    for node_type in ops:
-                        plan_channels[c][node_type] = 0
-                get_channels_dfs(node, plan_channels)
-                needed = torch.from_numpy(get_vecs([plan_channels]))
-                node.info['needed'] = needed
-            return trees, indexes, queryfeature, nodes
+            lero_feature, _ = self.feature_generator.transform(X)
+            return lero_feature
     
-    def inference(self, seqs, attns, QueryFeature=None, nodes=None):
-        cali_all = self.get_calibrations(seqs, attns, QueryFeature)
-        def diff_normalized(p1, p2):
-            norm = torch.sum(p1, dim=1)
-            pair = (p1 - p2) / norm.unsqueeze(1)
-            return pair
-        cost_node = nodes[0]
-        for i, node in enumerate(nodes):
-            self.__dnn_model.eval()
-            if self.__dnn_model(diff_normalized(node.info['needed'], cost_node.info['needed']).to(torch.float32)).squeeze(0)[0] > 0.65:
-                if i != 0:
-                    cali_all[i] = 1000000
+    def inference(self, lero_feature):
+        lero_feature = self.__model.build_trees(lero_feature)
+        cali_all = self.__model(lero_feature).squeeze(1)
+        cali_all = cali_all - min(cali_all) + 1
+        cali_all = cali_all / max(cali_all)
+        # def diff_normalized(p1, p2):
+        #     norm = torch.sum(p1, dim=1)
+        #     pair = (p1 - p2) / norm.unsqueeze(1)
+        #     return pair
+        # cost_node = nodes[0]
+        # for i, node in enumerate(nodes):
+        #     self.__dnn_model.eval()
+        #     if self.__dnn_model(diff_normalized(node.info['needed'], cost_node.info['needed']).to(torch.float32)).squeeze(0)[0] > 0.65:
+        #         if i != 0:
+        #             cali_all[i] = 1000000
+        # cali_all = 1000 * torch.rand(cali_all.shape[0])
+        # print(cali_all)
+        # cali_str = ['{:.2f}'.format(i) for i in cali_all.tolist()] # 最后一次 cali
         def format_scientific_notation(number):
             str_number = "{:e}".format(number)
             mantissa, exponent = str_number.split('e')
@@ -612,6 +573,7 @@ class SimpleLeonModel:
             result = "{},{},{:d}".format(mantissa, '1' if exponent >= 0 else '0', abs(exponent))
             return result
         cali_str = [format_scientific_notation(i) for i in cali_all.tolist()] # 最后一次 cali
+        # print("cali_str len", len(cali_str))
         cali_strs = ';'.join(cali_str)
         return cali_strs
     
@@ -644,7 +606,7 @@ class SimpleLeonModel:
         temp, self.eqset, self.eq_summary = ray.get(self.task_counter.load_port.remote(self.model_port))
         if temp:
             print(self.eqset)
-            self.__model, self.__dnn_model = self.load_model("./log/model.pth")
+            self.__model, self.__dnn_model = self.load_model("./log/lero_model.pth")
         X = messages
         if not isinstance(X, list):
             X = [X]
@@ -742,10 +704,10 @@ class SimpleLeonModel:
             return ';'.join(['1.00,1,0' for _ in X]) + ';'
 
         # 编码
-        seqs, attns, QueryFeature, nodes = self.encoding(X)
+        lero_feature = self.encoding(X)
 
         # 推理
-        cali_strs = self.inference(seqs, attns, QueryFeature, nodes)
+        cali_strs = self.inference(lero_feature)
         # del seqs, attns, QueryFeature
         # gc.collect()
         # torch.cuda.empty_cache()

@@ -49,18 +49,37 @@ class LeonDataset(Dataset):
         query_feats2 = self.nodes2[idx].info['query_feature']
         vecs1 = self.dict[self.nodes1[idx].info['index']][2].squeeze(0)
         vecs2 = self.dict[self.nodes2[idx].info['index']][2].squeeze(0)
-        return {
-            'labels': self.labels[idx],
-            'costs1': self.costs1[idx],
-            'costs2': self.costs2[idx],
-            'encoded_plans1': trees1,
-            'encoded_plans2': trees2,
-            'attns1': indexes1,
-            'attns2': indexes2,
-            'queryfeature1': query_feats1,
-            'queryfeature2': query_feats2,
-            'vecs1': vecs1,
-            'vecs2': vecs2
+        try:
+            lero_feature1 = self.dict[self.nodes1[idx].info['index']][3]
+            lero_feature2 = self.dict[self.nodes2[idx].info['index']][3]
+            return {
+                'labels': self.labels[idx],
+                'costs1': self.costs1[idx],
+                'costs2': self.costs2[idx],
+                'encoded_plans1': trees1,
+                'encoded_plans2': trees2,
+                'attns1': indexes1,
+                'attns2': indexes2,
+                'queryfeature1': query_feats1,
+                'queryfeature2': query_feats2,
+                'vecs1': vecs1,
+                'vecs2': vecs2,
+                'lero_feature1': lero_feature1,
+                'lero_feature2': lero_feature2
+            }
+        except:
+            return {
+                'labels': self.labels[idx],
+                'costs1': self.costs1[idx],
+                'costs2': self.costs2[idx],
+                'encoded_plans1': trees1,
+                'encoded_plans2': trees2,
+                'attns1': indexes1,
+                'attns2': indexes2,
+                'queryfeature1': query_feats1,
+                'queryfeature2': query_feats2,
+                'vecs1': vecs1,
+                'vecs2': vecs2
         }
 
         # if not isinstance(self.queryfeature1, torch.Tensor):

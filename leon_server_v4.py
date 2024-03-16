@@ -27,8 +27,14 @@ from util import treeconv
 import torch.nn.functional as F
 conf = read_config()
 
-
-
+def is_subset(s1, s2):
+    s1 = set(s1.split(','))
+    s2 = set(s2.split(','))
+    if abs(len(s1) - len(s2)) != 1:
+        return False
+    result1 = s1.issubset(s2)
+    result2 = s2.issubset(s1)
+    return result1 or result2
 @ray.remote
 class TaskCounter:
     def __init__(self):
@@ -190,6 +196,10 @@ class LeonModel:
         self.Current_Level = None
         self.Levels_Needed = None
         self.Query_Id = None
+        self.Old_Query_Id = None
+        self.explain_flag = False
+        self.Old_Current_Level = None
+        self.continuous_eqset = []
         print("finish init")
             
 
@@ -335,11 +345,45 @@ class LeonModel:
         self.Current_Level = X[0]['Current Level']
         self.Levels_Needed = X[0]['Levels Needed']
         self.Query_Id = X[0]['QueryId']
+        if self.Query_Id != self.Old_Query_Id:
+            print("1")
+            self.Old_Query_Id = self.Query_Id
+            self.continuous_eqset = []
+            self.explain_flag = True
         # if self.query_dict_flag:
         #     self.query_dict_flag = ray.get(self.query_dict.write_query_id.remote(X[0]['QueryId']))
         out = ','.join(sorted(Relation_IDs.split()))
-        if (out in self.eqset): # and (self.Current_Level == self.Levels_Needed)
-            self.current_eq_summary = self.eq_summary.get(out)
+        if (out in self.eqset) and (self.explain_flag or (out in self.continuous_eqset)): # and (self.Current_Level == self.Levels_Needed)
+            if self.explain_flag:
+                if self.continuous_eqset == []:
+                    self.continuous_eqset.append(out)
+                    self.Old_Current_Level = self.Current_Level
+                else:
+                    if self.Current_Level - self.Old_Current_Level <= 1:
+                        self.continuous_eqset.append(out)
+                        self.Old_Current_Level = self.Current_Level
+                    else:
+                        self.continuous_eqset = []
+                        self.continuous_eqset.append(out)
+                        self.Old_Current_Level = self.Current_Level
+                if self.Current_Level == self.Levels_Needed:
+                    self.explain_flag = False
+                    temp_list = [0] * len(self.continuous_eqset)
+                    temp_list[-1] = 1
+                    for i, eq_1 in enumerate(self.continuous_eqset):
+                        for eq_2 in self.continuous_eqset[i+1:]:
+                            if is_subset(eq_1, eq_2):
+                                temp_list[i] = 1
+                    new_list = []
+                    for i in range(0, len(self.continuous_eqset)):
+                        if temp_list[i]:
+                            new_list.append(self.continuous_eqset[i])
+                    self.continuous_eqset = new_list
+                    print(self.continuous_eqset)
+            if not self.eq_summary:
+                self.current_eq_summary = 1
+            else:
+                self.current_eq_summary = self.eq_summary.get(out)
             self.curr_eqset = out
             print(X[0]['QueryId'], out)
             print(self.Current_Level, self.Levels_Needed)
@@ -385,9 +429,12 @@ class LeonModel:
                 #         pickle.dump(X, f) 
                 # print("Success exec hint leon", self.Query_Id)
                 return ';'.join(['1.00,1,0' if i['Plan']['Total Cost'] != pick_plan else '0.01,0,9' for i in X]) + ';'
+            else:
+                return ';'.join(['1.00,1,0' for _ in X]) + ';'
 
         try:
-            if ray.get(self.task_counter.GetOnline.remote()) and self.Current_Level == self.Levels_Needed:
+            # if ray.get(self.task_counter.GetOnline.remote()) and self.Current_Level == self.Levels_Needed:
+            if ray.get(self.task_counter.GetOnline.remote()):
                 self.task_counter.Add_task.remote()
                 # self.writer_hander.recieved_task += 1 需要试一下能不能直接成员变量 +1?
                 self.writer_hander.write_file.remote(X)
@@ -446,6 +493,10 @@ class SimpleLeonModel:
         self.Current_Level = None
         self.Levels_Needed = None
         self.Query_Id = None
+        self.Old_Query_Id = None
+        self.explain_flag = False
+        self.Old_Current_Level = None
+        self.continuous_eqset = []
         self.model_port = model_port
         print("finish init")
             
@@ -551,11 +602,45 @@ class SimpleLeonModel:
         self.Current_Level = X[0]['Current Level']
         self.Levels_Needed = X[0]['Levels Needed']
         self.Query_Id = X[0]['QueryId']
+        if self.Query_Id != self.Old_Query_Id:
+            print("1")
+            self.Old_Query_Id = self.Query_Id
+            self.continuous_eqset = []
+            self.explain_flag = True
         # if self.query_dict_flag:
         #     self.query_dict_flag = ray.get(self.query_dict.write_query_id.remote(X[0]['QueryId']))
         out = ','.join(sorted(Relation_IDs.split()))
-        if (out in self.eqset): #  and (self.Current_Level == self.Levels_Needed)
-            self.current_eq_summary = self.eq_summary.get(out)
+        if (out in self.eqset) and (self.explain_flag or (out in self.continuous_eqset)): # and (self.Current_Level == self.Levels_Needed)
+            if self.explain_flag:
+                if self.continuous_eqset == []:
+                    self.continuous_eqset.append(out)
+                    self.Old_Current_Level = self.Current_Level
+                else:
+                    if self.Current_Level - self.Old_Current_Level <= 1:
+                        self.continuous_eqset.append(out)
+                        self.Old_Current_Level = self.Current_Level
+                    else:
+                        self.continuous_eqset = []
+                        self.continuous_eqset.append(out)
+                        self.Old_Current_Level = self.Current_Level
+                if self.Current_Level == self.Levels_Needed:
+                    self.explain_flag = False
+                    temp_list = [0] * len(self.continuous_eqset)
+                    temp_list[-1] = 1
+                    for i, eq_1 in enumerate(self.continuous_eqset):
+                        for eq_2 in self.continuous_eqset[i+1:]:
+                            if is_subset(eq_1, eq_2):
+                                temp_list[i] = 1
+                    new_list = []
+                    for i in range(0, len(self.continuous_eqset)):
+                        if temp_list[i]:
+                            new_list.append(self.continuous_eqset[i])
+                    self.continuous_eqset = new_list
+                    print(self.continuous_eqset)
+            if not self.eq_summary:
+                self.current_eq_summary = 1
+            else:
+                self.current_eq_summary = self.eq_summary.get(out)
             self.curr_eqset = out
             print(X[0]['QueryId'], out)
             print(self.Current_Level, self.Levels_Needed)
@@ -594,6 +679,8 @@ class SimpleLeonModel:
                 #         pickle.dump(X, f) 
                 # print("Success exec hint leon", self.Query_Id)
                 return ';'.join(['1.00,1,0' if i['Plan']['Total Cost'] != pick_plan else '0.01,0,9' for i in X]) + ';'
+            else:
+                return ';'.join(['1.00,1,0' for _ in X]) + ';'
 
         # Validation Accuracy
         # TODO: 可能不在Eq Summary里面？确实有可能，有些等价类没有被训练到，因为没有收集message

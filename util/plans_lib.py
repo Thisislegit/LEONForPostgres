@@ -170,7 +170,9 @@ class Node(object):
         aliases = self.leaf_ids(alias_only=True)
 
         def _KeepRelevantJoins(s):
-            splits = s.split('=')
+            # splits = s.split('=')
+            splits = re.split(r'[=><]', s)
+            splits = list(filter(None, splits))
             l, r = splits[0].strip(), splits[1].strip()
     
             l_alias = l.split('.')[0]
@@ -362,6 +364,8 @@ class WorkloadInfo(object):
         join_types = set()
         all_ops = set()
         all_ops.add('Null')
+        all_ops.add('Memoize')
+        all_ops.add('Material')
         all_attributes = set()
         mins = {"cost": float("inf"), "card": float("inf"), "width": float("inf")}
         maxs = {"cost": -float("inf"), "card": -float("inf"), "width": -float("inf")}
@@ -838,6 +842,9 @@ class TreeNodeFeaturizer_V2(TreeNodeFeaturizer):
     
     def __get_stats(self, node):
         return np.array([self.normalizer.norm(node.cost, "cost"), self.normalizer.norm(node._card, "card"), self.normalizer.norm(node._width, "width")], dtype=np.float32)
+    
+    def Dim(self):
+        return len(self.ops) + len(self.stats) + len(self.rel_ids)
 
 class PhysicalTreeNodeFeaturizer(TreeNodeFeaturizer):
     """Featurizes a single Node with support for physical operators.
@@ -1030,3 +1037,6 @@ class QueryFeaturizer(Featurizer):
 
         features = np.concatenate((triu, vec), axis=None)
         return features
+    
+    def Dim(self):
+        return int(len(self.workload_info.rel_ids) + len(self.workload_info.rel_ids) * (len(self.workload_info.rel_ids) - 1) / 2)

@@ -24,7 +24,7 @@ def load_training_query(query_path):
     print("Read", len(train_queries), "test queries.")
     return train_queries
 
-def load_sql(file_list: list, training_query=None):
+def load_sql(file_list: list, training_query=None, workload_type=None):
     """
     :param file_list: list of query file in str
     :return: list of sql query string
@@ -34,7 +34,15 @@ def load_sql(file_list: list, training_query=None):
         if training_query:
             sqls.append(training_query[file_str])
         else:
-            sqlFile = './my_job/' + file_str + '.sql'
+            if workload_type == 'job':
+                sqlFile = './my_job/' + file_str + '.sql'
+            elif workload_type == 'job_ext' or workload_type == 'job_training_ext':
+                sqlFile = './my_job_ext/' + file_str + '.sql'
+            elif workload_type == 'stack':
+                sqlFile = './stack/' + file_str + '.sql'
+            elif workload_type == 'tpch':
+                sqlFile = './tpch/' + file_str + '.sql'
+            
             if not os.path.exists(sqlFile):
                 raise IOError("File Not Exists!")
             with open(sqlFile, 'r') as f:
@@ -209,6 +217,30 @@ class JoinOrderBenchmark(Workload):
         if not os.path.exists(p.query_dir):
             raise IOError('File Not Exists!')
         return p
+    
+    @classmethod
+    def Params_ext(cls):
+        p = super().Params()
+        p.query_dir = 'my_job_ext'
+        if not os.path.exists(p.query_dir):
+            raise IOError('File Not Exists!')
+        return p
+    
+    @classmethod
+    def Params_stack(cls):
+        p = super().Params()
+        p.query_dir = 'stack'
+        if not os.path.exists(p.query_dir):
+            raise IOError('File Not Exists!')
+        return p
+    
+    @classmethod
+    def Params_tpch(cls):
+        p = super().Params()
+        p.query_dir = 'tpch'
+        if not os.path.exists(p.query_dir):
+            raise IOError('File Not Exists!')
+        return p
 
     def __init__(self, params):
         super().__init__(params)
@@ -265,6 +297,63 @@ class JoinOrderBenchmark_Train(JoinOrderBenchmark):
         return node
 
     def _LoadQueries(self):
+        """Loads all queries into balsa.Node objects."""
+        p = self.params
+        all_sql_set : list = load_training_query(p.query_dir)
+        test_sql_set : list = self._get_sql_set(p.query_dir, p.test_query_glob)
+        # sorted by query id for easy debugging
+        all_sql_list = sorted(all_sql_set, key=lambda x: x[0])
+        all_nodes = [self.ParseSqlToNode(sqlfile, sql) for sqlfile, sql in all_sql_list]
+
+        train_nodes = all_nodes
+        test_nodes = []
+        assert len(train_nodes) > 0
+
+        return all_nodes, train_nodes, test_nodes
+    
+class JoinOrderBenchmark_Train_Ext(JoinOrderBenchmark):
+    @classmethod
+    def Params(cls):
+        p = super().Params()
+        module_dir = os.path.abspath(os.path.dirname(__file__)) + '/../'    
+        print(module_dir)
+        p.query_dir = os.path.join(module_dir + './train/training_query/job_train.txt')
+        if not os.path.exists(p.query_dir):
+            raise IOError('File Not Exists!')
+        return p
+    
+    @classmethod
+    def Params_ext(cls):
+        p = super().Params()
+        p.query_dir = 'my_job_ext'
+        if not os.path.exists(p.query_dir):
+            raise IOError('File Not Exists!')
+        return p
+    
+
+    def __init__(self, params1, params2):
+        super().__init__(params1)
+        p = params1
+        self.query_nodes, self.train_nodes, self.test_nodes = \
+            self._LoadQueries()
+        self.params = params2
+        query_nodes1, train_nodes, test_nodes = \
+            self._LoadQueries1()
+        self.query_nodes = self.query_nodes + query_nodes1
+        self.workload_info = plans_lib.WorkloadInfo(self.query_nodes)
+        self.workload_info.SetPhysicalOps(p.search_space_join_ops,
+                                          p.search_space_scan_ops)
+
+    def ParseSqlToNode(self, sqlfile, sql_string):
+        query_name = sqlfile
+        node, json_dict = postgres.SqlToPlanNode(sql_string)
+        node.info['sql_str'] = sql_string
+        node.info['query_name'] = query_name
+        node.info['explain_json'] = json_dict
+        node.GetOrParseSql()
+        return node
+
+    def _LoadQueries1(self):
         """Loads all queries into balsa.Node objects."""
         p = self.params
         all_sql_set : list = load_training_query(p.query_dir)
@@ -408,8 +497,17 @@ def wordload_init(workload_type):
     if not os.path.exists(path):
         if workload_type == 'job_training':
             workload = JoinOrderBenchmark_Train(JoinOrderBenchmark_Train.Params())
-        else:
+        elif workload_type == 'job':
             workload = JoinOrderBenchmark(JoinOrderBenchmark.Params())
+        elif workload_type == 'job_training_ext':
+            workload = JoinOrderBenchmark_Train_Ext(JoinOrderBenchmark_Train_Ext.Params_ext(), JoinOrderBenchmark_Train_Ext.Params())
+        elif workload_type == 'stack':
+            workload = JoinOrderBenchmark(JoinOrderBenchmark.Params_stack())
+        elif workload_type == 'tpch':
+            workload = TPCHbenchmark(JoinOrderBenchmark.Params_tpch())
+        else:
+            workload = JoinOrderBenchmark(JoinOrderBenchmark.Params_ext())
+
         workload.workload_info.table_num_rows = postgres.GetAllTableNumRows(workload.workload_info.rel_names)
         workload.workload_info.alias_to_names = postgres.GetAllAliasToNames(workload.workload_info.rel_ids)
         # print(workload.workload_info)
@@ -453,7 +551,8 @@ def load_train_files1(workload_type):
             template = file[:-1]  # 提取模板部分，去掉最后一个字符
             if template not in test_templates:
                 if temp_files != []:
-                    test_files.append(random.choice(temp_files))
+                    # test_files.append(random.choice(temp_files))
+                    test_files.append(temp_files[0])
                     temp_files = []
                 test_templates.add(template)
                 temp_files.append(file)
@@ -465,18 +564,26 @@ def load_train_files1(workload_type):
         print("Test Files:", test_files)
         print("Train Files:", train_files)
         random.shuffle(train_files)
+        # train_files = test_files
         train_files = train_files * 3
         
-        training_query = load_sql(train_files)
-        test_query = load_sql(test_files)
+        training_query = load_sql(train_files, workload_type=workload_type)
+        test_query = load_sql(test_files, workload_type=workload_type)
         
     return train_files, training_query, test_files, test_query
 
-def load_train_files(workload_type):
+def load_train_files2(workload_type):
     if workload_type == 'job_training':
         training_query = load_training_query("./train/training_query/job_train.txt")
         train_files = [i[0] for i in training_query]
         training_query = [i[1] for i in training_query]
+    elif workload_type == 'job_training_ext':
+        training_query = load_training_query("./train/training_query/job_train.txt")
+        train_files = [i[0] for i in training_query]
+        training_query = [i[1] for i in training_query]
+        test_files = ['e1a', 'e1b', 'e2a', 'e2b', 'e3a', 'e3b', 'e4a', 'e4b', 'e5a', 'e5b', 'e6a', 'e6b', 'e7a', 'e7b', 'e8a', 'e8b', 'e9a', 'e9b', 'e10a', 'e10b', 'e11a', 'e11b', 'e12a', 'e12b']
+        
+        test_query = load_sql(test_files, workload_type=workload_type)
     else:
         train_files = ['1a', '1b', '1c', '1d', '2a', '2b', '2c', '2d', '3a', '3b', '3c', '4a',
                     '4b', '4c', '5a', '5b', '5c', '6a', '6b', '6c', '6d', '6e', '6f', '7a', 
@@ -490,7 +597,75 @@ def load_train_files(workload_type):
                     '30a', '30b', '30c', '31a', '31b', '31c', '32a', '32b', '33a', '33b', '33c']
         random.shuffle(train_files)
         train_files = train_files * 3
-        training_query = load_sql(train_files)
+        test_files = ['e1a', 'e1b', 'e2a', 'e2b', 'e3a', 'e3b', 'e4a', 'e4b', 'e5a', 'e5b', 'e6a', 'e6b', 'e7a', 'e7b', 'e8a', 'e8b', 'e9a', 'e9b', 'e10a', 'e10b', 'e11a', 'e11b', 'e12a', 'e12b']
+        
+        training_query = load_sql(train_files, workload_type=workload_type)
+        test_query = load_sql(test_files, workload_type=workload_type)
+        
+    return train_files, training_query, test_files, test_query
+
+
+def load_train_files3(workload_type):
+    if workload_type == 'stack':
+        train_files = [f'q{i}_{j}' for j in range(1, 21) for i in range(1, 11)]
+        training_query = load_sql(train_files, workload_type=workload_type)
+        test_files = [f'q{i}_{j}' for j in range(21, 23) for i in range(1, 11)]
+        test_query = load_sql(test_files, workload_type=workload_type)
+    elif workload_type == 'tpch':
+        train_files = [f'q{i}_{j}' for j in range(1, 41) for i in range(1, 7)]
+        training_query = load_sql(train_files, workload_type=workload_type)
+        test_files = [f'q{i}_{j}' for j in range(41, 43) for i in range(1, 7)]
+        test_query = load_sql(test_files, workload_type=workload_type)
+        
+    return train_files, training_query, test_files, test_query
+
+
+def load_train_files(workload_type):
+    if workload_type == 'job_training':
+        training_query = load_training_query("./train/training_query/job_train.txt")
+        train_files = [i[0] for i in training_query]
+        training_query = [i[1] for i in training_query]
+    elif workload_type == 'job_training_ext':
+        training_query = load_training_query("./train/training_query/job_train.txt")
+        train_files = [i[0] for i in training_query]
+        training_query = [i[1] for i in training_query]
+        train_files1 = ['e1a', 'e1b', 'e2a', 'e2b', 'e3a', 'e3b', 'e4a', 'e4b', 'e5a', 'e5b', 'e6a', 'e6b', 'e7a', 'e7b', 'e8a', 'e8b', 'e9a', 'e9b', 'e10a', 'e10b', 'e11a', 'e11b', 'e12a', 'e12b']
+        
+        training_query1 = load_sql(train_files1, workload_type=workload_type)
+        train_files = train_files1 + train_files
+        training_query = training_query1 + training_query
+    else:
+        if workload_type == 'job':
+            train_files = ['1a', '1b', '1c', '1d', '2a', '2b', '2c', '2d', '3a', '3b', '3c', '4a',
+                        '4b', '4c', '5a', '5b', '5c', '6a', '6b', '6c', '6d', '6e', '6f', '7a', 
+                        '7b', '7c', '8a', '8b', '8c', '8d', '9a', '9b', '9c', '9d', '10a', '10b', 
+                        '10c', '11a', '11b', '11c', '11d', '12a', '12b', '12c', '13a', '13b', '13c', 
+                        '13d', '14a', '14b', '14c', '15a', '15b', '15c', '15d', '16a', '16b', '16c',
+                        '16d', '17a', '17b', '17c', '17d', '17e', '17f', '18a', '18b', '18c', '19a',
+                        '19b', '19c', '19d', '20a', '20b', '20c', '21a', '21b', '21c', '22a', '22b',
+                        '22c', '22d', '23a', '23b', '23c', '24a', '24b', '25a', '25b', '25c', '26a', 
+                        '26b', '26c', '27a', '27b', '27c', '28a', '28b', '28c', '29a', '29b', '29c',
+                        '30a', '30b', '30c', '31a', '31b', '31c', '32a', '32b', '33a', '33b', '33c']
+            random.shuffle(train_files)
+            train_files = train_files * 3
+        elif workload_type == 'job_ext':
+            train_files2 = ['1a', '1b', '1c', '1d', '2a', '2b', '2c', '2d', '3a', '3b', '3c', '4a',
+                        '4b', '4c', '5a', '5b', '5c', '6a', '6b', '6c', '6d', '6e', '6f', '7a', 
+                        '7b', '7c', '8a', '8b', '8c', '8d', '9a', '9b', '9c', '9d', '10a', '10b', 
+                        '10c', '11a', '11b', '11c', '11d', '12a', '12b', '12c', '13a', '13b', '13c', 
+                        '13d', '14a', '14b', '14c', '15a', '15b', '15c', '15d', '16a', '16b', '16c',
+                        '16d', '17a', '17b', '17c', '17d', '17e', '17f', '18a', '18b', '18c', '19a',
+                        '19b', '19c', '19d', '20a', '20b', '20c', '21a', '21b', '21c', '22a', '22b',
+                        '22c', '22d', '23a', '23b', '23c', '24a', '24b', '25a', '25b', '25c', '26a', 
+                        '26b', '26c', '27a', '27b', '27c', '28a', '28b', '28c', '29a', '29b', '29c',
+                        '30a', '30b', '30c', '31a', '31b', '31c', '32a', '32b', '33a', '33b', '33c']
+            train_files1 = ['e1a', 'e1b', 'e2a', 'e2b', 'e3a', 'e3b', 'e4a', 'e4b', 'e5a', 'e5b', 'e6a', 'e6b', 'e7a', 'e7b', 'e8a', 'e8b', 'e9a', 'e9b', 'e10a', 'e10b', 'e11a', 'e11b', 'e12a', 'e12b']
+            train_files = train_files1 + train_files2
+        elif workload_type == 'stack':
+            train_files = [f'q{i}_{j}' for j in range(1, 23) for i in range(1, 11)]
+        elif workload_type == 'tpch':
+            train_files = [f'q{i}_{j}' for j in range(1, 43) for i in range(1, 7)]
+        training_query = load_sql(train_files, workload_type=workload_type)
         
     return train_files, training_query
 
@@ -498,10 +673,10 @@ def find_alias(training_query):
     a = []
     for sql_query in training_query:
         # 提取FROM和WHERE之间的内容
-        from_where_content = re.search('FROM(.*)WHERE', sql_query.replace("\n", "")).group(1)
+        from_where_content = re.search('FROM(.*)WHERE', sql_query.replace("\n", ""), re.IGNORECASE).group(1)
 
         # 提取别名
-        aliases = re.findall(r'AS (\w+)', from_where_content)
+        aliases = re.findall(r'AS (\w+)', from_where_content, re.IGNORECASE)
         
         aliases = ",".join(sorted(aliases))
         a.append(aliases)

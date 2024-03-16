@@ -347,8 +347,8 @@ class ResNet(nn.Module):
         self.in_channels = 64
         self.layer1 = self._make_layer(block, 64, num_blocks[0])
         self.layer2 = self._make_layer(block, 128, num_blocks[1])
-        self.layer3 = self._make_layer(block, 256, num_blocks[2])
-        self.layer4 = self._make_layer(block, 512, num_blocks[3])
+        # self.layer3 = self._make_layer(block, 256, num_blocks[2])
+        # self.layer4 = self._make_layer(block, 512, num_blocks[3])
         # self.linear = nn.Linear(512, num_classes)
         # self.max_pool = TreeMaxPool_With_Kernel_Stride()
 
@@ -367,7 +367,7 @@ class ResNet(nn.Module):
 
         # self.plan_p = 0.2
         self.out_mlp = nn.Sequential(
-            nn.Linear(512, 32),
+            nn.Linear(128, 32),
             # nn.Dropout(p=self.plan_p),
             nn.LeakyReLU(),
             nn.Linear(32, label_size),
@@ -411,8 +411,8 @@ class ResNet(nn.Module):
         # out, indexes = self.max_pool((out, indexes))
         out, indexes = self.layer1((out, indexes))
         out, indexes = self.layer2((out, indexes))
-        out, indexes = self.layer3((out, indexes))
-        out, indexes = self.layer4((out, indexes))
+        # out, indexes = self.layer3((out, indexes))
+        # out, indexes = self.layer4((out, indexes))
         out = self.tree_pool((out, indexes))
         # out = out.view(out.size(0), -1)
         out = self.out_mlp(out)
